@@ -1,0 +1,193 @@
+version: 1
+contractHash: sha256:f7726e8afb773284737de4326e06652a71a9693231474e3b494319659aad1289
+name: local_agent_tui_session_receipts
+# Runner note (2026-07-16): under a loaded full local suite, the filtered
+# session view has occasionally rendered after the former 2 s budget. The
+# isolated contract and CI pass, so retain the assertion with a 5 s allowance.
+intent: |
+    a user can find and restore a saved workspace session, inspect compact and
+    expanded tool receipts, keep private provider reasoning out of restored
+    state, pause transcript following, scroll the transcript without moving a
+    non-empty draft, return to the latest output, see an actionable block when
+    an effect has a durable dispatch marker without a terminal receipt, and
+    leave with a copyable short resume command.
+target:
+    cmd: ["./bin/sonar"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/session-receipts-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/session-receipts-agents"
+        SONAR_REDUCED_MOTION: "1"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 110
+    rows: 40
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/session-receipts-home .glyphrun/tmp/session-receipts-agents && mkdir -p .glyphrun/tmp/session-receipts-home/.config/sonar .glyphrun/tmp/session-receipts-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/session-receipts-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+        - run: "go run ./specs/fixtures/session_receipts .glyphrun/tmp/session-receipts-home/.config/sonar/sonar.db '${projectRoot}'"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "try: ollama serve"
+        timeoutMs: 5000
+    - press: "ctrl+p"
+    - wait:
+        screen:
+            contains: "Settings"
+        timeoutMs: 2000
+    - press: "down"
+    - press: "down"
+    - press: "down"
+    - press: "down"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Recovery receipt review"
+        timeoutMs: 3000
+    - snapshot: sessions
+    - press: "/"
+    - wait:
+        screen:
+            contains: "Filter ›"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - type: "recovery"
+    - wait:
+        screen:
+            contains: "Filter › recovery"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Recovery receipt review"
+        timeoutMs: 5000
+    - snapshot: sessions_filtered
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Recovery blocked: write_file has a durable dispatch marker"
+        timeoutMs: 3000
+    - snapshot: compact_receipts
+    - press: "ctrl+b"
+    - wait:
+        screen:
+            contains: "package ui"
+        timeoutMs: 2000
+    - snapshot: expanded_receipts
+    - press: "ctrl+t"
+    - wait:
+        screen:
+            notContains: "one successful read and one failed test command"
+        timeoutMs: 2000
+    - resize:
+        cols: 110
+        rows: 18
+    - wait:
+        screen:
+            contains: "/recover inspect"
+        timeoutMs: 2000
+    - type: "draft must stay unchanged while the transcript scrolls"
+    - mouse:
+        x: 10
+        y: 5
+        button: "wheelUp"
+    - wait:
+        screen:
+            contains: "Follow paused · end latest"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "draft must stay unchanged while the transcript scrolls"
+        timeoutMs: 2000
+    - snapshot: wheel_preserves_draft
+    - press: "end"
+    - wait:
+        screen:
+            contains: "Follow paused · end latest"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "draft must stay unchanged while the transcript scrolls"
+        timeoutMs: 2000
+    - press: "ctrl+u"
+    - press: "end"
+    - wait:
+        screen:
+            notContains: "Follow paused"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Recovery blocked: write_file has a durable dispatch marker"
+        timeoutMs: 2000
+    - snapshot: follow_resumed
+    - press: "ctrl+c"
+    - wait:
+        screen:
+            contains: "Session <session> · Recovery receipt review"
+        timeoutMs: 3000
+    - wait:
+        screen:
+            contains: "sonar --resume <session>"
+        timeoutMs: 3000
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: saved_session_is_discoverable
+      description: the workspace session picker exposes the deterministic saved receipt fixture
+      verify:
+        snapshot:
+            name: sessions
+            mode: text
+    - id: saved_sessions_can_be_filtered
+      description: the Bubbles session filter keeps the matching recovery session selected
+      verify:
+        snapshot:
+            name: sessions_filtered
+            mode: text
+    - id: compact_receipts_preserve_failure_and_recovery_context
+      description: restored receipts show success, failure, and actionable no-retry recovery guidance
+      verify:
+        snapshot:
+            name: compact_receipts
+            mode: text
+    - id: tool_receipts_expand_together
+      description: the transcript exposes saved arguments and bounded results for inspection
+      verify:
+        snapshot:
+            name: expanded_receipts
+            mode: text
+    - id: private_reasoning_is_not_restored
+      description: legacy provider reasoning does not re-enter the restored transcript
+      verify:
+        screen:
+            notContains: "one successful read and one failed test command"
+    - id: transcript_wheel_preserves_draft_ownership
+      description: mouse-wheel scrolling pauses transcript following while preserving the exact non-empty composer draft
+      verify:
+        snapshot:
+            name: wheel_preserves_draft
+            mode: text
+    - id: transcript_follow_can_resume
+      description: End returns directly to the latest recovery receipt and removes the paused state
+      verify:
+        snapshot:
+            name: follow_resumed
+            mode: text
+    - id: receipt_flow_quits_cleanly
+      description: ctrl+c exits cleanly with a titled short-handle resume receipt after restoring and inspecting a saved session
+      verify:
+        process:
+            exitCode: 0

@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "workspace": "/repo",
+  "authority": {
+    "mode": "exact_allowlist",
+    "default_workspace": "/repo",
+    "selected_workspace": "/repo",
+    "allowed_workspace_count": 1
+  },
+  "plan_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "clean": true,
+  "lock_changed": false,
+  "conflict_count": 0,
+  "counts": {
+    "create": 0,
+    "update": 0,
+    "adopt": 0,
+    "unchanged": 1,
+    "conflict": 0
+  },
+  "warnings": [
+    "SECRET_BOB_CHECK_WARNING"
+  ],
+  "next_actions": []
+}

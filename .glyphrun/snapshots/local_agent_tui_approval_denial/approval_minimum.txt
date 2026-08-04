@@ -1,0 +1,12 @@
+
+◇  Permission · write
+   Action Write 19 B
+   …/approval-probe.txt
+   › n deny
+   y once
+   s same/session
+   a tool/session
+   …
+   …
+   esc cancel turn · enter
+   pgdn more · d arguments

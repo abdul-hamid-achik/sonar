@@ -1,0 +1,61 @@
+version: 1
+contractHash: sha256:be4064e5077dab5735cbc5113835c44ebe2d755f82ea049cdc91a9ef79167b7e
+name: local_agent_live_ollama_tool
+intent: |
+    the documented default small local Qwen model can call the built-in read tool through the headless harness and use its result in a distinct final answer without cloud inference.
+target:
+    cmd:
+        - "${projectRoot}/bin/sonar"
+        - "-model"
+        - "qwen3.5:2b"
+        - "--plan"
+        - "--tools"
+        - "read"
+        - "-p"
+        - "The file probe.txt is guaranteed to exist. Your first and only tool call must be read with path set exactly to probe.txt (the relative path). Calling exists, bash, or any other tool is a benchmark failure. After read returns, copy the exact file contents once into your final answer. You may prefix it with FINAL_RESULT. Do not add anything else."
+    cwd: ".glyphrun/tmp/live-ollama-workspace"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/live-ollama-home"
+terminal:
+    cols: 100
+    rows: 30
+normalize:
+    replace:
+        - regex: "\\[ok [0-9]+(\\.[0-9]+)?(ms|s)\\]"
+          with: "[ok <duration>]"
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/live-ollama-home .glyphrun/tmp/live-ollama-workspace && mkdir -p .glyphrun/tmp/live-ollama-home .glyphrun/tmp/live-ollama-workspace && cp testdata/live_ollama/probe.txt .glyphrun/tmp/live-ollama-workspace/probe.txt && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "read path="
+        timeoutMs: 90000
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 30000
+outcomes:
+    - id: local_read_tool_dispatched
+      description: the default Qwen response performs the requested built-in read operation
+      verify:
+        screen:
+            contains: "read path="
+    - id: final_answer_uses_tool_result
+      description: the assistant produces a distinct final answer from the exact local fixture value
+      verify:
+        count:
+            matches: "7"
+            equals: 2
+    - id: no_unrequested_exists_preflight
+      description: the model trusts the supplied contract instead of guessing an unnecessary preflight step
+      verify:
+        screen:
+            notContains: "→ exists path="
+    - id: headless_turn_completes
+      description: the local tool turn exits successfully
+      verify:
+        process:
+            exitCode: 0

@@ -1,0 +1,54 @@
+version: 1
+contractHash: sha256:1928813352c06f26ddb6ac0696858b4addbc1811d0b8b92645fd930173775bbd
+name: local_agent_cli_skip_approvals
+intent: |
+    --skip-approvals starts the ordinary interactive TUI with approval prompts
+    skipped while host and tool boundaries remain visible. It does not silently
+    select AUTO authority.
+target:
+    cmd: ["./bin/sonar", "--skip-approvals"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/skip-approvals-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/skip-approvals-agents"
+        SONAR_REDUCED_MOTION: "1"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 100
+    rows: 28
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/skip-approvals-home .glyphrun/tmp/skip-approvals-agents && mkdir -p .glyphrun/tmp/skip-approvals-home/.config/sonar .glyphrun/tmp/skip-approvals-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/skip-approvals-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "approval prompts skipped"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            notContains: "AUTO"
+        timeoutMs: 2000
+    - snapshot: normal_authority
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: skip_approvals_is_visible_without_auto
+      description: the TUI distinguishes skipped approval prompts from AUTO authority and keeps host boundaries explicit
+      verify:
+        snapshot:
+            name: normal_authority
+            mode: text
+    - id: skip_approvals_tui_quits_cleanly
+      description: the interactive process exits successfully without a provider connection
+      verify:
+        process:
+            exitCode: 0

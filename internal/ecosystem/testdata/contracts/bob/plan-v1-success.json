@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "workspace": "/repo",
+  "authority": {
+    "mode": "exact_allowlist",
+    "default_workspace": "/repo",
+    "selected_workspace": "/repo",
+    "allowed_workspace_count": 1
+  },
+  "plan_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "clean": true,
+  "lock_changed": false,
+  "conflict_count": 0,
+  "counts": {
+    "create": 0,
+    "update": 0,
+    "adopt": 0,
+    "unchanged": 1,
+    "conflict": 0
+  },
+  "actions": [],
+  "truncation": {
+    "include_unchanged": false,
+    "max_actions": 100,
+    "total_actions": 1,
+    "eligible_actions": 0,
+    "filtered_unchanged": 1,
+    "returned_actions": 0,
+    "omitted_actions": 0,
+    "truncated": false,
+    "output_byte_limit": 30720,
+    "byte_limit_applied": false
+  },
+  "warnings": [
+    "SECRET_BOB_PLAN_WARNING"
+  ],
+  "next_actions": []
+}

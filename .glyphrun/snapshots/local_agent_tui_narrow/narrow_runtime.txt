@@ -1,0 +1,19 @@
+ ╭────────────────────────────────────╮
+ │ Runtime                            │
+ │                                    │
+ │ Workspace  ~/workspace/local-agent │
+ │ Model      Pinned · qwen3.5:2b     │
+ │ Ollama     setup needed · ctrl+o   │
+ │            select or install a     │
+ │            model; run ollama serve │
+ │            if the host is          │
+ │            unavailable             │
+ │ Profile    Default                 │
+ │ Mode       PLAN                    │
+ │ Approval   Prompted for            │
+ │            approval-gated tools    │
+ │ Read scope workspace only          │
+ │ Tools      21 ready · 21 local · 0 │
+ │            MCP                     │
+ │ esc/q back · j/k scroll · ↓ more   │
+ ╰────────────────────────────────────╯

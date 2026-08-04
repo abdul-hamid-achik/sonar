@@ -1,0 +1,69 @@
+version: 2
+
+project_name: sonar
+
+builds:
+  - id: sonar
+    main: ./cmd/sonar
+    binary: sonar
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X main.version={{.Version}}
+
+archives:
+  - id: default
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - Merge pull request
+      - Merge branch
+
+release:
+  github:
+    owner: abdul-hamid-achik
+    name: sonar
+  # A transient SCM failure can leave a complete release but an unpublished tap.
+  # Keep retries idempotent so GoReleaser can finish the remaining publishers.
+  replace_existing_artifacts: true
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+
+homebrew_casks:
+  - name: sonar
+    binaries:
+      - sonar
+    homepage: https://github.com/abdul-hamid-achik/sonar
+    description: "Local AI agent with TUI, powered by Ollama and MCP servers"
+    repository:
+      owner: abdul-hamid-achik
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    hooks:
+      post:
+        install: |
+          system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/sonar"] if OS.mac?
+    skip_upload: "{{ if .Env.HOMEBREW_TAP_TOKEN }}false{{ else }}true{{ end }}"

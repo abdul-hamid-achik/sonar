@@ -1,0 +1,27 @@
+   main · ollama-inventory-workdir                              qwen3.5:2b · 0/16.4k · 0%
+
+
+
+
+
+      ╭────────────────────────────────────────────────────────────────────────────╮
+      │ Ollama models                                                              │
+      │                                                                            │
+      │ │ LOCAL · qwen3.5:2b · current                                             │
+      │   CLOUD · kimi-code:cloud · review                                         │
+      │ LOCAL · current · running                                                  │
+      │ 2.0 GB · 2.3B · Q8_0 · tools · thinking · completion · 262K max ctx · 16K  │
+      │ effective                                                                  │
+      │ esc close · enter select · / filter · d details · a add · r refresh        │
+      ╰────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────
+   enter send · shift+tab mode · esc cancel · f1 help

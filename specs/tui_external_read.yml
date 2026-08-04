@@ -1,0 +1,169 @@
+version: 1
+contractHash: sha256:ce67026f46365eaa3235d546ccd77919c50a129d157791c01407d80b3e482926
+name: local_agent_tui_external_read
+intent: |
+    a prompt can name one existing file outside the startup workspace, pause
+    before model dispatch for an exact read-only review, ignore hidden decisions
+    while an undersized terminal masks that authority prompt, restore the exact
+    prompt after resize, and resume only after the user grants temporary access
+    without exposing sibling files. AUTO may then accept one directly named,
+    exact typed-write directory for the turn without a modal while keeping raw
+    shell authority confined to the startup workspace.
+target:
+    cmd:
+        - "${projectRoot}/bin/sonar"
+        - "--model"
+        - "qwen3.5:0.8b"
+    cwd: ".glyphrun/tmp/external-read-workspace"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/external-read-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/external-read-agents"
+        SONAR_REDUCED_MOTION: "1"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 90
+    rows: 28
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/external-read-home .glyphrun/tmp/external-read-agents .glyphrun/tmp/external-read-workspace .glyphrun/tmp/external-read-evidence .glyphrun/tmp/external-auto-target && mkdir -p .glyphrun/tmp/external-read-home/.config/sonar .glyphrun/tmp/external-read-agents .glyphrun/tmp/external-read-workspace .glyphrun/tmp/external-read-evidence .glyphrun/tmp/external-auto-target && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/external-read-home/.config/sonar/config.yaml && printf '%s\\n' 'deterministic video fixture' > .glyphrun/tmp/external-read-evidence/bug.mp4 && printf '%s\\n' 'must remain unavailable' > .glyphrun/tmp/external-read-evidence/sibling.txt && printf '%s\\n' 'must remain unchanged without a provider' > .glyphrun/tmp/external-auto-target/marker.txt && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - type: "Analyze \"${projectRoot}/.glyphrun/tmp/external-read-evidence/bug.mp4\" with vidtrace."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Allow exact external read-only file?"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "bug.mp4"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "exact files never include siblings"
+        timeoutMs: 2000
+    - resize:
+        cols: 29
+        rows: 11
+    - wait:
+        screen:
+            contains: "Input paused"
+        timeoutMs: 2000
+    - press: "y"
+    - resize:
+        cols: 90
+        rows: 28
+    - wait:
+        screen:
+            contains: "press enter"
+        timeoutMs: 2000
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Allow exact external read-only file?"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "bug.mp4"
+        timeoutMs: 2000
+    - press: "y"
+    - wait:
+        screen:
+            contains: "Granted temporary read-only access to 1 explicit path."
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "with vidtrace."
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "▏❯ Analyze"
+        timeoutMs: 5000
+    - press: "ctrl+u"
+    - type: "/scope list"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Temporary read-only grants"
+        timeoutMs: 3000
+    - wait:
+        screen:
+            contains: "exact file ·"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            notContains: "sibling.txt"
+        timeoutMs: 2000
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "PLAN"
+        timeoutMs: 2000
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "AUTO"
+        timeoutMs: 2000
+    - type: "Update \"${projectRoot}/.glyphrun/tmp/external-auto-target\"."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "AUTO accepted temporary scoped access to 1 explicit path"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "typed-write)."
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "shell remains confined to the primary workspace"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            notContains: "Allow exact external"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Inference not started: no model selected"
+        timeoutMs: 5000
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: explicit_external_file_requires_review
+      description: an existing file outside the startup workspace opens an exact-file read-only decision before the prompt is dispatched
+      verify:
+        screen:
+            contains: "exact file ·"
+    - id: approved_prompt_resumes
+      description: approval resumes the original video-analysis prompt, creates its titled session, and records one temporary explicit-path grant
+      verify:
+        screen:
+            contains: " · Analyze"
+    - id: sibling_remains_unavailable
+      description: the scope omits the neighboring fixture and approval changes no files
+      verify:
+        command:
+            run: "test \"$(cat .glyphrun/tmp/external-read-evidence/sibling.txt)\" = 'must remain unavailable'"
+    - id: auto_accepts_exact_typed_scope_without_shell_authority
+      description: AUTO accepts the directly named external directory without a modal while explicitly retaining workspace-only shell authority
+      verify:
+        screen:
+            contains: "shell remains confined to the primary workspace"
+    - id: failed_provider_causes_no_external_effect
+      description: the scoped directory marker remains unchanged when inference never starts
+      verify:
+        command:
+            run: "test \"$(cat .glyphrun/tmp/external-auto-target/marker.txt)\" = 'must remain unchanged without a provider'"
+    - id: external_read_flow_quits_cleanly
+      description: ctrl+c exits cleanly after the exact-file grant is visible
+      verify:
+        process:
+            exitCode: 0

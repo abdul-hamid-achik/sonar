@@ -1,0 +1,31 @@
+   main · local-agent                                 qwen3.5:2b · offline · 0/16.4k · 0%
+
+   notice · ollama: no model selected
+   try: ollama serve · ollama pull qwen3.5:2b
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────
+  ↓ later draft · ctrl+end bottom
+▏❯ Review the first receipt.
+ │ Keep the second line while I check Settings.
+ │ ```
+ │ fixture line 01
+ │ fixture line 02
+ │ fixture line 03
+ │ fixture line 04
+ │ fixture line 05
+   enter send · shift+tab mode · esc cancel · f1 help

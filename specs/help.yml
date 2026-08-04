@@ -1,0 +1,82 @@
+version: 1
+contractHash: sha256:83326f7c8fd11e7013545d48b02ec370f171a58205b8df01ff5c9f38957129e4
+name: local_agent_help
+intent: |
+    a user can run sonar -h and discover the supported CLI flags.
+target:
+    cmd: ["./bin/sonar", "-h"]
+    cwd: "."
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/goal-recover-home .glyphrun/tmp/goal-recover-workdir && mkdir -p .glyphrun/tmp/goal-recover-home .glyphrun/tmp/goal-recover-workdir && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "./bin/sonar <command> [options]"
+        timeoutMs: 2000
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 2000
+outcomes:
+    - id: usage_visible
+      description: the help output shows usage text
+      verify:
+        screen:
+            contains: "./bin/sonar <command> [options]"
+    - id: prompt_flag_documented
+      description: the public non-interactive prompt flag is documented
+      verify:
+        screen:
+            contains: "Run one non-interactive prompt"
+    - id: model_flag_documented
+      description: the model override flag is documented
+      verify:
+        screen:
+            contains: "Override the Ollama model"
+    - id: goal_recovery_help_is_explicit
+      description: goal help documents dry-run, complete evidence apply, no-resume behavior, and the absence of a force override
+      verify:
+        command:
+            run: |
+                root="$PWD"
+                output="$(HOME="$root/.glyphrun/tmp/goal-recover-home" "$root/bin/sonar" goal help)"
+                printf '%s\n' "$output" | grep -q 'goal recover \[--json\] <session-id>'
+                printf '%s\n' "$output" | grep -q 'goal recover --apply --item ID.*--observed-at RFC3339'
+                printf '%s\n' "$output" | grep -q 'never resumes execution'
+                printf '%s\n' "$output" | grep -q 'no force override'
+    - id: goal_recovery_dry_run_does_not_create_authority
+      description: a default recovery attempt on an absent session fails without creating group, item, or resolution authority
+      verify:
+        command:
+            run: |
+                root="$PWD"
+                set +e
+                output="$(cd "$root/.glyphrun/tmp/goal-recover-workdir" && HOME="$root/.glyphrun/tmp/goal-recover-home" "$root/bin/sonar" goal recover a1b2c3d 2>&1)"
+                code=$?
+                set -e
+                test "$code" -eq 2
+                printf '%s\n' "$output" | grep -q 'goal recover: session a1b2c3d'
+                db="$root/.glyphrun/tmp/goal-recover-home/.config/sonar/sonar.db"
+                go run ./specs/fixtures/assert_empty_recovery "$db"
+    - id: incomplete_goal_recovery_apply_is_rejected_before_mutation
+      description: apply requires the complete evidence form before lease or authority mutation
+      verify:
+        command:
+            run: |
+                root="$PWD"
+                set +e
+                output="$(cd "$root/.glyphrun/tmp/goal-recover-workdir" && HOME="$root/.glyphrun/tmp/goal-recover-home" "$root/bin/sonar" goal recover --apply a1b2c3d 2>&1)"
+                code=$?
+                set -e
+                test "$code" -eq 2
+                printf '%s\n' "$output" | grep -q -- '--apply requires non-empty --item'
+                db="$root/.glyphrun/tmp/goal-recover-home/.config/sonar/sonar.db"
+                go run ./specs/fixtures/assert_empty_recovery "$db"
+    - id: exits_zero
+      description: help exits successfully
+      verify:
+        process:
+            exitCode: 0

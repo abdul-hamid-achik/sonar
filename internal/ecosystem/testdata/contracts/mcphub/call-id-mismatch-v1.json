@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "callId": "another-id",
+  "mediaType": "application/json",
+  "data": "e30=",
+  "cursor": 0,
+  "nextCursor": 2,
+  "done": true,
+  "totalBytes": 2,
+  "preview": "SECRET_MCPHUB_MISMATCH_PREVIEW"
+}

@@ -1,0 +1,11 @@
+
+  Ollama model · ctrl+o
+
+╭───────────────────────────╮
+│ Goal · 2/6                │
+│ Acceptance criteria       │
+│ > status is visible       │
+│   and accurate            │
+│ esc cancel · tab/⇧ move   │
+│ enter newline             │
+╰───────────────────────────╯

@@ -1,0 +1,1 @@
+{"authority":{"allowed_workspace_count":1,"default_workspace":"/workspace","mode":"exact_allowlist","selected_workspace":"/workspace"},"error":{"code":"input_invalid","message":"missing required inputs: command_name"},"ok":false,"operation":"plan","schema_version":1}

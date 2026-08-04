@@ -1,0 +1,49 @@
+version: 1
+contractHash: sha256:238e6ab77c03fe2200b1a0771b3ce880a3a8368934fb967ad89ab9d165a157a5
+name: local_agent_tui_smoke
+intent: |
+    a user can launch the sonar TUI, see the initial screen, and quit with ctrl+c.
+target:
+    cmd: ["./bin/sonar"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/agents"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/home .glyphrun/tmp/agents && mkdir -p .glyphrun/tmp/home/.config/sonar .glyphrun/tmp/agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "try: ollama serve"
+        timeoutMs: 5000
+    - snapshot: launch
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: launch_snapshot_stable
+      description: the normal-width welcome and settled local-runtime guidance remain stable
+      verify:
+        snapshot:
+            name: launch
+            mode: text
+    - id: welcome_visible
+      description: the TUI renders its session chrome and offline guidance
+      verify:
+        screen:
+            contains: "try: ollama serve"
+    - id: ctrl_c_quits
+      description: ctrl+c exits the TUI cleanly
+      verify:
+        process:
+            exitCode: 0

@@ -1,0 +1,40 @@
+version: 1
+contractHash: sha256:cf9d4ad666bef7dd620461ebb970b3371f5474c8b906a7858c93ee66b34b5147
+name: local_agent_logs_empty
+intent: |
+    a user can run sonar logs with an empty log directory and get a clear empty-state message.
+target:
+    cmd: ["./bin/sonar", "logs"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/logs-home"
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/logs-home && mkdir -p .glyphrun/tmp/logs-home && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "No log files found"
+        timeoutMs: 2000
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 2000
+outcomes:
+    - id: empty_state_visible
+      description: the logs command explains that no log files exist
+      verify:
+        screen:
+            contains: "No log files found"
+    - id: log_directory_reported
+      description: the empty-state message includes the isolated log directory
+      verify:
+        screen:
+            contains: ".config/sonar/logs"
+    - id: exits_zero
+      description: logs exits successfully for an existing empty log directory
+      verify:
+        process:
+            exitCode: 0

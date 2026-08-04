@@ -1,0 +1,48 @@
+version: 1
+name: local_agent_cli_json_receipt
+intent: |
+    a headless --json run keeps stdout silent while the turn streams and ends
+    the process with exactly one sonar.turn-receipt.v1 document carrying
+    the closed status/stop-reason vocabulary, the provider's exact token usage
+    and aggregated timings, and the model identity bound to the live
+    inventory digest. Diagnostics stay on stderr.
+target:
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-ollama-json-receipt"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/json-receipt-verdict.txt"
+    cwd: "${projectRoot}/.glyphrun/tmp/json-receipt-work"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/json-receipt-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/json-receipt-agents"
+        SONAR_REDUCED_MOTION: "1"
+terminal:
+    cols: 200
+    rows: 40
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/json-receipt-home .glyphrun/tmp/json-receipt-agents .glyphrun/tmp/json-receipt-work .glyphrun/tmp/json-receipt-verdict.txt .glyphrun/tmp/fake-ollama-json-receipt && mkdir -p .glyphrun/tmp/json-receipt-home/.config/sonar .glyphrun/tmp/json-receipt-agents .glyphrun/tmp/json-receipt-work && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/json-receipt-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-ollama-json-receipt ./specs/fixtures/fake_ollama_json_receipt"
+          cwd: "."
+          timeoutMs: 60000
+steps:
+    - wait:
+        screen:
+            contains: "sonar.turn-receipt.v1"
+        timeoutMs: 20000
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 10000
+outcomes:
+    - id: receipt_contract_is_exact
+      description: the fixture validated every receipt field against the provider facts it served, including usage, timings, and the inventory digest
+      verify:
+        command:
+            run: "test \"$(head -1 .glyphrun/tmp/json-receipt-verdict.txt)\" = ok"
+            cwd: "."
+    - id: headless_json_run_exits_cleanly
+      description: the wrapped headless run and its validation both finish successfully
+      verify:
+        process:
+            exitCode: 0
+contractHash: sha256:55c38d9d77dc0c73aa8959a2e2f14bb5ccb77dcac4faf46523b5924e2e880e0d

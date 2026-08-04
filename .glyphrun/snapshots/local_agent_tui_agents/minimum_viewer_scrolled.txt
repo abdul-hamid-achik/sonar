@@ -1,0 +1,11 @@
+ ╭──────────────────────────╮
+ │ Agent viewer             │
+ │ Consultation #<digest> … │
+ │ Subagents                │
+ │ … generalist · running   │
+ │   consulting · qwen3.5:… │
+ │                          │
+ │ Activity                 │
+ │ This agent does not rep… │
+ │ esc back · enter jump    │
+ ╰──────────────────────────╯

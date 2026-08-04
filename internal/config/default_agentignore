@@ -1,0 +1,19 @@
+# Local Agent built-in secret exclusions. These host defaults are evaluated as
+# an independent deny layer, so a repository cannot negate them.
+.env
+.env.*
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.npmrc
+.netrc
+credentials
+.aws/**
+.ssh/**
+*.p12
+*.keystore
+
+# Exact leaf files named .env.example, .env.sample, .env.template, or .env.dist
+# are host-approved templates. A repository may still exclude them explicitly;
+# the exception never applies to descendants of a directory with that name.

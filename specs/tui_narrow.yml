@@ -1,0 +1,266 @@
+version: 1
+contractHash: sha256:c6d23e5a5513c6fe236899448c2950ffad41ab5f71b498f98b086bdbaadb6f60
+name: local_agent_tui_narrow
+intent: |
+    a user can begin at the supported 30x12 minimum, then keep a full-width
+    conversation at 40 columns while the mode rail, composer-owned command
+    completion, guided PLAN form, and nested settings, runtime, and help overlays
+    remain legible while strict slash-command parsing fails closed before
+    quitting cleanly.
+target:
+    cmd: ["${projectRoot}/bin/sonar"]
+    cwd: ".glyphrun/tmp/narrow-home/workspace/sonar"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/narrow-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/narrow-agents"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 80
+    rows: 24
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/narrow-home .glyphrun/tmp/narrow-agents && mkdir -p .glyphrun/tmp/narrow-home/.config/sonar .glyphrun/tmp/narrow-home/workspace/sonar .glyphrun/tmp/narrow-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/narrow-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "try: ollama serve"
+        timeoutMs: 5000
+    - resize:
+        cols: 30
+        rows: 12
+    - wait:
+        screen:
+            contains: "LOCAL AGENT"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Ask"
+        timeoutMs: 2000
+    - snapshot: minimum_idle
+    - press: "ctrl+p"
+    - wait:
+        screen:
+            contains: "Settings"
+        timeoutMs: 2000
+    - snapshot: minimum_settings
+    - press: "esc"
+    - wait:
+        screen:
+            notContains: "Settings"
+        timeoutMs: 2000
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "PLAN"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Ask"
+        timeoutMs: 2000
+    - snapshot: minimum_plan_form
+    - wait:
+        screen:
+            notContains: "Plan · 1/3"
+        timeoutMs: 2000
+    - type: "/plan map API"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Plan · 1/3"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "map API"
+        timeoutMs: 2000
+    - snapshot: minimum_guided_plan
+    - press: "esc"
+    - wait:
+        screen:
+            notContains: "Plan · 1/3"
+        timeoutMs: 2000
+    - resize:
+        cols: 40
+        rows: 20
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 2000
+    - snapshot: narrow_compact
+    - press: "ctrl+p"
+    - wait:
+        screen:
+            contains: "Settings"
+        timeoutMs: 2000
+    - snapshot: narrow_settings
+    - press: "down"
+    - press: "down"
+    - press: "down"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Interactive work"
+        timeoutMs: 2000
+    - snapshot: narrow_mode
+    - press: "esc"
+    - wait:
+        screen:
+            contains: "Settings"
+        timeoutMs: 2000
+    - press: "down"
+    - press: "down"
+    - press: "down"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "MCP"
+        timeoutMs: 2000
+    - snapshot: narrow_runtime
+    - press: "esc"
+    - wait:
+        screen:
+            contains: "Settings"
+        timeoutMs: 2000
+    - press: "esc"
+    - wait:
+        screen:
+            notContains: "Settings"
+        timeoutMs: 2000
+    # Glyph v0.14.3 does not yet name F1; ESC OP is its terminal sequence.
+    - send:
+        bytes: "\\x1bOP"
+    - wait:
+        screen:
+            contains: "Keyboard Shortcuts"
+        timeoutMs: 2000
+    - snapshot: narrow_help
+    - press: "q"
+    - wait:
+        screen:
+            notContains: "Keyboard Shortcuts"
+        timeoutMs: 2000
+    - press: "/"
+    - wait:
+        screen:
+            contains: "Commands"
+        timeoutMs: 2000
+    - snapshot: narrow_commands
+    - press: "esc"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "❯ /"
+        timeoutMs: 2000
+    - snapshot: narrow_command_draft
+    - resize:
+        cols: 80
+        rows: 24
+    - type: 'load "unterminated'
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - press: "enter"
+    - wait:
+        screen:
+            contains: 'command parse error: unterminated " quote'
+        timeoutMs: 2000
+    - type: "/resume 42"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "usage: /sessions"
+        timeoutMs: 2000
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: minimum_terminal_is_usable
+      description: the supported 30x12 terminal retains the primary prompt and settings path
+      verify:
+        snapshot:
+            name: minimum_idle
+            mode: text
+    - id: minimum_settings_are_bounded
+      description: settings remain navigable at the supported 30x12 minimum
+      verify:
+        snapshot:
+            name: minimum_settings
+            mode: text
+    - id: minimum_plan_mode_is_usable
+      description: the PLAN rail remains legible at the supported minimum without opening a form
+      verify:
+        snapshot:
+            name: minimum_plan_form
+            mode: text
+    - id: minimum_guided_plan_is_usable
+      description: /plan opens a prefilled read-only planning form at the supported minimum
+      verify:
+        snapshot:
+            name: minimum_guided_plan
+            mode: text
+    - id: narrow_conversation_is_directly_usable
+      description: the conversation keeps the complete narrow terminal width without persistent chrome
+      verify:
+        snapshot:
+            name: narrow_compact
+            mode: text
+    - id: responsive_settings_open
+      description: session settings are reachable from the narrow composer
+      verify:
+        snapshot:
+            name: narrow_settings
+            mode: text
+    - id: nested_mode_returns_to_settings
+      description: a Settings child fits the narrow terminal and returns to the root palette
+      verify:
+        snapshot:
+            name: narrow_mode
+            mode: text
+    - id: responsive_runtime_status_opens
+      description: runtime status remains bounded and reachable from Settings
+      verify:
+        snapshot:
+            name: narrow_runtime
+            mode: text
+    - id: responsive_completion_opens
+      description: slash completion fits the supported 40-column terminal
+      verify:
+        snapshot:
+            name: narrow_commands
+            mode: text
+    - id: completion_cancel_preserves_draft
+      description: dismissing completion returns the unchanged trigger to the composer
+      verify:
+        snapshot:
+            name: narrow_command_draft
+            mode: text
+    - id: responsive_help_opens
+      description: help remains usable after the terminal is narrowed
+      verify:
+        snapshot:
+            name: narrow_help
+            mode: text
+    - id: narrow_tui_quits_cleanly
+      description: ctrl+c exits cleanly after the responsive flow
+      verify:
+        process:
+            exitCode: 0

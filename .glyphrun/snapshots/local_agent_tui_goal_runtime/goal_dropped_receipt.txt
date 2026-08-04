@@ -1,0 +1,31 @@
+   main · local-agent                       qwen3.5:2b · offline · 0/16.4k · 0%
+
+   notice · ollama: no model selected
+   try: ollama serve · ollama pull qwen3.5:2b
+   notice · Goal saved · Cortex is not configured; starting one bounded
+   local turn…
+
+  ╭──────────────────────────────────────────────────────────────────────────╮
+  │ Goal inspector · 0/1 verified                                            │
+  │ × dropped · Ship a polished goal UI                                      │
+  │ Acceptance criteria                                                      │
+  │ ○ pending · The durable goal status is visible and accurate              │
+  │ Productive turns are progress signals, not acceptance proof.             │
+  │                                                                          │
+  │ State                                                                    │
+  │ dropped · dropped by user                                                │
+  │                                                                          │
+  │ Last turn                                                                │
+  │ not productive · 0 eval · just now · inference not started: no model     │
+  │ selected                                                                 │
+  │                                                                          │
+  │ Cortex                                                                   │
+  │ not linked · bounded local goal                                          │
+  │                                                                          │
+  │ Actions                                                                  │
+  │ › Pause ×  Resume ×  Budget ×  Drop ×                                    │
+  │   Unavailable · Only an active goal can be paused.                       │
+  │ esc close · ←/→ action · enter select · j/k scroll                       │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+
+   enter send · shift+tab mode · esc cancel · f1

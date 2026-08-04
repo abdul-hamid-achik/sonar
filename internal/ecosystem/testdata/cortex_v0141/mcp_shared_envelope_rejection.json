@@ -1,0 +1,20 @@
+{
+  "contractVersion": 1,
+  "id": "mcp_shared_envelope_rejection",
+  "generatedBy": "TestPublicConformanceMCPSharedEnvelopeParity/mcp_shared_envelope_rejection",
+  "classification": "canonical",
+  "sensitiveDataPolicy": "synthetic data only; secrets, private paths, timestamps, and nondeterministic identifiers are forbidden",
+  "sizeBehavior": "JSON text and structured content carry the same bounded shared-envelope value",
+  "payload": {
+    "isError": true,
+    "jsonText": "{\n  \"ok\": false,\n  \"taskId\": \"task_contract_rejection\",\n  \"phase\": \"changing\",\n  \"summary\": \"change lease belongs to another actor\",\n  \"rawAvailable\": false,\n  \"error\": \"change lease belongs to another actor\"\n}",
+    "structuredContent": {
+      "error": "change lease belongs to another actor",
+      "ok": false,
+      "phase": "changing",
+      "rawAvailable": false,
+      "summary": "change lease belongs to another actor",
+      "taskId": "task_contract_rejection"
+    }
+  }
+}

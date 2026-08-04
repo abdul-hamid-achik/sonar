@@ -1,0 +1,31 @@
+   main · local-agent                       qwen3.5:2b · offline · 0/16.4k · 0%
+   notice · Goal saved · Cortex is not configured; starting one bounded
+   local turn…
+    ✗ error
+   Inference not started: no model selected
+   notice · Goal paused · unproductive turn: inference not started: no
+   model selected
+
+───────────────────────────────────────────────────────────────────────────────
+╭─────────────────────────────────────────────────────────────────────────────╮
+│ Goal budgets                                                                │
+│ Definition locked · adjust limits only.                                     │
+│                                                                             │
+│ Objective · locked                                                          │
+│   Ship a polished goal UI                                                   │
+│                                                                             │
+│ Acceptance criteria · locked                                                │
+│   The durable goal status is visible and accurate                           │
+│                                                                             │
+│                                                                             │
+│                                                                             │
+│ Limits · set at least one                                                   │
+│ Auto turns > 8                                                              │
+│ Tokens       12000                                                          │
+│ Time         30m                                                            │
+│                                                                             │
+│ Actions                                                                     │
+│ ▸ Save budgets ·   Cancel                                                   │
+│ Update limits only                                                          │
+│ esc cancel · enter/tab next                                                 │
+╰─────────────────────────────────────────────────────────────────────────────╯

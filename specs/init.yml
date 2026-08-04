@@ -1,0 +1,40 @@
+version: 1
+contractHash: sha256:644acb039a43d7262360a08a363888139a1e1a166900b20d9330cbcc76bf5997
+name: local_agent_init
+intent: |
+    a user can run sonar init in an empty project directory and create AGENTS.md.
+target:
+    cmd: ["${projectRoot}/bin/sonar", "init", "--force"]
+    cwd: ".glyphrun/tmp/init-workdir"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/init-home"
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/init-workdir .glyphrun/tmp/init-home && mkdir -p .glyphrun/tmp/init-workdir .glyphrun/tmp/init-home && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "AGENTS.md created successfully."
+        timeoutMs: 3000
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 2000
+outcomes:
+    - id: success_message_visible
+      description: init reports that AGENTS.md was created
+      verify:
+        screen:
+            contains: "AGENTS.md created successfully."
+    - id: agent_file_created
+      description: init creates AGENTS.md in the target project directory
+      verify:
+        command:
+            run: "test -s .glyphrun/tmp/init-workdir/AGENTS.md"
+    - id: exits_zero
+      description: init exits successfully
+      verify:
+        process:
+            exitCode: 0

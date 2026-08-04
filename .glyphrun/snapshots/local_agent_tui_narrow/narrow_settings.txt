@@ -1,0 +1,19 @@
+   qwen3.5:2b … · 0/16.4k · 0%
+   PLAN · read-only
+
+
+ ╭────────────────────────────────────╮
+ │ Settings                           │
+ │ │ Model · Pinned · qwen3.5:2b      │
+ │   Provider · ollama · local        │
+ │   Agent profile · Default          │
+ │   Mode · PLAN                      │
+ │   Sessions · Resume                │
+ │   Compact layout · Auto            │
+ │   Runtime status · 21 ready tools… │
+ │   Permissions · 0 session · 0 rul… │
+ │   Help · Shortcuts                 │
+ │                                    │
+ │   Choose an installed local model… │
+ │ esc close · enter select · ↑/↓     │
+ ╰────────────────────────────────────╯

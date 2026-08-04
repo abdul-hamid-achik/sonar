@@ -1,0 +1,27 @@
+   workspace                                                  qwen3.5:0.8b · 7/16.4k · 0%
+
+
+▌  Create approval-probe.txt with the exact text must not be written.
+
+
+   │ Thinking… · Checking workspace policy before the write.
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────
+◇  Permission · write · NORMAL
+   Action     Write 19 B
+   Target     <temp>/local-agent-glyphrun-denial/approval-probe.txt
+   Impact     Creates or replaces the target file with the proposed content.
+   Scope      Exact arguments · this process only
+
+   Proposed change
+   +must not be written
+
+   › n deny
+     y once
+     s same request again this session
+     a this tool again this session
+     p path again this session · approval-probe.txt
+     w save path for workspace · approval-probe.txt
+   esc cancel turn · enter select · ↑/↓/j/k move · d arguments · pgup/dn scroll

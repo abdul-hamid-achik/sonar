@@ -1,0 +1,132 @@
+version: 1
+contractHash: sha256:f0324e1fe8da44ec72a04dc99e651953ede34007f5fc3c7b66a52db93b777752
+name: local_agent_tui_composer_paste
+intent: |
+    a user can compose a multiline draft, visit Settings without losing it, and
+    safely review a large bracketed paste before accepting a bounded fenced block.
+target:
+    cmd: ["./bin/sonar"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/composer-paste-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/composer-paste-agents"
+        SONAR_REDUCED_MOTION: "1"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 90
+    rows: 32
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/composer-paste-home .glyphrun/tmp/composer-paste-agents && mkdir -p .glyphrun/tmp/composer-paste-home/.config/sonar .glyphrun/tmp/composer-paste-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/composer-paste-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "try: ollama serve"
+        timeoutMs: 5000
+    - type: "Review the first receipt."
+    - send:
+        bytes: "\e[13;2u"
+    - type: "Keep the second line while I check Settings."
+    - wait:
+        screen:
+            contains: "Keep the second line while I check Settings."
+        timeoutMs: 2000
+    - snapshot: multiline_draft
+    - press: "ctrl+p"
+    - wait:
+        screen:
+            contains: "│ Settings"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: settings_over_draft
+    - press: "esc"
+    - wait:
+        screen:
+            notContains: "│ Settings"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: draft_after_settings
+    - send:
+        bytes: "\e[13;2u"
+    - paste: "fixture line 01\nfixture line 02\nfixture line 03\nfixture line 04\nfixture line 05\nfixture line 06\nfixture line 07\nfixture line 08\nfixture line 09\nfixture line 10\nfixture line 11"
+    - wait:
+        screen:
+            contains: "Large paste 11 lines"
+        timeoutMs: 2000
+    - snapshot: large_paste_prompt
+    - press: "y"
+    - wait:
+        screen:
+            contains: "fixture line 11"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: fenced_paste_end
+    - send:
+        bytes: "\e[1;5H"
+    - wait:
+        screen:
+            contains: "Review the first receipt."
+        timeoutMs: 2000
+    - snapshot: fenced_paste_start
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: multiline_draft_grows_the_composer
+      description: Shift+Enter creates a readable multiline draft without sending it
+      verify:
+        snapshot:
+            name: multiline_draft
+            mode: text
+    - id: settings_opens_without_hiding_draft_state
+      description: Settings remains bounded while the multiline composer stays visible beneath it
+      verify:
+        snapshot:
+            name: settings_over_draft
+            mode: text
+    - id: settings_return_preserves_the_draft
+      description: closing Settings returns the unchanged two-line draft to keyboard focus
+      verify:
+        snapshot:
+            name: draft_after_settings
+            mode: text
+    - id: large_paste_requires_an_explicit_choice
+      description: an eleven-line bracketed paste replaces the composer with a clear wrap-or-cancel prompt
+      verify:
+        snapshot:
+            name: large_paste_prompt
+            mode: text
+    - id: accepted_paste_has_a_bounded_fenced_end
+      description: accepting wrap keeps the composer to five rows and exposes the closing code fence
+      verify:
+        snapshot:
+            name: fenced_paste_end
+            mode: text
+    - id: accepted_paste_has_a_fenced_start
+      description: moving to the start exposes the original draft followed by the opening code fence
+      verify:
+        snapshot:
+            name: fenced_paste_start
+            mode: text
+    - id: composer_flow_quits_cleanly
+      description: ctrl+c exits cleanly without submitting the draft
+      verify:
+        process:
+            exitCode: 0

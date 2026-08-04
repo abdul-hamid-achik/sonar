@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "taskId": "task-fixture",
+  "phase": "plan",
+  "reason": "SECRET_CORTEX_GATE_REASON",
+  "blockedBy": [
+    "SECRET_CORTEX_BLOCKER"
+  ]
+}

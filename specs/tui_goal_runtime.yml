@@ -1,0 +1,227 @@
+version: 1
+contractHash: sha256:f7b4d3619121783cf8ec17dab5a2678bc3e723d00db03425dc449012af5d959e
+name: local_agent_tui_goal_runtime
+intent: |
+    a user can define a bounded durable goal in the inline composer surface at
+    normal and minimum terminal sizes, continue safely without optional Cortex,
+    observe provider failure without false completion, inspect locked budget
+    editing, and drop the goal explicitly.
+target:
+    cmd: ["./bin/sonar"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/goal-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/goal-agents"
+        SONAR_REDUCED_MOTION: "1"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 80
+    rows: 32
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/goal-home .glyphrun/tmp/goal-agents && mkdir -p .glyphrun/tmp/goal-home/.config/sonar .glyphrun/tmp/goal-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/goal-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "try: ollama serve"
+        timeoutMs: 5000
+    - type: "/goal new"
+    - press: "enter"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Define done, then bound the run."
+        timeoutMs: 2000
+    - type: "Ship a polished goal UI"
+    - wait:
+        screen:
+            contains: "Ship a polished goal UI"
+        timeoutMs: 2000
+    - snapshot: goal_form_normal
+    - press: "enter"
+    - type: "The durable goal status is visible and accurate"
+    - resize:
+        cols: 30
+        rows: 12
+    - wait:
+        screen:
+            contains: "Goal · 2/6"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Acceptance criteria"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: goal_form_minimum
+    - resize:
+        cols: 80
+        rows: 32
+    - press: "tab"
+    - press: "tab"
+    - press: "tab"
+    - press: "tab"
+    - wait:
+        screen:
+            contains: "Save goal"
+        timeoutMs: 2000
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Goal saved · Cortex is not configured"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "Goal paused"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 3000
+    - type: "/goal show"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - press: "enter"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Goal inspector · 0/1 verified"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "paused · unproductive turn"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "not productive · 0 eval · just now"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 100
+        timeoutMs: 2000
+    - snapshot: goal_paused_receipt
+    - press: "esc"
+    - wait:
+        screen:
+            notContains: "Goal inspector"
+        timeoutMs: 2000
+    - type: "/goal budget"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - press: "enter"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Definition locked · adjust limits only."
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Auto turns"
+        timeoutMs: 2000
+    - snapshot: goal_budget_normal
+    - resize:
+        cols: 30
+        rows: 12
+    - wait:
+        screen:
+            contains: "Goal budgets · 1/4"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Locked · Ship"
+        timeoutMs: 2000
+    - snapshot: goal_budget_minimum
+    - press: "esc"
+    - wait:
+        screen:
+            notContains: "Goal budgets"
+        timeoutMs: 2000
+    - resize:
+        cols: 80
+        rows: 32
+    - type: "/goal drop"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - press: "enter"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Goal dropped without claiming completion."
+        timeoutMs: 2000
+    - type: "/goal show"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - press: "enter"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Goal inspector · 0/1 verified"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "dropped · Ship a polished goal UI"
+        timeoutMs: 2000
+    - snapshot: goal_dropped_receipt
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: normal_goal_form_is_clear
+      description: the wide inline goal form explains verifiable done and bounded continuation
+      verify:
+        snapshot:
+            name: goal_form_normal
+            mode: text
+    - id: minimum_goal_form_is_usable
+      description: the 30x12 inline form retains the active acceptance step and cancellation path
+      verify:
+        snapshot:
+            name: goal_form_minimum
+            mode: text
+    - id: unavailable_advisors_stop_safely
+      description: the Goal Inspector shows that AUTO continued without optional Cortex and paused safely when local provider inference could not start
+      verify:
+        snapshot:
+            name: goal_paused_receipt
+            mode: text
+    - id: budget_editor_locks_definition
+      description: the wide budget editor identifies immutable goal fields and auto-turn semantics
+      verify:
+        snapshot:
+            name: goal_budget_normal
+            mode: text
+    - id: minimum_budget_editor_keeps_context
+      description: the 30x12 budget editor retains locked objective context and progress
+      verify:
+        snapshot:
+            name: goal_budget_minimum
+            mode: text
+    - id: dropping_never_claims_completion
+      description: the Goal Inspector distinguishes explicit abandonment from verified completion
+      verify:
+        snapshot:
+            name: goal_dropped_receipt
+            mode: text
+    - id: goal_flow_quits_cleanly
+      description: ctrl+c exits cleanly after the durable goal lifecycle
+      verify:
+        process:
+            exitCode: 0

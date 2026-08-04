@@ -1,0 +1,144 @@
+version: 1
+
+artifactRoot: .glyphrun/runs
+snapshotRoot: .glyphrun/snapshots
+
+# Preserve every artifact from one full task glyphrun batch so a late failure
+# cannot prune the diagnostics for an earlier scenario in the same run.
+retention:
+  keepRuns: 20
+
+terminal:
+  cols: 120
+  rows: 36
+  profile: xterm-256color
+  normalize:
+    trimRight: true
+    normalizeLineEndings: true
+    replace:
+      - regex: "/(?:private/)?tmp/sonar-glyphrun"
+        with: "<temp>/sonar-glyphrun"
+      - regex: "/(?:private/)?tmp/sonar-glyphr…"
+        with: "<temp>/sonar-glyphrun…"
+      - regex: "/(?:private/)?tmp/sonar-glyph…"
+        with: "<temp>/sonar-glyphrun…"
+      - regex: "/(?:private/)?tmp/sonar-glyp…"
+        with: "<temp>/sonar-glyphrun…"
+      - regex: "/(?:private/)?tmp/sonar-gly…"
+        with: "<temp>/sonar-glyphrun…"
+      - regex: "/(?:private/)?tmp/sonar-gl…"
+        with: "<temp>/sonar-glyphrun…"
+      - regex: "/(?:private/)?tmp/sonar-g…"
+        with: "<temp>/sonar-glyphrun…"
+      - regex: "/(?:private/)?tmp/sonar…"
+        with: "<temp>/sonar-glyphrun…"
+      # Host workspace path in the session top bar differs between developer
+      # machines and CI (and may be width-truncated mid-segment with …). Match
+      # the project root plus common truncations — not longer paths under it.
+      - regex: "/Users/[^/\\s]+/projects/sonar"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/sonar"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects/local-agen…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects/local-ag…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects/local-a…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects/local…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects/loca…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects/loc…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects/lo…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects/l…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/projects…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/project…"
+        with: "<project>"
+      - regex: "/Users/[^/\\s]+/p╭"
+        with: "<project>╭"
+      - regex: "/Users/[^/\\s]+/p "
+        with: "<project> "
+      - regex: "/home/[^/\\s]+/work/sonar/local-age…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/local-ag…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/local-a…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/local…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/loca…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/loc…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/lo…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/l…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/local-agen…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/local-ag…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/local…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/loca…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/loc…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/lo…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/l…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/w…"
+        with: "<project>"
+      - regex: "/home/[^/\\s]+/work/sonar/p╭"
+        with: "<project>╭"
+      - regex: "/home/[^/\\s]+/work/sonar/p "
+        with: "<project> "
+      - regex: "~/projects/sonar"
+        with: "<project>"
+      - regex: "~/work/sonar/sonar"
+        with: "<project>"
+      # Legacy long placeholder (pre-dense chrome) if any residual frames remain.
+      - regex: "Ask, @mention files, or type /help"
+        with: "Ask"
+      - regex: "Ask or type / for commands"
+        with: "Ask · /help"
+      # Framed Ask line pads/ellipsis differently by host cell metrics.
+      - regex: "[│|]▏❯ Ask[ …]*[│|]"
+        with: "│▏❯ Ask │"
+      - regex: "[│|]> Ask[ …]*[│|]"
+        with: "│> Ask │"
+      # Session public IDs are random 7-char hex handles. Normalize them so
+      # committed snapshots stay stable across runs while still covering the
+      # handle shape in screen text.
+
+      # Approval target wrap and proposed-change preview differ by cell metrics.
+      - regex: "session-grant\\.\\n\\s+txt"
+        with: "session-grant.txt"
+      - regex: "\\n\\s*\\+session scoped approval"
+        with: ""
+      - regex: "\\n\\s*No textual difference detected\\."
+        with: ""
+      # Minimum footer truncates approval/settings labels differently by host.
+      - regex: "ctrl\\+p settings · qw…"
+        with: "ctrl+p settings"
+      - regex: "ctrl\\+…"
+        with: "ctrl+p settings"
+      - regex: "\\b[0-9a-f]{7}\\b"
+        with: "<session>"
+
+artifacts:
+  rawLog: true
+  frames: true
+  finalScreen: true
+  snapshots: true
+  agentContext: true

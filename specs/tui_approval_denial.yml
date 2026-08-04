@@ -1,0 +1,197 @@
+version: 1
+contractHash: sha256:067086de698f8a3cf74c1c7c86f57bcf4e3e3b81480fde97d6e7bfff74db0bb1
+name: local_agent_tui_approval_denial
+# Runner note (2026-07-16): a restricted sandbox can deny the wrapper's
+# 127.0.0.1:0 listener before sonar starts. Glyphrun currently reports
+# that immediate exit as a blank-screen timeout; CI and unrestricted runs pass.
+# Keep this enabled and improve Glyphrun to surface target_exited plus stderr.
+intent: |
+    a user can review a consequential request inline where the composer normally
+    lives, retain the surrounding transcript plus action and target context at
+    minimum width, deny it from the keyboard, and continue without any file
+    effect.
+target:
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-ollama-approval"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/approval-protocol.txt"
+    cwd: "/tmp/sonar-glyphrun-denial"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/approval-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/approval-agents"
+        SONAR_REDUCED_MOTION: "1"
+terminal:
+    cols: 90
+    rows: 28
+# See tui_approval_always for the constraint: macOS resolves /tmp to
+# /private/tmp, and a workdir path long enough to wrap the approval panel's
+# Target row there but not on Linux makes the panel one row taller on one host.
+# This name previously cleared the 83-column budget by three characters.
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/approval-home .glyphrun/tmp/approval-agents .glyphrun/tmp/approval-protocol.txt .glyphrun/tmp/fake-ollama-approval /tmp/sonar-glyphrun-denial && mkdir -p .glyphrun/tmp/approval-home/.config/sonar .glyphrun/tmp/approval-agents /tmp/sonar-glyphrun-denial && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/approval-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-ollama-approval ./specs/fixtures/fake_ollama_approval"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "qwen3.5:0.8b"
+        timeoutMs: 2000
+    - type: "Create approval-probe.txt with the exact text must not be written."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Thinking… · Checking workspace policy before the write."
+        timeoutMs: 5000
+    - snapshot: busy_normal
+    - type: "Summarize after the probe."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "queued › Summarize after the probe."
+        timeoutMs: 2000
+    - snapshot: busy_follow_up_queued
+    - press: "esc"
+    - wait:
+        screen:
+            notContains: "queued ›"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Permission · write"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "approval-probe.txt"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "y once"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "same request again this session"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "n deny"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: approval_normal
+    - resize:
+        cols: 30
+        rows: 12
+    - wait:
+        screen:
+            contains: "Permission · write"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Action Write 19 B"
+        timeoutMs: 2000
+    # At 30x12 the choice row truncates "same/session" to "s …"; keep waits that
+    # still appear after the compact reflow.
+    - wait:
+        screen:
+            contains: "n deny"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: approval_minimum
+    - press: "n"
+    - wait:
+        screen:
+            contains: "Denied safely."
+        timeoutMs: 4000
+    - resize:
+        cols: 50
+        rows: 20
+    - wait:
+        screen:
+            contains: "Denied safely. No file was changed."
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Write failed"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            notContains: "✓ Done"
+        timeoutMs: 4000
+    - snapshot: denied_receipt
+    - press: "ctrl+r"
+    - wait:
+        screen:
+            contains: "tool: write"
+        timeoutMs: 2000
+    - snapshot: denied_receipt_expanded
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: busy_turn_is_clear
+      description: provider reasoning stays inside the assistant transcript while cancel plus queue controls remain in the operational footer
+      verify:
+        snapshot:
+            name: busy_normal
+            mode: text
+    - id: running_turn_has_a_visible_recoverable_queue
+      description: Enter queues one visible follow-up and Escape clears that queue without cancelling the active turn
+      verify:
+        snapshot:
+            name: busy_follow_up_queued
+            mode: text
+    - id: normal_approval_is_inspectable
+      description: normal width exposes the write preview and explicit decisions inline without covering the transcript
+      verify:
+        snapshot:
+            name: approval_normal
+            mode: text
+    - id: minimum_approval_remains_safe
+      description: 30x12 inline approval preserves action and target context plus compact once, exact-request session, and deny shortcuts
+      verify:
+        snapshot:
+            name: approval_minimum
+            mode: text
+    - id: keyboard_denial_returns_a_receipt
+      description: denying with n produces a failed Write receipt and the model acknowledges the denial
+      verify:
+        snapshot:
+            name: denied_receipt
+            mode: text
+    - id: denied_receipt_is_keyboard_inspectable
+      description: ctrl+r expands the denied receipt to show safe tool identity, redacted arguments, and transport/domain/evidence state
+      verify:
+        snapshot:
+            name: denied_receipt_expanded
+            mode: text
+    - id: denied_write_has_no_effect
+      description: the denied tool never creates its requested workspace file
+      verify:
+        command:
+            run: "test ! -e /tmp/sonar-glyphrun-denial/approval-probe.txt"
+    - id: fake_provider_observed_the_denial
+      description: exactly two provider calls occurred and the second contained the denied tool result
+      verify:
+        command:
+            run: "grep -q '^protocol_ok=true$' .glyphrun/tmp/approval-protocol.txt"
+    - id: approval_flow_quits_cleanly
+      description: ctrl+c exits cleanly after the denied turn is complete
+      verify:
+        process:
+            exitCode: 0

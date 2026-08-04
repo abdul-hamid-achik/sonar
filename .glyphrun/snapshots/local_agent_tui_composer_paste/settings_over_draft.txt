@@ -1,0 +1,30 @@
+   main · local-agent                                 qwen3.5:2b · offline · 0/16.4k · 0%
+
+   notice · ollama: no model selected
+   try: ollama serve · ollama pull qwen3.5:2b
+
+
+
+      ╭────────────────────────────────────────────────────────────────────────────╮
+      │ Settings                                                                   │
+      │                                                                            │
+      │ │ Model · Pinned · qwen3.5:2b                                              │
+      │ │ Choose an installed local model or Ollama Cloud model                    │
+      │   Provider · ollama · local                                                │
+      │   Switch Ollama or OpenAI-compatible remote profiles                       │
+      │   Agent profile · Default                                                  │
+      │   Change prompt, skills, model, and MCP scope                              │
+      │   Mode · NORMAL                                                            │
+      │   NORMAL, PLAN, or AUTO authority                                          │
+      │   Sessions · Resume                                                        │
+      │   Open a saved workspace session                                           │
+      │   Compact layout · Auto                                                    │
+      │   Toggle the explicit compact transcript preference                        │
+      │   Runtime status · 21 ready tools · 21 local · 0 MCP                       │
+      │   Inspect model, approval posture, tools, servers, and failures            │
+      │   Permissions · 0 session · 0 rules                                        │
+      │   Accept-edits, session grants, durable rules, export/import               │
+      │   Help · Shortcuts                                                         │
+      │   Keyboard reference and slash commands                                    │
+      │ esc close · enter select · ↑/↓ move                                        │
+      ╰────────────────────────────────────────────────────────────────────────────╯

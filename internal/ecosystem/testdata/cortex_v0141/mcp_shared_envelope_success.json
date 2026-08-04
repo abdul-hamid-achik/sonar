@@ -1,0 +1,22 @@
+{
+  "contractVersion": 1,
+  "id": "mcp_shared_envelope_success",
+  "generatedBy": "TestPublicConformanceMCPSharedEnvelopeParity/mcp_shared_envelope_success",
+  "classification": "canonical",
+  "sensitiveDataPolicy": "synthetic data only; secrets, private paths, timestamps, and nondeterministic identifiers are forbidden",
+  "sizeBehavior": "JSON text and structured content carry the same bounded shared-envelope value",
+  "payload": {
+    "isError": false,
+    "jsonText": "{\n  \"ok\": true,\n  \"taskId\": \"task_contract_success\",\n  \"phase\": \"investigating\",\n  \"summary\": \"task opened\",\n  \"nextActions\": [\n    \"investigate\"\n  ],\n  \"rawAvailable\": false\n}",
+    "structuredContent": {
+      "nextActions": [
+        "investigate"
+      ],
+      "ok": true,
+      "phase": "investigating",
+      "rawAvailable": false,
+      "summary": "task opened",
+      "taskId": "task_contract_success"
+    }
+  }
+}

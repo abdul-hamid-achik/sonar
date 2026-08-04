@@ -1,0 +1,637 @@
+package ui
+
+import (
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+
+	"charm.land/bubbles/v2/list"
+	"github.com/abdul-hamid-achik/sonar/internal/config"
+)
+
+const (
+	modelPickerCompactWidth = 40
+	modelPickerCompactRows  = 14
+)
+
+// OllamaModelSource is the execution boundary reported by Ollama. It is kept
+// in the UI package so the picker does not depend on a particular wire client.
+type OllamaModelSource uint8
+
+const (
+	OllamaModelLocal OllamaModelSource = iota
+	OllamaModelCloud
+	OllamaModelRemote
+)
+
+// OllamaModelDescriptor is the UI-facing inventory contract. The Ollama
+// adapter owns discovery and enrichment; the picker only projects that state.
+type OllamaModelDescriptor struct {
+	Name             string
+	DisplayName      string
+	Source           OllamaModelSource
+	SizeBytes        int64
+	ParameterSize    string
+	Quantization     string
+	ContextLength    int
+	EffectiveContext int
+	AllocatedContext int
+	SizeVRAM         int64
+	Capabilities     []string
+	Current          bool
+	Running          bool
+	Selectable       bool
+	Fit              bool
+	AutoRoutable     bool
+	ManualOnly       bool
+	RequiresConsent  bool
+	ConsentGranted   bool
+	Reason           string
+}
+
+// OllamaModelInventoryMsg replaces the picker's cached inventory. RequestID
+// lets the parent discard stale asynchronous refreshes.
+type OllamaModelInventoryMsg struct {
+	RequestID uint64
+	Models    []OllamaModelDescriptor
+	Err       error
+}
+
+// ollamaModelInventoryCommittedMsg returns after the manager has atomically
+// installed one inventory snapshot outside Bubble Tea's Update goroutine.
+type ollamaModelInventoryCommittedMsg struct {
+	Inventory        OllamaModelInventoryMsg
+	RecoveredModel   string
+	RecoveryErr      error
+	SelectionChanged bool
+	PreviousModel    string
+	SelectedModel    string
+	SelectionReason  string
+	SelectionErr     error
+}
+
+// OllamaModelDetailsRequestedMsg asks the parent to enrich/show one model.
+// Cached descriptors may be rendered immediately while /api/show completes.
+type OllamaModelDetailsRequestedMsg struct{ Model OllamaModelDescriptor }
+
+type OllamaModelDetailsResultMsg struct {
+	Model OllamaModelDescriptor
+	Err   error
+}
+
+type modelItem struct {
+	name       string
+	descriptor OllamaModelDescriptor
+	size       string // retained for focused compatibility tests
+	capability string // retained for focused compatibility tests
+	isCurrent  bool
+	unsafe     bool
+}
+
+func (i modelItem) Title() string {
+	name := modelDisplayName(i.descriptor)
+	if name == "" {
+		name = sanitizeTerminalSingleLine(i.name)
+	}
+	parts := []string{modelGroupLabel(descriptorGroup(i.descriptor)), name}
+	if state := modelRowState(i.descriptor, i.isCurrent, i.unsafe); state != "" {
+		parts = append(parts, state)
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (i modelItem) Description() string {
+	if i.descriptor.Name == "" { // legacy config projection
+		size := sanitizeTerminalSingleLine(i.size)
+		capability := sanitizeTerminalSingleLine(i.capability)
+		if i.unsafe {
+			return fmt.Sprintf("%s · needs >16GB — unavailable", size)
+		}
+		return fmt.Sprintf("%s · %s", size, capability)
+	}
+	parts := make([]string, 0, 5)
+	if size := humanModelBytes(i.descriptor.SizeBytes); size != "" {
+		parts = append(parts, size)
+	}
+	if i.descriptor.ParameterSize != "" {
+		if value := sanitizeTerminalSingleLine(i.descriptor.ParameterSize); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	if i.descriptor.Quantization != "" {
+		if value := sanitizeTerminalSingleLine(i.descriptor.Quantization); value != "" {
+			parts = append(parts, value)
+		}
+	}
+	if capabilities := compactCapabilities(i.descriptor.Capabilities); capabilities != "" {
+		parts = append(parts, capabilities)
+	}
+	if i.descriptor.ContextLength > 0 {
+		parts = append(parts, compactTokenCount(i.descriptor.ContextLength)+" max ctx")
+	}
+	if i.descriptor.EffectiveContext > 0 && i.descriptor.EffectiveContext != i.descriptor.ContextLength {
+		parts = append(parts, compactTokenCount(i.descriptor.EffectiveContext)+" effective")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (i modelItem) FilterValue() string {
+	return strings.Join([]string{
+		sanitizeTerminalSingleLine(i.name),
+		modelDisplayName(i.descriptor),
+		modelGroupLabel(descriptorGroup(i.descriptor)),
+		modelRowState(i.descriptor, i.isCurrent, i.unsafe),
+		sanitizeTerminalSingleLine(strings.Join(i.descriptor.Capabilities, " ")),
+		sanitizeTerminalSingleLine(i.descriptor.Reason),
+	}, " ")
+}
+
+// modelDisplayName returns a terminal-safe presentation projection while the
+// descriptor itself retains the exact Ollama identifier used for selection
+// and network requests.
+func modelDisplayName(model OllamaModelDescriptor) string {
+	name := sanitizeTerminalSingleLine(model.DisplayName)
+	if name == "" {
+		name = sanitizeTerminalSingleLine(model.Name)
+	}
+	return name
+}
+
+// ollamaModelPickerTitle is a constant heading. The daemon version it used to
+// carry is a runtime fact, and now lives in the Runtime panel with the others.
+func ollamaModelPickerTitle(string) string {
+	return "Ollama models"
+}
+
+type ModelPickerState struct {
+	List         list.Model
+	Models       []config.Model // compatibility projection for existing callers
+	Inventory    []OllamaModelDescriptor
+	CurrentModel string
+	RequestID    uint64
+	Notice       string
+	Compact      bool
+	ItemHeight   int
+}
+
+func (s *ModelPickerState) SelectedDescriptor() (OllamaModelDescriptor, bool) {
+	if s == nil {
+		return OllamaModelDescriptor{}, false
+	}
+	item, ok := s.List.SelectedItem().(modelItem)
+	if !ok {
+		return OllamaModelDescriptor{}, false
+	}
+	return item.descriptor, item.descriptor.Name != ""
+}
+
+func (s *ModelPickerState) SelectedReason() string {
+	descriptor, ok := s.SelectedDescriptor()
+	if !ok {
+		return ""
+	}
+	return modelDecisionReason(descriptor)
+}
+
+func newModelPickerState(models []config.Model, currentModel string, terminalWidth, terminalHeight int, isDark bool, themeID string, reducedMotion ...bool) *ModelPickerState {
+	descriptors := make([]OllamaModelDescriptor, 0, len(models))
+	for _, model := range models {
+		descriptors = append(descriptors, OllamaModelDescriptor{
+			Name: model.Name, DisplayName: model.Name, Source: OllamaModelLocal,
+			ParameterSize: model.Size, ContextLength: model.ContextSize,
+			Capabilities: []string{model.Capability.String()}, Current: model.Name == currentModel,
+			Selectable: true, Fit: config.CheckModelMemorySafe(model.Name) == nil, AutoRoutable: true,
+		})
+	}
+	state := newOllamaModelPickerState(descriptors, currentModel, terminalWidth, terminalHeight, isDark, themeID, reducedMotion...)
+	state.Models = models
+	return state
+}
+
+func newOllamaModelPickerState(models []OllamaModelDescriptor, currentModel string, terminalWidth, terminalHeight int, isDark bool, themeID string, reducedMotion ...bool) *ModelPickerState {
+	models = append([]OllamaModelDescriptor(nil), models...)
+	sort.SliceStable(models, func(i, j int) bool {
+		gi, gj := descriptorGroup(models[i]), descriptorGroup(models[j])
+		return gi < gj
+	})
+
+	items := make([]list.Item, 0, len(models))
+	selectedIdx := 0
+	for _, model := range models {
+		if model.Name == currentModel || model.Current {
+			selectedIdx = len(items)
+		}
+		items = append(items, modelItem{name: model.Name, descriptor: model})
+	}
+
+	compact := compactModelPicker(terminalWidth, terminalHeight)
+	// Model identity and decision state belong to the navigable row; the
+	// selected-detail strip below owns metadata. Model rows intentionally stay
+	// single-line at every terminal size so metadata is not repeated and mixed
+	// local/cloud inventories remain simultaneously scannable.
+	delegate := newPickerDelegate(isDark, true, themeID)
+	pickerW := pickerListWidth(terminalWidth)
+	pickerH := modelPickerListHeight(terminalHeight, len(items), delegate.Height())
+	l := list.New(items, delegate, pickerW, pickerH)
+	configurePickerList(&l, isDark, themeID, reducedMotion...)
+	setSettingsTitleDensity(&l, compact)
+	l.Title = "Ollama models"
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetShowPagination(!compact && len(items)*delegate.Height() > pickerH-2)
+	l.SetFilteringEnabled(true)
+	l.DisableQuitKeybindings()
+	if len(items) > 0 {
+		l.Select(selectedIdx)
+	}
+
+	state := &ModelPickerState{
+		List:         l,
+		Inventory:    models,
+		CurrentModel: currentModel,
+		Compact:      compact,
+		ItemHeight:   delegate.Height(),
+	}
+	if len(models) == 0 {
+		state.Notice = "No models found · add a model or refresh Ollama"
+	}
+	return state
+}
+
+func descriptorGroup(model OllamaModelDescriptor) int {
+	switch model.Source {
+	case OllamaModelLocal:
+		return 0
+	case OllamaModelCloud:
+		return 1
+	default:
+		return 2
+	}
+}
+
+func modelGroupLabel(group int) string {
+	switch group {
+	case 0:
+		return "LOCAL"
+	case 1:
+		return "CLOUD"
+	case 2:
+		return "REMOTE"
+	default:
+		return "UNAVAILABLE"
+	}
+}
+
+func modelRowState(model OllamaModelDescriptor, legacyCurrent, legacyUnsafe bool) string {
+	switch {
+	case !model.Selectable || !model.Fit || legacyUnsafe:
+		return "unavailable"
+	case model.RequiresConsent && !model.ConsentGranted:
+		return "review"
+	case model.Current || legacyCurrent:
+		return "current"
+	case model.Running:
+		return "running"
+	case model.Source == OllamaModelLocal && model.ManualOnly:
+		return "manual"
+	default:
+		return "available"
+	}
+}
+
+func modelDecisionReason(model OllamaModelDescriptor) string {
+	reason := sanitizeTerminalSingleLine(model.Reason)
+	switch {
+	case model.RequiresConsent && !model.ConsentGranted:
+		if reason != "" {
+			return reason
+		}
+		return "Ollama Cloud confirmation required before use"
+	case !model.Selectable || !model.Fit:
+		if reason != "" {
+			return reason
+		}
+		return "model is unavailable under the current Ollama policy"
+	case model.Source == OllamaModelLocal && model.ManualOnly:
+		if reason != "" {
+			return reason
+		}
+		return "manual-only profile; automatic routing will not select it"
+	default:
+		return ""
+	}
+}
+
+func compactModelPicker(terminalWidth, terminalHeight int) bool {
+	return terminalWidth <= modelPickerCompactWidth || terminalHeight <= modelPickerCompactRows
+}
+
+func modelPickerListHeight(terminalHeight, itemCount, itemHeight int) int {
+	// Reserve room for the frame, primary key hints, and the selected-model
+	// detail. Compact terminals may need one extra wrapped decision line.
+	if terminalHeight <= modelPickerCompactRows {
+		// At the supported 30x12 minimum, keep one navigable result below the
+		// title and give the selected-detail strip the remaining rows. Bubbles
+		// scrolls the result window as selection moves.
+		return 2
+	}
+	return pickerListHeight(terminalHeight, itemCount*itemHeight+2, 7)
+}
+
+func modelSelectionState(model OllamaModelDescriptor) string {
+	parts := []string{modelGroupLabel(descriptorGroup(model))}
+	switch {
+	case !model.Selectable || !model.Fit:
+		parts = append(parts, "unavailable")
+	case model.RequiresConsent && !model.ConsentGranted:
+		parts = append(parts, "review required")
+	case model.Current:
+		parts = append(parts, "current")
+	case model.Running:
+		parts = append(parts, "running")
+	case model.Source == OllamaModelLocal && model.ManualOnly:
+		parts = append(parts, "manual-only")
+	default:
+		parts = append(parts, "available")
+	}
+	if model.Current && model.Running {
+		parts = append(parts, "running")
+	}
+	if model.ConsentGranted {
+		parts = append(parts, "conversation consent")
+	}
+	return strings.Join(parts, " · ")
+}
+
+func (m *Model) renderModelSelectionDetail(state *ModelPickerState, width int) string {
+	if state == nil {
+		return ""
+	}
+	descriptor, ok := state.SelectedDescriptor()
+	if !ok {
+		return m.styles.OverlayDim.Render(wrapText(sanitizeTerminalSingleLine(state.Notice), width))
+	}
+
+	lines := []string{m.styles.OverlayAccent.Render(wrapText(modelSelectionState(descriptor), width))}
+	if metadata := (modelItem{descriptor: descriptor}).Description(); metadata != "" {
+		// Capability joins are compact inside list rows, but the selected-detail
+		// strip should wrap at semantic boundaries instead of splitting a word.
+		metadata = strings.ReplaceAll(metadata, "+", " · ")
+		if state.Compact {
+			metadata = strings.ReplaceAll(metadata, " max ctx", " ctx")
+		}
+		lines = append(lines, m.styles.OverlayDim.Render(wrapText(metadata, width)))
+	}
+	if reason := modelDecisionReason(descriptor); reason != "" {
+		label := "Unavailable"
+		if descriptor.RequiresConsent && !descriptor.ConsentGranted {
+			label = "Review"
+		}
+		lines = append(lines, m.styles.OverlayDim.Render(wrapText(label+" · "+reason, width)))
+	}
+	if state.Notice != "" {
+		if notice := sanitizeTerminalSingleLine(state.Notice); notice != "" {
+			lines = append(lines, m.styles.OverlayDim.Render(wrapText(notice, width)))
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+func (m *Model) renderModelPicker() string {
+	ps := m.modelPickerState
+	if ps == nil {
+		return ""
+	}
+	selectAction := "select"
+	if descriptor, ok := ps.SelectedDescriptor(); ok && descriptor.RequiresConsent && !descriptor.ConsentGranted {
+		selectAction = "review"
+	}
+	width := pickerListWidth(m.width)
+	footer := m.renderKeyHints(width,
+		keyHint{Key: m.keys.Cancel.Help().Key, Action: m.overlayCloseLabel()},
+		keyHint{Key: m.keys.CompleteSelect.Help().Key, Action: selectAction},
+		keyHint{Key: "/", Action: "filter"},
+		keyHint{Key: "d", Action: "details"}, keyHint{Key: "a", Action: "add"},
+		keyHint{Key: "r", Action: "refresh"},
+	)
+	content := strings.TrimRight(ps.List.View(), "\n")
+	if detail := m.renderModelSelectionDetail(ps, width); detail != "" {
+		content += "\n" + detail
+	}
+	return m.renderPickerFrame(content, footer)
+}
+
+func humanModelBytes(size int64) string {
+	if size <= 0 {
+		return ""
+	}
+	const gib = int64(1024 * 1024 * 1024)
+	const mib = int64(1024 * 1024)
+	if size >= gib {
+		return fmt.Sprintf("%.1f GB", float64(size)/float64(gib))
+	}
+	return fmt.Sprintf("%d MB", max(int64(1), size/mib))
+}
+
+func compactTokenCount(value int) string {
+	if value >= 1000 {
+		return fmt.Sprintf("%dK", value/1000)
+	}
+	return fmt.Sprintf("%d", value)
+}
+
+func compactCapabilities(values []string) string {
+	wanted := []string{"tools", "thinking", "vision", "completion", "embedding"}
+	seen := make(map[string]bool, len(values))
+	for _, value := range values {
+		value = strings.ToLower(strings.TrimSpace(value))
+		if value == "tool" || value == "tool_calling" {
+			value = "tools"
+		}
+		seen[value] = true
+	}
+	result := make([]string, 0, len(seen))
+	for _, value := range wanted {
+		if seen[value] {
+			result = append(result, value)
+		}
+	}
+	return strings.Join(result, "+")
+}
+
+// openModelPicker shows the model picker overlay.
+func (m *Model) openModelPicker() {
+	if m.router == nil {
+		return
+	}
+	if len(m.ollamaModels) > 0 {
+		m.modelPickerState = newOllamaModelPickerState(m.ollamaModels, m.model, m.width, m.height, m.isDark, m.themeID, m.reducedMotion)
+		m.restylePickerOverlays()
+		if m.ollamaVersion != "" {
+			m.modelPickerState.List.Title = ollamaModelPickerTitle(m.ollamaVersion)
+		}
+		m.overlay = OverlayModelPicker
+		m.input.Blur()
+		return
+	}
+	if m.ollamaInventoryAttempted {
+		m.modelPickerState = newOllamaModelPickerState(nil, m.model, m.width, m.height, m.isDark, m.themeID, m.reducedMotion)
+		m.restylePickerOverlays()
+		if m.ollamaVersion != "" {
+			m.modelPickerState.List.Title = ollamaModelPickerTitle(m.ollamaVersion)
+		}
+		m.overlay = OverlayModelPicker
+		m.input.Blur()
+		return
+	}
+	catalog := m.router.ListModels()
+	byName := make(map[string]config.Model, len(catalog))
+	for _, model := range catalog {
+		byName[model.Name] = model
+	}
+	models := catalog
+	if len(m.modelList) > 0 {
+		models = make([]config.Model, 0, len(m.modelList))
+		for _, name := range m.modelList {
+			if model, ok := byName[name]; ok {
+				models = append(models, model)
+			} else {
+				models = append(models, config.Model{
+					Name: name, DisplayName: name, Size: "local", Capability: config.CapabilityMedium,
+				})
+			}
+		}
+	}
+	if len(models) == 0 {
+		return
+	}
+
+	m.modelPickerState = newModelPickerState(models, m.model, m.width, m.height, m.isDark, m.themeID, m.reducedMotion)
+	m.restylePickerOverlays()
+	m.overlay = OverlayModelPicker
+	m.input.Blur()
+}
+
+// selectModel switches to the given model and closes the picker.
+func (m *Model) selectModel(name string) {
+	if descriptor, ok := m.ollamaModelDescriptor(name); ok {
+		if !descriptor.Selectable || !descriptor.Fit {
+			reason := descriptor.Reason
+			if reason == "" {
+				reason = "model is not admitted by the current Ollama policy"
+			}
+			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: reason})
+			m.closeModelPicker()
+			m.refreshTranscript()
+			m.resumeFollow()
+			return
+		}
+		if descriptor.RequiresConsent && !descriptor.ConsentGranted {
+			m.openCloudConsent(descriptor)
+			return
+		}
+	} else if err := config.CheckModelMemorySafe(name); err != nil {
+		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
+		m.closeModelPicker()
+		m.refreshTranscript()
+		m.resumeFollow()
+		return
+	}
+	m.switchSelectedModel(name)
+}
+
+// switchSelectedModel commits a model switch after all admission and consent
+// checks have succeeded. Ollama Cloud grants remain exact and session-scoped.
+func (m *Model) switchSelectedModel(name string) bool {
+	old := m.model
+	if config.CanonicalModelName(old) == config.CanonicalModelName(name) && strings.TrimSpace(old) != "" {
+		// Selecting the active model is idempotent. This also absorbs duplicate
+		// Enter/delivery events without re-preparing the provider or stacking
+		// identical `Model` receipts in the transcript.
+		m.modelPinned = true
+		m.saveManualModelPreference(name)
+		for index := range m.ollamaModels {
+			m.ollamaModels[index].Current = config.CanonicalModelName(m.ollamaModels[index].Name) == config.CanonicalModelName(name)
+		}
+		m.cloudConsentState = nil
+		m.closeModelPicker()
+		m.refreshTranscript()
+		m.resumeFollow()
+		return true
+	}
+	if m.modelManager != nil {
+		m.prepareModelSwitch()
+		if err := m.modelManager.SetCurrentModel(name); err != nil {
+			if descriptor, ok := m.ollamaModelDescriptor(name); ok && descriptor.ConsentGranted {
+				m.modelManager.RevokeOllamaCloudModel(name)
+				m.setCloudConsentProjection(name, false)
+			}
+			if m.overlay == OverlayCloudConsent && m.cloudConsentState != nil {
+				m.cloudConsentState.Error = fmt.Sprintf("Could not switch: %v", err)
+				return false
+			}
+			m.entries = append(m.entries, ChatEntry{
+				Kind:    "error",
+				Content: fmt.Sprintf("Failed to switch model: %v", err),
+			})
+			m.closeModelPicker()
+			return false
+		}
+	}
+	m.setCurrentModelProjection(name)
+	m.ollamaOffline = false
+	m.modelPinned = true
+	m.saveManualModelPreference(name)
+	for index := range m.ollamaModels {
+		m.ollamaModels[index].Current = config.CanonicalModelName(m.ollamaModels[index].Name) == config.CanonicalModelName(name)
+	}
+	if m.logger != nil {
+		m.logger.Info("model switched", "from", old, "to", name)
+	}
+	// Empty state and the fixed status line already own the current model. Once
+	// a conversation exists, retain one compact transition receipt.
+	if m.conversationStarted() {
+		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "Model · " + m.currentModelSurfaceLabel(false)})
+	}
+	m.cloudConsentState = nil
+	m.closeModelPicker()
+	m.refreshTranscript()
+	m.resumeFollow()
+	return true
+}
+
+func (m *Model) ollamaModelDescriptor(name string) (OllamaModelDescriptor, bool) {
+	wanted := config.CanonicalModelName(name)
+	for _, descriptor := range m.ollamaModels {
+		if config.CanonicalModelName(descriptor.Name) == wanted {
+			return descriptor, true
+		}
+	}
+	return OllamaModelDescriptor{}, false
+}
+
+func (m *Model) validateModelAdmission(name string) error {
+	if descriptor, ok := m.ollamaModelDescriptor(name); ok {
+		if descriptor.Source == OllamaModelCloud && m.localOnly && !descriptor.ConsentGranted {
+			return fmt.Errorf("model %q requires Ollama Cloud confirmation for this conversation", name)
+		}
+		if descriptor.Selectable && descriptor.Fit {
+			return nil
+		}
+		if descriptor.Reason != "" {
+			return errors.New(descriptor.Reason)
+		}
+		return fmt.Errorf("model %q is not admitted by the current Ollama policy", name)
+	}
+	if m.ollamaInventoryAttempted {
+		return fmt.Errorf("model %q is absent from the current Ollama inventory", name)
+	}
+	return config.CheckModelMemorySafe(name)
+}
+
+// closeModelPicker dismisses the model picker overlay.
+func (m *Model) closeModelPicker() {
+	m.modelPickerState = nil
+	m.closeOverlayToParent()
+}

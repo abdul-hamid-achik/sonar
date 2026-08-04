@@ -1,0 +1,39 @@
+   main · local-agent                                                     qwen3.5:2b · offline · 0/16.4k · 0%
+
+   notice · ollama: no model selected
+   try: ollama serve · ollama pull qwen3.5:2b
+
+
+
+
+
+                ╭────────────────────────────────────────────────────────────────────────────╮
+                │ Filter › recovery                                                          │
+                │                                                                            │
+                │   <session> · Recovery receipt review                                        │
+                │   Jul 11, 2026 · 12:00 UTC                                                 │
+                │                                                                            │
+                │                                                                            │
+                │ esc back · enter select · ↑/↓ move · / filter                              │
+                ╰────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   enter send · shift+tab mode · esc cancel · f1 help

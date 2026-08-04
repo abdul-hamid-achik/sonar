@@ -1,0 +1,153 @@
+version: 1
+contractHash: sha256:f98cb7ae7bf73e4773aea02edcf26ec8cec357dadf74ccb6c2e68ebd297a4ab3
+name: local_agent_tui_modes
+intent: |
+    Normal remains the quiet interactive default, Shift+Tab cycles
+    NORMAL -> PLAN -> AUTO -> NORMAL without opening forms, PLAN sends ordinary
+    prompts directly under read-only authority, and explicit `/goal <time>
+    <prompt>` starts a bounded durable goal without a redundant form. An active
+    goal keeps effective AUTO authority while Shift+Tab selects the next ambient mode.
+target:
+    cmd: ["./bin/sonar"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/modes-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/modes-agents"
+        SONAR_REDUCED_MOTION: "1"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 72
+    rows: 28
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/modes-home .glyphrun/tmp/modes-agents && mkdir -p .glyphrun/tmp/modes-home/.config/sonar .glyphrun/tmp/modes-agents && printf '%s\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/modes-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "try: ollama serve"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "qwen3.5:2b"
+        timeoutMs: 3000
+    - wait:
+        screen:
+            notContains: "NORMAL ·"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Ask"
+        timeoutMs: 5000
+    - snapshot: normal_default
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "PLAN"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Ask"
+        timeoutMs: 5000
+    - type: "design a safe migration"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Inference not started: no model selected"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            notContains: "Plan · 1/3"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "▌❯ design a safe migration"
+        timeoutMs: 2000
+    - snapshot: plan_read_only
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "AUTO"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            notContains: "Goal ·"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "▌❯ design a safe migration"
+        timeoutMs: 2000
+    - snapshot: auto_mode
+    - press: "ctrl+u"
+    - type: "/goal 30m ship a bounded durable migration"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 2000
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Goal paused"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "Ⅱ paused · ship a b"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            notContains: "Save goal"
+        timeoutMs: 2000
+    - snapshot: explicit_goal_direct
+    - press: "right"
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "After goal · NORMAL · active goal · AUTO"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "AUTO"
+        timeoutMs: 2000
+    - snapshot: active_goal_auto_authority
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: normal_is_interactive_default
+      description: startup keeps Normal visually quiet while preserving the interactive authority
+      verify:
+        snapshot:
+            name: normal_default
+            mode: text
+    - id: plan_remains_read_only_and_structured
+      description: PLAN sends an ordinary prompt directly under read-only authority without opening a form
+      verify:
+        snapshot:
+            name: plan_read_only
+            mode: text
+    - id: auto_mode_does_not_open_goal_ui
+      description: the full Shift+Tab ring changes authority and wraps to quiet NORMAL without opening or creating a goal
+      verify:
+        snapshot:
+            name: auto_mode
+            mode: text
+    - id: explicit_goal_command_starts_directly
+      description: "`/goal <time> <prompt>` starts a concrete bounded goal without a redundant form"
+      verify:
+        snapshot:
+            name: explicit_goal_direct
+            mode: text
+    - id: active_goal_authority_remains_auto
+      description: Shift+Tab records the next ambient mode while the active goal remains visibly and effectively AUTO
+      verify:
+        snapshot:
+            name: active_goal_auto_authority
+            mode: text
+    - id: modes_flow_quits_cleanly
+      description: ctrl+c exits cleanly from the paused AUTO goal
+      verify:
+        process:
+            exitCode: 0

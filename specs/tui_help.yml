@@ -1,0 +1,68 @@
+version: 1
+contractHash: sha256:1301c3b05181158e6139bb3925c513beaf41c442133e928d60bcad52643e6490
+name: local_agent_tui_help
+intent: |
+    a user can open the sonar TUI help overlay, see shortcut and slash-command guidance, close it, and quit.
+target:
+    cmd: ["./bin/sonar"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/help-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/help-agents"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/help-home .glyphrun/tmp/help-agents && mkdir -p .glyphrun/tmp/help-home/.config/sonar .glyphrun/tmp/help-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/help-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "try: ollama serve"
+        timeoutMs: 5000
+    # Glyph v0.14.3 does not yet name F1; ESC OP is its terminal sequence.
+    - send:
+        bytes: "\\x1bOP"
+    - wait:
+        screen:
+            contains: "Keyboard Shortcuts"
+        timeoutMs: 3000
+    - snapshot: help
+    - press: "pgdown"
+    - wait:
+        screen:
+            contains: "Slash Commands"
+        timeoutMs: 3000
+    - snapshot: help_commands
+    - press: "q"
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 3000
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: help_snapshot_stable
+      description: the help overlay content matches the committed terminal snapshot
+      verify:
+        snapshot:
+            name: help
+            mode: text
+    - id: slash_commands_snapshot_stable
+      description: scrolling help reveals slash-command guidance
+      verify:
+        snapshot:
+            name: help_commands
+            mode: text
+    - id: ctrl_c_quits
+      description: ctrl+c exits the TUI cleanly after help is closed
+      verify:
+        process:
+            exitCode: 0

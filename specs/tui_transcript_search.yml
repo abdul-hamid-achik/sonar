@@ -1,0 +1,93 @@
+version: 1
+contractHash: sha256:7a7fe6a6bb5832d28b5ede403ccb372a885227c74a1d54629f39271b2102c539
+name: local_agent_tui_transcript_search
+intent: |
+    a reader can search the safe transcript projection, navigate matches, and
+    close search without changing an existing draft or paused reading intent.
+target:
+    cmd: ["./bin/sonar", "--resume", "c0ffee1"]
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/transcript-search-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/transcript-search-agents"
+        SONAR_REDUCED_MOTION: "1"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 110
+    rows: 22
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/transcript-search-home .glyphrun/tmp/transcript-search-agents && mkdir -p .glyphrun/tmp/transcript-search-home/.config/sonar .glyphrun/tmp/transcript-search-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/transcript-search-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+        - run: "go run ./specs/fixtures/session_receipts .glyphrun/tmp/transcript-search-home/.config/sonar/sonar.db '${projectRoot}'"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "The read completed, the test failure is visible"
+        timeoutMs: 15000
+    - type: "draft survives transcript search"
+    - press: "pgup"
+    - wait:
+        screen:
+            contains: "Follow paused · end latest"
+        timeoutMs: 2000
+    - press: "ctrl+f"
+    - wait:
+        screen:
+            contains: "search safe transcript"
+        timeoutMs: 2000
+    - type: "interrupted effect"
+    - wait:
+        screen:
+            contains: "1/1"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "interrupted effect"
+        timeoutMs: 2000
+    - snapshot: active_search_match
+    - press: "ctrl+n"
+    - press: "ctrl+p"
+    - press: "esc"
+    - wait:
+        screen:
+            contains: "draft survives transcript search"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "Follow paused · end latest"
+        timeoutMs: 2000
+    - snapshot: restored_search_state
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: safe_transcript_match_is_navigable
+      description: search finds and navigates a visible settled assistant match
+      verify:
+        snapshot:
+            name: active_search_match
+            mode: text
+    - id: search_close_restores_draft
+      description: closing transcript search restores the existing composer draft
+      verify:
+        snapshot:
+            name: restored_search_state
+            mode: text
+    - id: search_close_restores_paused_follow
+      description: closing transcript search preserves the reader's paused follow intent
+      verify:
+        snapshot:
+            name: restored_search_state
+            mode: text
+    - id: search_state_snapshot_stable
+      description: the restored draft and paused transcript frame remain stable after search closes
+      verify:
+        snapshot:
+            name: restored_search_state
+            mode: text

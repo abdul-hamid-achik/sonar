@@ -1,0 +1,191 @@
+version: 1
+contractHash: sha256:9da76cf2c4b04ec9044ede00e0debcc754caa47caa1c472ee6107e560ee2ac36
+name: local_agent_cli_flags
+intent: |
+    command-line users can discover and safely combine the public headless
+    aliases. --prompt is equivalent to -p, --auto and --plan require a prompt
+    and cannot contradict each other or --mode, and --skip-approvals replaces
+    the deprecated --yolo spelling without implying AUTO authority.
+target:
+    cmd: ["./bin/sonar", "-h"]
+    cwd: "."
+preconditions:
+    commands:
+        - run: "go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "./bin/sonar <command> [options]"
+        timeoutMs: 2000
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 2000
+outcomes:
+    - id: public_headless_flags_are_discoverable
+      description: help exposes the prompt, authority, and approval aliases while marking yolo as deprecated
+      verify:
+        command:
+            run: |
+                output="$(./bin/sonar -h 2>&1)"
+                printf '%s\n' "$output" | grep -qF -- '  -p, --prompt <text>'
+                printf '%s\n' "$output" | grep -qF -- '      --auto'
+                printf '%s\n' "$output" | grep -qF -- '      --plan'
+                printf '%s\n' "$output" | grep -qF -- '      --skip-approvals'
+                printf '%s\n' "$output" | grep -qF -- '      --version'
+                printf '%s\n' "$output" | grep -qF -- '      --yolo'
+                printf '%s\n' "$output" | grep -qF -- 'Deprecated alias for --skip-approvals; does not enable --auto'
+                printf '%s\n' "$output" | grep -qF -- '  execution  Inspect and reconcile standalone execution effects'
+    - id: legacy_yolo_warns_without_changing_authority
+      description: invoking --yolo emits a migration warning and explicitly states that AUTO authority is separate
+      verify:
+        command:
+            run: |
+                set +e
+                output="$(./bin/sonar --yolo --auto 2>&1)"
+                code=$?
+                set -e
+                test "$code" -eq 2
+                printf '%s\n' "$output" | grep -qF -- 'warning: --yolo is deprecated; use --skip-approvals'
+                printf '%s\n' "$output" | grep -qF -- 'does not enable --auto'
+    - id: root_help_command_is_discoverable
+      description: the explicit help command exits successfully and lists public subcommands without initializing the runtime
+      verify:
+        command:
+            run: |
+                output="$(./bin/sonar help 2>&1)"
+                printf '%s\n' "$output" | grep -qF -- './bin/sonar <command> [options]'
+                printf '%s\n' "$output" | grep -qF -- '  init       Create an AGENTS.md starter file'
+    - id: prompt_alias_preserves_resume_exclusion
+      description: --prompt is treated exactly like -p when validating the interactive-only resume contract
+      verify:
+        command:
+            run: |
+                set +e
+                output="$(./bin/sonar --prompt inspect --resume latest 2>&1)"
+                code=$?
+                set -e
+                test "$code" -eq 2
+                printf '%s\n' "$output" | grep -qE -- '--resume'
+                printf '%s\n' "$output" | grep -qE -- '-p'
+                printf '%s\n' "$output" | grep -qE -- '--prompt'
+    - id: version_spelling_is_preserved_as_a_prompt_value
+      description: --version consumed as the value of --prompt is not reinterpreted as the root version flag
+      verify:
+        command:
+            run: |
+                set +e
+                output="$(./bin/sonar --prompt --version --auto --plan 2>&1)"
+                code=$?
+                set -e
+                test "$code" -eq 2
+                printf '%s\n' "$output" | grep -qE -- '--auto and --plan are mutually exclusive'
+                ! printf '%s\n' "$output" | grep -qxE -- 'dev'
+    - id: explicit_empty_prompt_values_are_rejected
+      description: both prompt aliases reject an explicitly empty equals-form value before config or network access
+      verify:
+        command:
+            run: |
+                set +e
+                long_output="$(./bin/sonar --prompt= 2>&1)"
+                long_code=$?
+                short_output="$(./bin/sonar -p= 2>&1)"
+                short_code=$?
+                set -e
+                test "$long_code" -eq 2
+                test "$short_code" -eq 2
+                printf '%s\n' "$long_output" | grep -qE -- 'requires a non-empty value'
+                printf '%s\n' "$short_output" | grep -qE -- 'requires a non-empty value'
+    - id: auto_requires_a_headless_prompt
+      description: --auto fails before config or network access when neither -p nor --prompt is present
+      verify:
+        command:
+            run: |
+                set +e
+                output="$(./bin/sonar --auto 2>&1)"
+                code=$?
+                set -e
+                test "$code" -eq 2
+                printf '%s\n' "$output" | grep -qE -- '-p'
+                printf '%s\n' "$output" | grep -qE -- '--prompt'
+    - id: plan_requires_a_headless_prompt
+      description: --plan fails before config or network access when neither -p nor --prompt is present
+      verify:
+        command:
+            run: |
+                set +e
+                output="$(./bin/sonar --plan 2>&1)"
+                code=$?
+                set -e
+                test "$code" -eq 2
+                printf '%s\n' "$output" | grep -qE -- '-p'
+                printf '%s\n' "$output" | grep -qE -- '--prompt'
+    - id: auto_and_plan_are_mutually_exclusive
+      description: contradictory authority shortcuts fail deterministically before config or network access
+      verify:
+        command:
+            run: |
+                set +e
+                output="$(./bin/sonar --auto --plan --prompt inspect 2>&1)"
+                code=$?
+                set -e
+                test "$code" -eq 2
+                printf '%s\n' "$output" | grep -qE -- '--auto and --plan are mutually exclusive'
+    - id: shortcuts_reject_conflicting_explicit_modes
+      description: each shortcut rejects an explicitly contradictory --mode value
+      verify:
+        command:
+            run: |
+                set +e
+                auto_output="$(./bin/sonar --auto --mode plan --prompt inspect 2>&1)"
+                auto_code=$?
+                plan_output="$(./bin/sonar --plan --mode auto --prompt inspect 2>&1)"
+                plan_code=$?
+                set -e
+                test "$auto_code" -eq 2
+                test "$plan_code" -eq 2
+                printf '%s\n' "$auto_output" | grep -qE -- '--auto conflicts with --mode "plan"'
+                printf '%s\n' "$plan_output" | grep -qE -- '--plan conflicts with --mode "auto"'
+    - id: flag_like_values_follow_cli_token_order
+      description: string flags consume the following token even when it looks like another public flag
+      verify:
+        command:
+            run: |
+                set +e
+                mode_output="$(./bin/sonar --mode --auto --prompt inspect 2>&1)"
+                mode_code=$?
+                prompt_output="$(./bin/sonar -p --plan --auto --mode plan 2>&1)"
+                prompt_code=$?
+                model_output="$(./bin/sonar --model --prompt --auto 2>&1)"
+                model_code=$?
+                set -e
+                test "$mode_code" -eq 2
+                test "$prompt_code" -eq 2
+                test "$model_code" -eq 2
+                printf '%s\n' "$mode_output" | grep -qE -- 'unknown authority "--auto"'
+                printf '%s\n' "$prompt_output" | grep -qE -- '--auto conflicts with --mode "plan"'
+                printf '%s\n' "$model_output" | grep -qE -- 'require a headless prompt via -p/--prompt'
+    - id: shortcuts_accept_matching_explicit_modes
+      description: matching shortcut and --mode combinations pass conflict validation and reach the prompt requirement
+      verify:
+        command:
+            run: |
+                set +e
+                auto_output="$(./bin/sonar --auto --mode auto 2>&1)"
+                auto_code=$?
+                plan_output="$(./bin/sonar --plan --mode plan 2>&1)"
+                plan_code=$?
+                set -e
+                test "$auto_code" -eq 2
+                test "$plan_code" -eq 2
+                printf '%s\n' "$auto_output" | grep -qE -- '--prompt'
+                printf '%s\n' "$plan_output" | grep -qE -- '--prompt'
+                ! printf '%s\n' "$auto_output" | grep -qE -- 'conflicts with --mode'
+                ! printf '%s\n' "$plan_output" | grep -qE -- 'conflicts with --mode'
+    - id: help_exits_zero
+      description: help remains a successful side-effect-free command
+      verify:
+        process:
+            exitCode: 0

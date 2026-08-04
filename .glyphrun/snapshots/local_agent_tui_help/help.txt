@@ -1,0 +1,35 @@
+                     ╭────────────────────────────────────────────────────────────────────────────╮
+                     │ Help                                                                       │
+                     │                                                                            │
+                     │ Keyboard Shortcuts                                                         │
+                     │   Compose                                                                  │
+                     │   enter             Send / queue one follow-up                             │
+                     │   shift+enter       New line · ctrl+j/alt+enter also                       │
+                     │   tab               Autocomplete                                           │
+                     │   ↑                 Previous input (empty input)                           │
+                     │   ↓                 Next input (history active)                            │
+                     │   ctrl+e            Open in $VISUAL/$EDITOR                                │
+                     │                                                                            │
+                     │   Read                                                                     │
+                     │   pgup              Scroll up                                              │
+                     │   pgdown            Scroll down                                            │
+                     │   ctrl+u            Edit / half page up                                    │
+                     │   ctrl+d            Edit / half page down                                  │
+                     │   end               Latest output (empty input)                            │
+                     │   ctrl+f            Search transcript                                      │
+                     │                                                                            │
+                     │   Inspect                                                                  │
+                     │   ctrl+b            Toggle all tools (empty input)                         │
+                     │   ctrl+r            Toggle last tool (empty input)                         │
+                     │   ctrl+t            Toggle all thoughts (empty draft)                      │
+                     │   ctrl+y            Copy last response (empty input)                       │
+                     │   ctrl+k            Toggle compact mode                                    │
+                     │                                                                            │
+                     │   Session                                                                  │
+                     │   shift+tab         Cycle mode (NORMAL/PLAN/AUTO)                          │
+                     │   ctrl+o            Open Ollama models                                     │
+                     │   ctrl+p            Open settings                                          │
+                     │   ctrl+g            Open agents                                            │
+                     │   ctrl+n            New conversation                                       │
+                     │ esc/q close · pgdn more · g/shift+g ends                                   │
+                     ╰────────────────────────────────────────────────────────────────────────────╯

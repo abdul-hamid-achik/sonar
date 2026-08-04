@@ -1,0 +1,11 @@
+{
+  "status": "ok",
+  "callId": "3f9a1c2e7b804d5e9f1a2b3c4d5e6f70",
+  "mediaType": "text/plain",
+  "data": "not-base64!",
+  "cursor": 0,
+  "nextCursor": 11,
+  "done": true,
+  "totalBytes": 11,
+  "preview": "SECRET_MCPHUB_INVALID_PREVIEW"
+}

@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "source": "workspace",
+  "workspace": "/repo",
+  "authority": {
+    "mode": "exact_allowlist",
+    "default_workspace": "/repo",
+    "selected_workspace": "/repo",
+    "allowed_workspace_count": 1
+  },
+  "manifest_schema_version": 1,
+  "recipe": {
+    "id": "files",
+    "version": 1
+  },
+  "manifest": {
+    "schema_version": 1,
+    "recipe": "files",
+    "product": {
+      "name": "sample",
+      "module": "",
+      "description": "SECRET_BOB_MANIFEST_DESCRIPTION",
+      "visibility": "",
+      "license": ""
+    },
+    "runtime": {
+      "language": "",
+      "kind": ""
+    },
+    "surfaces": {
+      "cli": false,
+      "json": false,
+      "mcp": false,
+      "studio": false
+    },
+    "integrations": {
+      "code_structure": "",
+      "semantic_search": "",
+      "terminal_verification": "",
+      "browser_verification": "",
+      "secrets": "",
+      "artifacts": ""
+    },
+    "distribution": {
+      "github_actions": false,
+      "goreleaser": false,
+      "homebrew": false,
+      "docs": ""
+    },
+    "files": [
+      {
+        "path": "README.md",
+        "content": "hello"
+      }
+    ]
+  },
+  "warnings": [
+    "SECRET_BOB_VALIDATE_WARNING"
+  ]
+}

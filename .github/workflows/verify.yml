@@ -1,0 +1,156 @@
+name: Verify
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: Go 1.25 verification
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # setup-go v6 prefers go.mod's toolchain directive. Pin the minimum
+      # supported application toolchain and prevent an automatic upgrade so
+      # this job proves the advertised Go 1.25 contract.
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.25.12'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Check module files
+        run: go mod tidy -diff
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          version: v2.12.2
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test ./... -count=1 -race
+
+      - name: Compile integration-tag suite
+        run: go test -tags=integration ./internal/integration -run '^$' -count=1
+
+      - name: Run govulncheck
+        env:
+          GOTOOLCHAIN: local
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+  glyphrun-cli:
+    name: Glyphrun deterministic terminal suite
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      # actions/checkout resolves a SHA, so `git branch --show-current` is empty
+      # and the session top bar falls back to its detached-HEAD label. That label
+      # is a different width than a branch name, so the bar's right-aligned
+      # context meter lands in a different column and every committed snapshot
+      # containing the top bar mismatches. Text normalization cannot repair it —
+      # the padding is computed before any rule runs. Restoring the branch is the
+      # only fix that keeps the snapshots byte-identical to a developer's run.
+      - name: Restore branch name for deterministic session chrome
+        run: git checkout -B main --no-track HEAD
+
+      - name: Set up Go for Glyphrun
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.26.x'
+          # cache: false only disables this action's restore/save hooks. The
+          # install step below separately isolates every writable Go path.
+          cache: false
+
+      - name: Install pinned Glyphrun
+        env:
+          GOBIN: ${{ runner.temp }}/glyphrun/bin
+          GOPATH: ${{ runner.temp }}/glyphrun/gopath
+          GOMODCACHE: ${{ runner.temp }}/glyphrun/gomodcache
+          GOCACHE: ${{ runner.temp }}/glyphrun/build-cache
+        run: |
+          go install github.com/abdul-hamid-achik/glyphrun/cmd/glyph@v0.14.3
+          echo "${GOBIN}" >> "${GITHUB_PATH}"
+
+      # Glyphrun currently needs Go 1.26 to build, but the application contract
+      # is Go 1.25. Switch back before the specs compile sonar so the PTY
+      # surface is exercised with the same minimum toolchain as releases.
+      - name: Set up application Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.25.12'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Verify every Glyphrun contract hash
+        run: |
+          test -f specs/live/ollama_tool.yml
+          for spec in specs/*.yml specs/live/*.yml; do
+            test -f "$spec" || continue
+            glyph spec verify "$spec" --format md
+          done
+
+      - name: Prebuild application for terminal suite
+        run: go build -o ./bin/sonar ./cmd/sonar
+
+      - name: Verify complete deterministic terminal suite
+        run: |
+          set -eu
+          set --
+          for spec in specs/*.yml; do
+            set -- "$@" "$spec"
+          done
+          test "$#" -gt 0
+          glyph run "$@" --format md --progress always --parallel 1
+
+      - name: Upload failed terminal diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: glyphrun-failure-${{ github.run_attempt }}
+          path: .glyphrun/runs
+          include-hidden-files: true
+          retention-days: 3
+
+  darwin-smoke:
+    name: Darwin build and POSIX smoke tests
+    runs-on: macos-latest
+    timeout-minutes: 10
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - name: Checkout
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+
+      - name: Set up Go
+        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: '1.25.12'
+          cache: true
+          cache-dependency-path: go.sum
+
+      - name: Build release-compatible binary
+        env:
+          CGO_ENABLED: 0
+        run: go build -trimpath -o "${RUNNER_TEMP}/sonar" ./cmd/sonar
+
+      - name: Run binary smoke test
+        run: '"${RUNNER_TEMP}/sonar" --version'
+
+      - name: Run Darwin-sensitive package tests
+        run: go test ./cmd/sonar ./internal/agent ./internal/config ./internal/db ./internal/mcp ./internal/safeio -count=1

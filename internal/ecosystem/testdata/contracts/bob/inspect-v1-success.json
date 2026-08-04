@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "workspace": "/repo",
+  "authority": {
+    "mode": "exact_allowlist",
+    "default_workspace": "/repo",
+    "selected_workspace": "/repo",
+    "allowed_workspace_count": 1
+  },
+  "report": {
+    "schema_version": 1,
+    "workspace": "/repo",
+    "repository": {
+      "state": "clean",
+      "manifest_path": "/repo/bob.yaml",
+      "recipe": "files",
+      "ready": true,
+      "converged": true,
+      "lock_changed": false,
+      "managed_files": 1,
+      "conflict_count": 0,
+      "actions": {
+        "create": 0,
+        "update": 0,
+        "adopt": 0,
+        "unchanged": 1,
+        "conflict": 0
+      }
+    },
+    "integrations": [
+      {
+        "name": "codemap",
+        "selected": false,
+        "available": false,
+        "probe": {
+          "state": "not_selected",
+          "cwd": "/repo",
+          "argv": []
+        },
+        "index": {
+          "state": "unknown"
+        }
+      },
+      {
+        "name": "vecgrep",
+        "selected": false,
+        "available": false,
+        "probe": {
+          "state": "not_selected",
+          "cwd": "/repo",
+          "argv": []
+        },
+        "index": {
+          "state": "unknown"
+        }
+      }
+    ],
+    "degraded": false,
+    "warnings": [
+      "SECRET_BOB_INSPECT_WARNING"
+    ],
+    "next_actions": []
+  }
+}

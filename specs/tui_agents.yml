@@ -1,0 +1,237 @@
+version: 1
+contractHash: sha256:0de466571150a88459547bebd5f0589153a832c74b40176d3819fb54c8af3513
+name: local_agent_tui_agents
+intent: |
+    a user can inspect the empty Agent Hub, open a live consultation with
+    Ctrl+G, inspect its bounded subagent projection without exposing child
+    reasoning, scroll the Viewer with the mouse at the supported 30x12 minimum,
+    observe the consultation settle, and reopen the Hub with /agents.
+target:
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-ollama-agents"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/agents-protocol.txt"
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/agents-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/agents-profiles"
+        SONAR_REDUCED_MOTION: "1"
+        SONAR_FIXTURE_EXPERT_DELAY: "8s"
+terminal:
+    cols: 80
+    rows: 24
+normalize:
+    replace:
+        - regex: 'Done · [0-9]+\.[0-9]+s'
+          with: 'Done · <elapsed>'
+        - regex: 'Consultation #[0-9a-f]{8}'
+          with: 'Consultation #<digest>'
+        - regex: 'Consultation #[0-9a-f]{7}'
+          with: 'Consultation #<short>'
+        - regex: '[0-9]{5}m[0-9]{2}s'
+          with: 'xxxxxmxxs'
+        - regex: '[0-9]{4}m[0-9]{2}s'
+          with: 'xxxxmxxs'
+        - regex: '[0-9]{3}m[0-9]{2}s'
+          with: 'xxxmxxs'
+        - regex: '[0-9]{2}m[0-9]{2}s'
+          with: 'xxmxxs'
+        - regex: '[0-9]m[0-9]{2}s'
+          with: 'xmxxs'
+        - regex: '[0-9]{2}s'
+          with: 'xxs'
+        - regex: '[0-9]\.[0-9]s'
+          with: 'x.xs'
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/agents-home .glyphrun/tmp/agents-profiles .glyphrun/tmp/agents-protocol.txt .glyphrun/tmp/fake-ollama-agents && mkdir -p .glyphrun/tmp/agents-home/.config/sonar .glyphrun/tmp/agents-profiles && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' 'experts:' '  enabled: true' '  max_concurrent_inference: 1' '  max_concurrent_distinct_models: 1' '  max_team_experts: 1' '  max_swarm_workers: 1' '  max_moe_experts: 1' '  max_eval_tokens: 64' '  timeout: 30s' > .glyphrun/tmp/agents-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-ollama-agents ./specs/fixtures/fake_ollama_agents"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "qwen3.5:0.8b"
+        timeoutMs: 3000
+    - press: "ctrl+g"
+    - wait:
+        screen:
+            contains: "No agent consultations yet."
+        timeoutMs: 3000
+    - wait:
+        screen:
+            contains: "Agents created during a run will appear here."
+        timeoutMs: 3000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: empty_hub
+    - press: "ctrl+g"
+    - wait:
+        screen:
+            notContains: "No agent consultations yet."
+        timeoutMs: 3000
+    - type: "Consult one generalist about the Agent Hub."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "generalist · running"
+        timeoutMs: 10000
+    - press: "ctrl+g"
+    - wait:
+        screen:
+            contains: "Consultation #"
+        timeoutMs: 3000
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Agent viewer"
+        timeoutMs: 3000
+    - wait:
+        screen:
+            contains: "This agent does not report step-by-step activity."
+        timeoutMs: 3000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: live_viewer
+    - resize:
+        cols: 30
+        rows: 12
+    - wait:
+        screen:
+            contains: "generalist · running"
+        timeoutMs: 3000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: minimum_viewer
+    - mouse:
+        x: 15
+        y: 7
+        button: "wheelDown"
+    - wait:
+        screen:
+            contains: "Activity"
+        timeoutMs: 3000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: minimum_viewer_scrolled
+    - press: "esc"
+    - wait:
+        screen:
+            contains: "esc close · enter view"
+        timeoutMs: 3000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: minimum_hub_live
+    - resize:
+        cols: 80
+        rows: 24
+    - wait:
+        screen:
+            contains: "· settled"
+        timeoutMs: 15000
+    - wait:
+        idle:
+            quietForMs: 100
+        timeoutMs: 3000
+    - press: "esc"
+    - wait:
+        screen:
+            contains: "The bounded expert consultation completed"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - type: "/agents"
+    - wait:
+        screen:
+            notContains: "Commands"
+        timeoutMs: 3000
+    - press: "enter"
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "· settled"
+        timeoutMs: 3000
+    - wait:
+        screen:
+            contains: "esc close · enter view"
+        timeoutMs: 3000
+    - resize:
+        cols: 30
+        rows: 12
+    - wait:
+        screen:
+            contains: "Consultation #"
+        timeoutMs: 3000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: minimum_hub_settled
+    - press: "ctrl+g"
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 5000
+outcomes:
+    - id: empty_hub_is_honest
+      description: the Hub explains that no consultations exist without inventing agent activity
+      verify:
+        snapshot:
+            name: empty_hub
+            mode: text
+    - id: live_viewer_is_bounded
+      description: the normal-width Viewer exposes safe status, model, and locality while explicitly withholding unavailable child events
+      verify:
+        snapshot:
+            name: live_viewer
+            mode: text
+    - id: minimum_viewer_is_usable
+      description: the live subagent identity and status remain legible at the supported 30x12 minimum
+      verify:
+        snapshot:
+            name: minimum_viewer
+            mode: text
+    - id: viewer_mouse_scroll_is_owned
+      description: wheel input inside the minimum Viewer reveals its bounded activity disclosure
+      verify:
+        snapshot:
+            name: minimum_viewer_scrolled
+            mode: text
+    - id: live_hub_is_responsive
+      description: Escape returns from the Viewer to the live Hub without closing the modal at 30x12
+      verify:
+        snapshot:
+            name: minimum_hub_live
+            mode: text
+    - id: agents_command_reopens_settled_hub
+      description: /agents reopens the responsive Hub with the completed consultation still selected
+      verify:
+        snapshot:
+            name: minimum_hub_settled
+            mode: text
+    - id: fake_provider_observed_real_consultation
+      description: the fixture observed one parent tool request, one tool-free expert request, and one correlated parent follow-up
+      verify:
+        command:
+            run: "grep -q '^protocol_ok=true$' .glyphrun/tmp/agents-protocol.txt"
+    - id: agent_hub_flow_quits_cleanly
+      description: ctrl+c exits cleanly after both Agent Hub entry points are exercised
+      verify:
+        process:
+            exitCode: 0

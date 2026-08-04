@@ -1,0 +1,39 @@
+   main · local-agent                                                     qwen3.5:2b · offline · 0/16.4k · 0%
+
+
+▌  Review the release receipts.
+
+
+   I checked the saved verification receipts.
+
+│  ▾ ✓ Read (42ms)
+│  tool: read_file
+│  args: path=internal/ui/view.go
+│  1 │ package ui
+│  2 │
+│  3 │ func renderFixture() string { return "ready" }
+│  ▾ ✗ Run failed (310ms)
+│  tool: bash
+│  args: command=go test ./internal/ui
+│  exit status 1: fixture regression
+
+   The read completed, the test failure is visible, and the interrupted effect needs
+   inspection.
+
+   notice · Restored session <session> · Recovery receipt review
+
+    ✗ error
+   Recovery blocked: write_file has a durable dispatch marker but no terminal receipt. Its outcome is
+   unknown; use /recover to inspect and record exact evidence.
+
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   Recovery paused <session> · Recovery receipt review · /recover inspect
+▏❯ Ask
+   enter send · shift+tab mode · esc cancel · f1 help

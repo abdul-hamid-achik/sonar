@@ -1,0 +1,27 @@
+   main · ollama-inventory-workdir                              qwen3.5:2b · 0/16.4k · 0%
+
+
+
+
+
+      ╭────────────────────────────────────────────────────────────────────────────╮
+      │ Use Ollama Cloud?                                                          │
+      │ Prompts, context, files, and tool results leave this machine through       │
+      │ Ollama Cloud.                                                              │
+      │                                                                            │
+      │ │ Cancel                                                                   │
+      │ │ Keep this conversation local-only                                        │
+      │   Use kimi-code:cloud for this conversation                                │
+      │   One conversation · never auto-routed · not saved                         │
+      │                                                                            │
+      │ esc/enter cancel · ↑/↓ move                                                │
+      ╰────────────────────────────────────────────────────────────────────────────╯
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────
+   enter send · shift+tab mode · esc cancel · f1 help

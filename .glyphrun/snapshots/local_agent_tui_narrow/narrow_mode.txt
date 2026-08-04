@@ -1,0 +1,19 @@
+   qwen3.5:2b … · 0/16.4k · 0%
+   PLAN · read-only
+
+
+ ╭────────────────────────────────────╮
+ │ Mode                               │
+ │                                    │
+ │   NORMAL                           │
+ │   Interactive work with approval-… │
+ │ │ PLAN  ✓                          │
+ │ │ Explore and design without muta… │
+ │   AUTO                             │
+ │   Work proactively with configure… │
+ │ esc back · enter select · ↑/↓ move │
+ ╰────────────────────────────────────╯
+
+
+───────────────────────────────────────
+   enter send · shift+tab · esc · f1

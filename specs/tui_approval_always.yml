@@ -1,0 +1,136 @@
+version: 1
+contractHash: sha256:d9db0aed3d7010007becd8477fecbf63052aa20e6c28665b2213e09390e9061a
+name: local_agent_tui_approval_always
+# Runner note (2026-07-16): a restricted sandbox can deny the wrapper's
+# 127.0.0.1:0 listener before sonar starts. Glyphrun currently reports
+# that immediate exit as a blank-screen timeout; CI and unrestricted runs pass.
+# Keep this enabled and improve Glyphrun to surface target_exited plus stderr.
+intent: |
+    choosing the exact-request "session" decision reuses that grant only inside
+    the current Agent process. A fresh sonar process using the same HOME
+    must prompt again, and no global allow policy may be persisted.
+target:
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-ollama-always"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/approval-always-protocol.txt"
+    cwd: "/tmp/sonar-glyphrun-always"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/approval-always-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/approval-always-agents"
+        SONAR_REDUCED_MOTION: "1"
+terminal:
+    cols: 90
+    rows: 28
+# The approval panel wraps its Target row, and macOS resolves /tmp to
+# /private/tmp — eight characters longer. A workdir name long enough to wrap
+# there but not on Linux makes the panel one row taller on one host, which no
+# text normalization can repair because the wrap happens before any rule runs.
+# Keep the absolute path under ~70 columns: "/private/tmp/" + dir + "/file".
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/approval-always-home .glyphrun/tmp/approval-always-agents .glyphrun/tmp/approval-always-protocol.txt .glyphrun/tmp/fake-ollama-always /tmp/sonar-glyphrun-always && mkdir -p .glyphrun/tmp/approval-always-home/.config/sonar .glyphrun/tmp/approval-always-agents /tmp/sonar-glyphrun-always && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/approval-always-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-ollama-always ./specs/fixtures/fake_ollama_always"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "qwen3.5:0.8b"
+        timeoutMs: 2000
+    - type: "Write session-grant.txt with the exact text session scoped approval."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Permission · write"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "same request again this session"
+        timeoutMs: 5000
+    - snapshot: session_permission
+    - press: "s"
+    - wait:
+        screen:
+            contains: "Session approval recorded."
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 3000
+    - type: "Write session-grant.txt again with the exact text session scoped approval."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Session approval reused without another prompt."
+        timeoutMs: 5000
+    - wait:
+        screen:
+            notContains: "Permission · write"
+        timeoutMs: 2000
+    - press: "ctrl+c"
+    - wait:
+        screen:
+            notContains: "Session approval reused without another prompt."
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "qwen3.5:0.8b"
+        timeoutMs: 5000
+    - type: "Write session-grant.txt with the exact text session scoped approval."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Permission · write"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "y once"
+        timeoutMs: 2000
+    - snapshot: restart_permission
+    - press: "y"
+    - wait:
+        screen:
+            contains: "Restart required a fresh approval."
+        timeoutMs: 5000
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 5000
+outcomes:
+    - id: session_approval_runs
+      description: the explicitly session-approved exact write executes
+      verify:
+        command:
+            run: "test \"$(cat /tmp/sonar-glyphrun-always/session-grant.txt)\" = 'session scoped approval'"
+    - id: session_permission_is_reviewed
+      description: the first prompt exposes the exact-request session decision
+      verify:
+        snapshot:
+            name: session_permission
+            mode: text
+    - id: exact_request_reuses_inside_agent
+      description: the identical request reuses the grant inside the first Agent process without another permission request
+      verify:
+        command:
+            run: "grep -q '^approval_session_receipts=2$' .glyphrun/tmp/approval-always-protocol.txt"
+    - id: restart_requires_fresh_permission
+      description: the second Agent process prompts again for the identical request
+      verify:
+        snapshot:
+            name: restart_permission
+            mode: text
+    - id: fake_provider_observed_all_receipts
+      description: all three writes completed with one tool receipt apiece and no global allow row
+      verify:
+        command:
+            run: "grep -q '^protocol_ok=true$' .glyphrun/tmp/approval-always-protocol.txt"
+    - id: both_processes_quit_cleanly
+      description: the wrapper and both sonar processes exit successfully
+      verify:
+        process:
+            exitCode: 0

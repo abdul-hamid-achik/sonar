@@ -1,0 +1,81 @@
+version: '3'
+
+tasks:
+  build:
+    desc: Build the binary
+    cmds:
+      - go build -o bin/sonar ./cmd/sonar
+
+  run:
+    desc: Build and run
+    deps: [build]
+    cmds:
+      - ./bin/sonar
+
+  dev:
+    desc: Run with go run
+    cmds:
+      - go run ./cmd/sonar
+
+  lint:
+    desc: Run linter
+    cmds:
+      - golangci-lint run ./...
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...
+
+  'test:integration':
+    desc: Compile and run the opt-in integration-tag suite (live dependencies self-skip when absent)
+    cmds:
+      - go test -tags=integration ./internal/integration -count=1
+
+  sqlc:
+    desc: Regenerate typed SQLite query and schema models
+    dir: internal/db
+    cmds:
+      - sqlc generate
+
+  verify:
+    desc: Run the code verification gates
+    cmds:
+      - go mod tidy -diff
+      - golangci-lint run ./...
+      - go vet ./...
+      - go test ./... -count=1 -race
+      - go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+
+  glyphrun-cli:
+    desc: Run release-critical CLI, AUTO, and external-scope contracts with Glyphrun
+    cmds:
+      - glyph run specs/cli_flags.yml specs/cli_skip_approvals.yml specs/cli_json_receipt.yml specs/tui_auto_commands.yml specs/tui_external_read.yml --format md --progress auto --parallel 1
+
+  glyphrun-contracts:
+    desc: Verify every committed Glyphrun contract hash
+    cmds:
+      - |
+        set -eu
+        for spec in specs/*.yml specs/live/*.yml; do
+          test -f "$spec" || continue
+          glyph spec verify "$spec" --format md
+        done
+
+  glyphrun:
+    desc: Run every deterministic terminal behavior spec with Glyphrun
+    cmds:
+      - go build -o ./bin/sonar ./cmd/sonar
+      - |
+        set -eu
+        set --
+        for spec in specs/*.yml; do
+          set -- "$@" "$spec"
+        done
+        test "$#" -gt 0
+        glyph run "$@" --format md --progress auto --parallel 1
+
+  clean:
+    desc: Clean build artifacts
+    cmds:
+      - rm -rf bin/

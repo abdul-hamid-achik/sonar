@@ -1,0 +1,11 @@
+no model selected
+
+╭───────────────────────────╮
+│ Goal budgets · 1/4        │
+│ Locked · Ship a polish…   │
+│ 1 acceptance criterion    │
+│ Auto-turn budget          │
+│ > 8                       │
+│ esc cancel                │
+│ enter/tab next            │
+╰───────────────────────────╯

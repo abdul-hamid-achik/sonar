@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" role="img" aria-labelledby="logo-title logo-desc">
+  <title id="logo-title">local-agent</title>
+  <desc id="logo-desc">A terminal prompt and cursor inside a graphite square</desc>
+  <rect x="1" y="1" width="46" height="46" rx="12" fill="#151916" stroke="#B85F3D" stroke-width="2"/>
+  <path d="M13 14.5 22 24l-9 9.5" fill="none" stroke="#D6E3A5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M27 33.5h9" fill="none" stroke="#D6E3A5" stroke-width="3" stroke-linecap="round"/>
+  <circle cx="35" cy="14" r="3" fill="#B85F3D"/>
+</svg>

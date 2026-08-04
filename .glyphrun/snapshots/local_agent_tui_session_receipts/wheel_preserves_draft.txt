@@ -1,0 +1,17 @@
+   main · local-agent                                                     qwen3.5:2b · offline · 0/16.4k · 0%
+
+▌  Review the release receipts.
+
+│  tool: bash
+│  args: command=go test ./internal/ui
+│  exit status 1: fixture regression
+
+   The read completed, the test failure is visible, and the interrupted effect needs
+   inspection.
+
+   notice · Restored session <session> · Recovery receipt review
+
+─────────────────────────────────────────────────────────────────────────────────────────────────────────────
+   <session> · Recovery receipt review · Follow paused · end latest
+▏❯ draft must stay unchanged while the transcript scrolls
+   enter send · shift+tab mode · esc cancel · f1 help

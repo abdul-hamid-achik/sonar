@@ -1,0 +1,19 @@
+   qwen3.5:2b … · 0/16.4k · 0%
+selected
+try: ollama serve · ollama pull
+qwen3.5:2b
+
+╭────────────────────────────────────╮
+│ Commands                           │
+│ Filter › type to narrow            │
+│ ────────────────────────────────── │
+│ ▸ /help · Show help overlay with … │
+│   /clear · Clear conversation his… │
+│   /plan · Open a guided read-only… │
+│   /goal · Create, inspect, pause,… │
+│   /model · Show, switch, or list … │
+│   /theme · Show, switch, or list … │
+│   /provider · Show or switch infe… │
+│ esc cancel · enter select · ↑/↓    │
+╰────────────────────────────────────╯
+▌❯ /

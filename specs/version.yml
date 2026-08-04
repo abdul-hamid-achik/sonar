@@ -1,0 +1,33 @@
+version: 1
+contractHash: sha256:ba330995539e41466e83903c8c92af759689f6242f46a5cfdc0f94550806ef42
+name: local_agent_version
+intent: |
+    a user can run sonar --version and the command exits successfully.
+target:
+    cmd: ["./bin/sonar", "--version"]
+    cwd: "."
+preconditions:
+    commands:
+        - run: "go build -o ./bin/sonar ./cmd/sonar"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "dev"
+        timeoutMs: 2000
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 2000
+outcomes:
+    - id: version_printed
+      description: the version command prints the development version
+      verify:
+        screen:
+            contains: "dev"
+    - id: exits_zero
+      description: the command exits successfully
+      verify:
+        process:
+            exitCode: 0

@@ -1,0 +1,19 @@
+   qwen3.5:2b … · 0/16.4k · 0%
+   PLAN · read-only
+
+notice · ollama: no model
+selected
+try: ollama serve · ollama pull
+qwen3.5:2b
+
+
+
+
+
+
+
+
+
+───────────────────────────────────────
+▌❯ Ask
+   enter send · shift+tab · esc · f1

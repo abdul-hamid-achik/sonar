@@ -1,0 +1,105 @@
+version: 1
+contractHash: sha256:43a47362921134fd01cc2e514a2d1d7f3309c7b7dc6283665c4968c54a7b42a5
+name: local_agent_tui_auto_commands
+# Runner note (2026-07-16): a restricted sandbox can deny the wrapper's
+# 127.0.0.1:0 listener before sonar starts. Glyphrun currently reports
+# that immediate exit as a blank-screen timeout; CI and unrestricted runs pass.
+# Keep this enabled and improve Glyphrun to surface target_exited plus stderr.
+intent: |
+    AUTO executes a host-catalogued development check and exact, identity-verified
+    Minerva workspace queries without repeatedly interrupting the user for
+    permission. The flow includes the real S20 bounded grep composition. Each
+    execution still receives a durable policy approval and terminal receipt, and
+    the session exits with no unresolved effect.
+target:
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-ollama-auto"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/auto-commands-protocol.txt"
+    cwd: "${projectRoot}/.glyphrun/tmp/auto-minerva-workspace"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/auto-commands-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/auto-commands-agents"
+        SONAR_REDUCED_MOTION: "1"
+terminal:
+    cols: 100
+    rows: 30
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/auto-commands-home .glyphrun/tmp/auto-commands-agents .glyphrun/tmp/auto-commands-protocol.txt .glyphrun/tmp/fake-ollama-auto .glyphrun/tmp/auto-minerva-workspace && mkdir -p .glyphrun/tmp/auto-commands-home/.config/sonar .glyphrun/tmp/auto-commands-agents .glyphrun/tmp/auto-minerva-workspace/bin && cp -R specs/fixtures/minerva_workspace/. .glyphrun/tmp/auto-minerva-workspace/ && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/auto-commands-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-ollama-auto ./specs/fixtures/fake_ollama_auto && (cd .glyphrun/tmp/auto-minerva-workspace && go build -o bin/minerva ./cmd/minerva)"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "qwen3.5:0.8b"
+        timeoutMs: 3000
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "PLAN"
+        timeoutMs: 2000
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "AUTO"
+        timeoutMs: 2000
+    - type: "Run the safe local check, then inspect Minerva stack health and confirm test-skill is listed."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "go test ./..."
+        timeoutMs: 10000
+    - wait:
+        screen:
+            notContains: "Permission · bash"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "./bin/minerva stack check"
+        timeoutMs: 10000
+    - wait:
+        screen:
+            notContains: "Permission · bash"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "./bin/minerva skill list 2>&1 | grep test-skill"
+        timeoutMs: 10000
+    - wait:
+        screen:
+            notContains: "Permission · bash"
+        timeoutMs: 2000
+    - wait:
+        screen:
+            contains: "AUTO completed the safe local check and both exact Minerva queries"
+        timeoutMs: 10000
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 3000
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 5000
+outcomes:
+    - id: repeated_auto_commands_need_no_modal
+      description: the safe check and both exact Minerva queries complete with durable policy approvals and zero approval requests
+      verify:
+        command:
+            run: "grep -q '^protocol_ok=true$' .glyphrun/tmp/auto-commands-protocol.txt"
+    - id: auto_commands_have_terminal_receipts
+      description: the execution ledger contains three completed Bash lifecycles and no unresolved dispatch
+      verify:
+        command:
+            run: "grep -q '^completed_bash=3$' .glyphrun/tmp/auto-commands-protocol.txt && grep -q '^unresolved=0$' .glyphrun/tmp/auto-commands-protocol.txt"
+    - id: auto_commands_flow_quits_cleanly
+      description: ctrl+c exits cleanly after the autonomous turn settles
+      verify:
+        process:
+            exitCode: 0

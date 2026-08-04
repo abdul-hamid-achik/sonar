@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "workspace": "/repo",
+  "warnings": [
+    "SECRET_BOB_MALFORMED_WARNING"
+  ]
+}

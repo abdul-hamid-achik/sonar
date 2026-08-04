@@ -1,0 +1,23 @@
+   main · local-agent                               qwen3.5:0.8b · 7/16.4k · 0%
+
+
+▌  Consult one generalist about the Agent Hub.
+
+ ╭────────────────────────────────────────────────────────────────────────────╮
+ │ Agent viewer                                                               │
+ │ Consultation #<digest> · active                                            │
+ │ Status · active · x.xs · revision 3                                        │
+ │ team · 1 agent · 1 active · x.xs                                           │
+ │                                                                            │
+ │ Subagents                                                                  │
+ │ … generalist · running · consulting · qwen3.5:0.8b · local                 │
+ │                                                                            │
+ │ Activity                                                                   │
+ │ This agent does not report step-by-step activity.                          │
+ │ esc back · enter jump · j/k scroll · pgup/pgdn page                        │
+ ╰────────────────────────────────────────────────────────────────────────────╯
+
+
+───────────────────────────────────────────────────────────────────────────────
+…  Consulting experts · 0/1 finished · 1 active · ↑ 5 · esc stop · enter queue
+   shift+tab mode

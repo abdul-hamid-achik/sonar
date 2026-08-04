@@ -1,0 +1,10 @@
+{
+  "status": "stored",
+  "callId": "3f9a1c2e7b804d5e9f1a2b3c4d5e6f70",
+  "server": "cortex",
+  "tool": "cortex_status",
+  "originalBytes": 40960,
+  "budgetBytes": 32768,
+  "preview": "SECRET_MCPHUB_STORED_PREVIEW",
+  "nextAction": "SECRET_MCPHUB_STORED_ACTION"
+}

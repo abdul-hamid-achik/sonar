@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="social-title social-description">
+  <title id="social-title">local-agent — local-first coding agent</title>
+  <desc id="social-description">A dark terminal panel showing local-agent running with Ollama, Go, Charm, and MCP.</desc>
+
+  <defs>
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M40 0H0V40" fill="none" stroke="#27313d" stroke-width="1" opacity="0.42"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="#10151c"/>
+  <rect width="1200" height="630" fill="url(#grid)"/>
+  <rect x="64" y="54" width="1072" height="522" rx="28" fill="#161d26" stroke="#344150" stroke-width="2"/>
+  <path d="M64 132H1136" stroke="#344150" stroke-width="2"/>
+
+  <circle cx="112" cy="93" r="8" fill="#6f7f8f"/>
+  <circle cx="142" cy="93" r="8" fill="#6f7f8f"/>
+  <circle cx="172" cy="93" r="8" fill="#63d6c7"/>
+  <text x="1058" y="101" text-anchor="end" fill="#91a0af" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">LOCAL</text>
+
+  <text x="112" y="246" fill="#f1f5f9" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="76" font-weight="700" letter-spacing="-4">local-agent</text>
+  <rect x="112" y="275" width="118" height="8" rx="4" fill="#63d6c7"/>
+  <text x="112" y="342" fill="#c6d0da" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="38" font-weight="600">A local-first coding agent for Ollama.</text>
+  <text x="112" y="400" fill="#91a0af" font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif" font-size="28">Inspect. Edit with approval. Verify. Stay in the terminal.</text>
+
+  <rect x="112" y="462" width="140" height="48" rx="12" fill="#203e3d" stroke="#3f8078"/>
+  <text x="182" y="494" text-anchor="middle" fill="#9ce8df" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" font-weight="700">NORMAL</text>
+  <rect x="268" y="462" width="112" height="48" rx="12" fill="#1d2630" stroke="#465666"/>
+  <text x="324" y="494" text-anchor="middle" fill="#b6c2ce" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" font-weight="700">PLAN</text>
+  <rect x="396" y="462" width="108" height="48" rx="12" fill="#1d2630" stroke="#465666"/>
+  <text x="450" y="494" text-anchor="middle" fill="#b6c2ce" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="21" font-weight="700">AUTO</text>
+
+  <text x="1088" y="494" text-anchor="end" fill="#91a0af" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="22">OLLAMA · GO · CHARM · MCP</text>
+</svg>

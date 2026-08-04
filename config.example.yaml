@@ -1,0 +1,245 @@
+# sonar configuration
+# Place at ./sonar.yaml, $XDG_CONFIG_HOME/sonar/config.yaml,
+# or the fallback $HOME/.config/sonar/config.yaml (in precedence order).
+
+# Inference. sonar runs deepseek-v4-flash and nothing else, so the whole block
+# below is optional — the defaults already resolve to it:
+#
+#   type:        deepseek
+#   base_url:    https://api.deepseek.com
+#   model:       deepseek-v4-flash   (1M context, 384K max output)
+#   api_key_env: DEEPSEEK_API_KEY
+#
+# Secrets are NEVER written here — only environment variable NAMES. The value is
+# read from the process environment at launch:
+#
+#   export DEEPSEEK_API_KEY=...
+#   # or, with a secret manager:
+#   tvault set -p sonar DEEPSEEK_API_KEY
+#   tvault run -p sonar --only DEEPSEEK_API_KEY -- sonar
+#
+# provider:
+#   type: deepseek
+#   # Point at a gateway or proxy that speaks the same dialect:
+#   # base_url: https://my-gateway.example.com/deepseek
+#
+# Chain-of-thought is ON by default, matching the API. It is the dominant cost
+# term on long turns; a request opts out per-call, not from config.
+#
+# Cost, per 1M tokens (regular rate): $0.14 input on a cache miss, $0.0028 on a
+# cache hit, $0.28 output. A cache hit is ~50x cheaper than a miss, so a stable
+# prompt prefix is the single biggest lever you have. DeepSeek has announced
+# peak-hour pricing at 2x every billing item (09:00-12:00 and 14:00-18:00
+# Beijing time), so treat any in-app cost figure as an estimate.
+
+ollama:
+  # Ollama is NOT used for chat. These keys only matter if you re-enable ICE
+  # retrieval below, which needs an embeddings endpoint that DeepSeek's API does
+  # not provide.
+  model: "qwen3.5:2b"
+  base_url: "http://localhost:11434"
+  num_ctx: 16384
+
+# local_only bounds TOOL endpoints (MCP), not inference. sonar always reaches
+# DeepSeek over the network, so leaving this true does not keep prompts on the
+# machine — it only refuses remote MCP servers. Approved shell tools remain an
+# explicit network-capable boundary until OS sandboxing lands.
+# Presentation only: no effect on authority, tool policy, or what leaves the
+# machine. Every scheme is contrast-checked for light and dark terminals.
+# Pick interactively with /theme; that choice is stored in
+# ~/.config/sonar/runtime-preferences.json and outranks this key.
+ui:
+  theme: nord # nord | catppuccin | dracula | everforest | gruvbox | kanagawa | one | rose-pine | solarized | tokyo-night
+
+privacy:
+  local_only: true
+
+# Provider-loop budgets are independent so interactive turns stay concise while
+# AUTO has room to inspect, implement, and verify without a premature stop.
+tools:
+  timeout: 30s
+  max_grep_results: 500
+  max_iterations: 10
+  auto_max_iterations: 40
+
+# Typed continuation actions are suggestions by default. auto_read_only may
+# follow only exact, fully specified, unblocked, registry-validated read-only
+# contracts; it never auto-runs shell, mutation, secreted execution, or a
+# generic gateway proxy. Every call still passes normal host trust, approval,
+# and execution-ledger checks. The runtime hard ceiling is two automatic steps.
+continuations:
+  mode: suggest # off | suggest | auto_read_only
+  max_auto_steps: 2
+
+# Auto-routing uses installed, non-exclusive compact tiers only. Qwen 9B,
+# Ornith 9B, and Gemma E2B remain available for an explicit deep-task profile.
+model:
+  models:
+    - name: "qwen3.5:0.8b"   # trivial: routing/classification only — weak at tools
+      family: "qwen3.5"
+      size: "0.8B"
+      capability: "simple"
+    - name: "qwen3.5:2b"     # DEFAULT: smallest model with usable tool calling
+      family: "qwen3.5"
+      size: "2B"
+      capability: "medium"
+      default: true
+    - name: "qwen3.5:4b"     # largest memory-safe tier; reliable multi-step tools
+      family: "qwen3.5"
+      size: "4B"
+      capability: "complex"
+    - name: "phi4-mini:latest"
+      family: "phi"
+      size: "2.5GB"
+      capability: "medium"
+      exclusive: true            # manual-only until behavioral tool verification
+    - name: "qwen3.5:9b"
+      family: "qwen3.5"
+      size: "6.6GB"
+      capability: "advanced"
+      exclusive: true
+    - name: "ornith:latest"  # Qwen 3.5-derived 9B coding model; observed Q4 weights
+      family: "qwen3.5"
+      size: "5.6GB Q4"
+      parameters: "9 billion"
+      context_size: 262144   # model max; runtime allocation remains ollama.num_ctx
+      capability: "advanced"
+      exclusive: true
+    - name: "gemma4:e2b"
+      family: "gemma"
+      size: "7.2GB"
+      capability: "medium"
+      exclusive: true
+  default_model: "qwen3.5:2b"
+  fallback_chain: ["qwen3.5:2b", "qwen3.5:0.8b", "qwen3.5:4b"]
+  auto_select: true
+  embed_model: "nomic-embed-text"
+
+# Read-only application-level expert consultation. Team, Swarm, and MoE use
+# ordinary tool-free Ollama calls; they are not a model-internal/token-level MoE.
+# Zero concurrency and fan-out values mean auto. Explicit values are caps only:
+# they can reduce work but never force the machine above the measured CPU/RAM
+# plan. The runtime serializes work when the accepted model set fits, or reduces
+# deterministic fan-out when the complete local weight set does not fit.
+experts:
+  enabled: true
+  max_concurrent_inference: 0
+  max_concurrent_distinct_models: 0
+  max_team_experts: 0
+  max_swarm_workers: 0
+  max_moe_experts: 0
+  max_eval_tokens: 768
+  timeout: 90s
+
+# ICE (Infinite Context Engine) is enabled by default. Embeddings are computed
+# locally via Ollama (nomic-embed-text); no data leaves the machine. Set
+# `enabled: false` to disable. An empty store_path uses the managed
+# ~/.config/sonar/conversations.json default. A non-empty relative value
+# is rooted under ~/.config/sonar/ice/<workspace-hash>; absolute paths
+# and `..` escapes are rejected so repository config cannot write elsewhere or
+# place private embeddings inside the Git worktree.
+ice:
+  # OFF by default in sonar. ICE needs an embeddings endpoint and DeepSeek's API
+  # does not expose one, so enabling it requires a separate local embedding
+  # backend (Ollama with embed_model below) — which reintroduces a non-API
+  # dependency the harness otherwise does not have.
+  # enabled: false
+  embed_model: "nomic-embed-text"
+  # store_path: "conversations.json"
+
+# MCP tool servers. Prefer placing executable STDIO entries in user-wide
+# configuration. A repository-local copy of this file must be trusted with the
+# exact SONAR_TRUST_REPO_MCP digest printed at startup before any STDIO
+# process is spawned; changing the resolved executable or its content, command,
+# args, env, exact trust routes, or repository path changes that digest.
+servers:
+  # Recommended: one lazy MCPHub gateway. It keeps specialist schemas out of
+  # small-model context until needed and lets Cortex orchestrate the stack.
+  - name: mcphub
+    command: mcphub
+    args: [mcp, serve, --agent, sonar]
+    # Host-owned exact authority. This is honored only for local STDIO when
+    # local_owner exactly matches the executable basename; wrappers, remote
+    # transports, MCP annotations, wildcards, and suffix matches cannot widen it.
+    # read_only routes are auto-authorized and ledgered as reads.
+    # workspace_effectful routes are auto-authorized only in AUTO and only when
+    # an explicit `workspace` argument resolves inside the active workspace.
+    trust:
+      local_owner: mcphub
+      gateway: mcphub
+      read_only:
+        - bob__bob_check
+        - bob__bob_context
+        - bob__bob_inspect
+        - bob__bob_path
+        - bob__bob_plan
+        - bob__bob_playbook
+        - bob__bob_recipe_describe
+        - bob__bob_stats
+        - bob__bob_validate_manifest
+        - cortex__cortex_handoff
+        - cortex__cortex_list_tasks
+        - cortex__cortex_metrics
+        - cortex__cortex_overview
+        - cortex__cortex_read_artifact
+        - cortex__cortex_read_evidence
+        - cortex__cortex_recall_cases
+        - cortex__cortex_sessions
+        - cortex__cortex_status
+        - cortex__cortex_timeline
+        - mcphub_describe_tool
+        - mcphub_get_result
+        - mcphub_list_servers
+        - mcphub_resolve_tool
+        - mcphub_search_tools
+        - mcphub_stats
+      workspace_effectful:
+        - cortex__cortex_begin_change
+        - cortex__cortex_investigate
+        - cortex__cortex_note
+        - cortex__cortex_open_task
+        - cortex__cortex_plan
+        - cortex__cortex_remember
+        - cortex__cortex_request_decision
+        - cortex__cortex_resolve
+        - cortex__cortex_start_task
+        - cortex__cortex_verify
+
+    # Recommended MCPHub agent (mcphub.yaml) for this harness:
+    #   agents.sonar.mode: gateway
+    #   pin: []
+    #   tool_schema_budget: "0"
+    #   servers: bob, cortex, codemap, vecgrep, hitspec, hitspec_web,
+    #            fcheap, monitor, obsidian, minerva, glyph, cairntrace
+    # Enrich each server's use_when / tags so mcphub_resolve_tool ranks well.
+    # sonar host enrichment: resolve → optional host describe pre-fetch →
+    # phase playbook → model mcphub_call_tool under normal approval.
+
+    # Omitting trust currently uses a build-owned compatibility profile only
+    # for exact mcphub/cortex/bob basenames. Prefer an explicit list. To suppress
+    # that migration bridge, configure only: trust: {disabled: true}
+
+  # Direct STDIO transport is also supported when MCPHub is not installed.
+  # - name: noted
+  #   command: noted
+  #   args: [mcp]
+
+  # tinyvault — requires `tvault init` before first use
+  # - name: tinyvault
+  #   command: tvault
+  #   args: [mcp-server]
+
+  # Docker MCP Gateway (requires Docker Desktop with MCP enabled)
+  # - name: docker-gateway
+  #   command: docker
+  #   args: ["mcp", "gateway", "run"]
+
+  # SSE transport
+  # - name: remote-server
+  #   transport: sse
+  #   url: "http://localhost:8811"
+
+  # Streamable HTTP transport
+  # - name: streamable-server
+  #   transport: streamable-http
+  #   url: "http://localhost:8812/mcp"

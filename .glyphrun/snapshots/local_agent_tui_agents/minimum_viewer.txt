@@ -1,0 +1,11 @@
+ ╭──────────────────────────╮
+ │ Agent viewer             │
+ │ Consultation #<digest> … │
+ │ Status · active · x.xs … │
+ │ team · 1 agent · 1 acti… │
+ │                          │
+ │ Subagents                │
+ │ … generalist · running   │
+ │   consulting · qwen3.5:… │
+ │ esc back · enter jump    │
+ ╰──────────────────────────╯

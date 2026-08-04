@@ -1,0 +1,45 @@
+# Binaries
+bin/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+sonar
+!cmd/sonar/
+!cmd/sonar/*.go
+
+# Vector embeddings
+.vecgrep/
+
+# IDE
+.idea/
+.vscode/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Glyphrun artifacts
+.glyphrun/runs/
+.glyphrun/tmp/
+.glyphrun/snapshots/**/*.json
+
+# Task cache
+.task/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+.vercel

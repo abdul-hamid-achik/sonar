@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "ok": true,
+  "recipe": {
+    "id": "files",
+    "version": 1,
+    "manifest_schema_version": 1,
+    "description": "SECRET_BOB_RECIPE_DESCRIPTION",
+    "surfaces": [
+      "cli",
+      "json"
+    ],
+    "supported_choices": null
+  }
+}

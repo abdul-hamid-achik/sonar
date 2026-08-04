@@ -1,0 +1,10 @@
+▌  Consult one generalist
+
+ ╭──────────────────────────╮
+ │ Agents · 1 consultatio…  │
+ │ │ Consultation #<session>… │
+ │                          │
+ │                          │
+ │                          │
+ │ esc close · enter view   │
+ ╰──────────────────────────╯

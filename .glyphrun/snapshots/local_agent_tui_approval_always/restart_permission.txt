@@ -1,0 +1,26 @@
+   workspace                                                  qwen3.5:0.8b · 7/16.4k · 0%
+
+
+▌  Write session-grant.txt with the exact text session scoped approval.
+
+
+   Waiting for model…
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────
+◇  Permission · write · NORMAL
+   Action     Write 23 B
+   Target     <temp>/local-agent-glyphrun-always/session-grant.txt
+   Impact     Creates or replaces the target file with the proposed content.
+   Scope      Exact arguments · this process only
+
+   Proposed change
+   › n deny
+     y once
+     s same request again this session
+     a this tool again this session
+     p path again this session · session-grant.txt
+     w save path for workspace · session-grant.txt
+   esc cancel turn · enter select · ↑/↓/j/k move · d arguments · pgup/dn scroll

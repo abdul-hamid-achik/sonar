@@ -1,0 +1,19 @@
+ ╭────────────────────────────────────╮
+ │ Help                               │
+ │                                    │
+ │ Keyboard Shortcuts                 │
+ │   Compose                          │
+ │   enter        Send / queue one    │
+ │                follow-up           │
+ │   shift+enter  New line ·          │
+ │                ctrl+j/alt+enter    │
+ │                also                │
+ │   tab          Autocomplete        │
+ │   ↑            Previous input      │
+ │                (empty input)       │
+ │   ↓            Next input          │
+ │                (history active)    │
+ │   ctrl+e       Open in             │
+ │                $VISUAL/$EDITOR     │
+ │ esc/q close · pgdn · g/shift+g     │
+ ╰────────────────────────────────────╯

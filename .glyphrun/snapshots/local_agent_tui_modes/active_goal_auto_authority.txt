@@ -1,0 +1,27 @@
+   main · local-agent               qwen3.5:2b · offline · 0/16.4k · 0%
+
+   notice · ollama: no model selected
+   try: ollama serve · ollama pull qwen3.5:2b
+    ✗ error
+   Inference not started: no model selected
+   notice · Goal saved · Cortex is not configured; starting one
+   bounded local turn…
+    ✗ error
+   Inference not started: no model selected
+   notice · Goal paused · unproductive turn: inference not
+   started: no model selected
+   notice · After goal · NORMAL · active goal · AUTO
+
+
+
+
+
+
+
+───────────────────────────────────────────────────────────────────────
+plan · paused · 0/2 verified
+  □ pending · Demonstrate every requested outcome and constraint in th…
+  □ pending · Record passing evidence from focused or reproducible ver…
+ [ AUTO ] · Ⅱ paused · ship a bounded durable migra… · 0s/30m · <session>
+▌❯ Ask
+   enter send · shift+tab mode · esc · f1

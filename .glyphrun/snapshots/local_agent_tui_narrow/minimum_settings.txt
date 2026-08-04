@@ -1,0 +1,11 @@
+ ╭──────────────────────────╮
+ │ Settings                 │
+ │ │ Model · Pinned · qwen… │
+ │   Provider · ollama · l… │
+ │   Agent profile · Defau… │
+ │   Mode · NORMAL          │
+ │   Sessions · Resume      │
+ │   Compact layout · Auto  │
+ │   Runtime status · 21 r… │
+ │ esc close · enter · ↑/↓  │
+ ╰──────────────────────────╯
