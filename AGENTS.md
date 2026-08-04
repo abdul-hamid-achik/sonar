@@ -4,7 +4,7 @@ Global instructions for the sonar project (private fork of sonar).
 
 ## Public Website Boundary
 
-- This repository is private and has no public website. `docs/` is internal reference prose inherited from the sonar upstream and not yet rewritten.
+- This repository is public. Keep maintainer-specific paths, usernames, and private tool inventories out of tracked files. `docs/` is internal reference prose inherited from the sonar upstream and not yet rewritten.
 - Keep `docs/` as a standalone product and documentation website. Add only landing-page copy, public user documentation, or public static assets.
 - Do not create ADRs in this repository. Store project ADRs in `~/notes/projects/sonar/adrs/`.
 - Never link the public website to private Notes paths or assume those files ship with the repository.

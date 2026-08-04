@@ -2,9 +2,13 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This repository is private. There is no public website and no published
-package; `docs/` is internal reference prose, still largely inherited from the
-`local-agent` upstream and not yet rewritten for sonar.
+sonar is an open-source harness. There is no public website yet; `docs/` is
+reference prose still largely inherited from the `local-agent` upstream and not
+rewritten for sonar.
+
+Because it is public: no maintainer-specific paths, usernames, host names, or
+private tool inventories in tracked files. Examples use neutral defaults such
+as `~/.config/sonar/env`.
 
 ## Provider Boundary
 

@@ -2,6 +2,8 @@
 
 A terminal coding agent for hosted models, over the API, with an API key. No local runtime.
 
+MIT licensed. Built on [Charm](https://charm.land) and the [Catwalk](https://github.com/charmbracelet/catwalk) provider catalog.
+
 **DeepSeek V4 Flash is the default, not the boundary.** Provider metadata comes from an embedded [Catwalk](https://github.com/charmbracelet/catwalk) snapshot — 40 providers, 1403 models — so selecting `groq`, `cerebras`, or `moonshot` needs a provider name and a key, not code.
 
 Forked from `local-agent` and cut down. The agent loop, tool dispatch, permission model, durable goals, session store, and MCP surface came across intact; the local-first inference machinery did not.
@@ -29,7 +31,7 @@ Or keep keys in a file and point sonar at it:
 ```yaml
 # sonar.yaml
 credentials:
-  env_file: ~/.config/secrets/env
+  env_file: ~/.config/sonar/env
 ```
 
 Only names the catalog recognises as provider credentials are read from that

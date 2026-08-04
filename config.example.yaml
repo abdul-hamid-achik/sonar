@@ -48,7 +48,7 @@
 # process. Override with SONAR_ENV_FILE.
 #
 # credentials:
-#   env_file: ~/.config/secrets/env
+#   env_file: ~/.config/sonar/env
 
 ollama:
   # Ollama is NOT used for chat. These keys only matter if you re-enable ICE
