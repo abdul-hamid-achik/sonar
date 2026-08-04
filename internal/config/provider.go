@@ -9,7 +9,13 @@ import (
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/abdul-hamid-achik/sonar/internal/catalog"
 )
+
+// maxProviderContextSize bounds a catalog-sourced context window so a future
+// catalog entry cannot overflow host-side budget arithmetic.
+const maxProviderContextSize = 1 << 24
 
 // Provider types. sonar is a single-provider harness: DeepSeek is the default
 // and the only type that needs no explicit configuration.
@@ -125,42 +131,68 @@ func (c ProviderConfig) Resolve() ProviderConfig {
 func (p ProviderProfile) Resolve() ProviderProfile {
 	out := p
 	out.Type = NormalizedProviderType(out.Type)
-	switch out.Type {
-	case ProviderTypeDeepSeek:
+	if out.Type == ProviderTypeOllama {
+		// Local runtime: leave the model empty so ollama.model applies later.
+		return out
+	}
+	// Every other type names a provider in the embedded catalog, which is the
+	// authority for its endpoint, credential variable, default model, and
+	// context window. A second hand-written copy of those facts is how they
+	// drift; the catalog is refreshed as a unit instead.
+	if defaults, ok := catalogProviderDefaults(out.Type); ok {
 		if strings.TrimSpace(out.BaseURL) == "" {
-			out.BaseURL = "https://api.deepseek.com"
+			out.BaseURL = defaults.BaseURL
 		}
 		if strings.TrimSpace(out.APIKeyEnv) == "" {
-			out.APIKeyEnv = "DEEPSEEK_API_KEY"
+			out.APIKeyEnv = defaults.APIKeyEnv
 		}
 		if strings.TrimSpace(out.Model) == "" {
-			out.Model = "deepseek-v4-flash"
+			out.Model = defaults.Model
 		}
 		if out.ContextSize <= 0 {
-			// DeepSeek serves a 1M context by default on V4.
-			out.ContextSize = 1_000_000
+			out.ContextSize = defaults.ContextSize
 		}
-	case ProviderTypeXAI:
-		if strings.TrimSpace(out.BaseURL) == "" {
-			out.BaseURL = "https://api.x.ai/v1"
-		}
-		if strings.TrimSpace(out.APIKeyEnv) == "" {
-			out.APIKeyEnv = "XAI_API_KEY"
-		}
-		if strings.TrimSpace(out.Model) == "" {
-			out.Model = "grok-4.5"
-		}
-		if out.ContextSize <= 0 {
-			out.ContextSize = 131072
-		}
-	case ProviderTypeOpenAICompatible:
-		if out.ContextSize <= 0 {
-			out.ContextSize = 128000
-		}
-	case ProviderTypeOllama:
-		// leave empty model to fall back to ollama.model at runtime
+	}
+	if out.ContextSize <= 0 {
+		// A profile the catalog does not know (a bare openai_compatible host,
+		// a private gateway). Keep a conservative floor rather than guess large.
+		out.ContextSize = 128000
 	}
 	return out
+}
+
+// providerDefaults is the catalog-derived starting point for a profile.
+type providerDefaults struct {
+	BaseURL     string
+	APIKeyEnv   string
+	Model       string
+	ContextSize int
+}
+
+// catalogProviderDefaults reads a provider's defaults from the embedded
+// catalog. It prefers the provider's small/fast default model: an interactive
+// coding agent pays per token, so the cheap tier is the better default and the
+// user can always pick the large one explicitly.
+func catalogProviderDefaults(providerType string) (providerDefaults, bool) {
+	id := catalog.ProviderID(providerType)
+	provider, ok := catalog.LookupProvider(id)
+	if !ok {
+		return providerDefaults{}, false
+	}
+	defaults := providerDefaults{
+		BaseURL:   strings.TrimSpace(provider.APIEndpoint),
+		APIKeyEnv: catalog.APIKeyEnv(id),
+		Model:     strings.TrimSpace(provider.DefaultSmallModelID),
+	}
+	if defaults.Model == "" {
+		defaults.Model = strings.TrimSpace(provider.DefaultLargeModelID)
+	}
+	if model, found := catalog.LookupModel(id, defaults.Model); found {
+		if model.ContextWindow > 0 && model.ContextWindow <= int64(maxProviderContextSize) {
+			defaults.ContextSize = int(model.ContextWindow)
+		}
+	}
+	return defaults, true
 }
 
 func (p ProviderProfile) asConfig() ProviderConfig {
@@ -417,20 +449,23 @@ func validateProviderProfile(name string, profile ProviderProfile) error {
 	if profile.ContextSize < 0 {
 		return fmt.Errorf("config: provider profile %q context_size cannot be negative", label)
 	}
-	switch NormalizedProviderType(profile.Type) {
-	case ProviderTypeOllama:
+	providerType := NormalizedProviderType(profile.Type)
+	switch {
+	case providerType == ProviderTypeOllama:
 		return nil
-	case ProviderTypeDeepSeek, ProviderTypeOpenAICompatible, ProviderTypeXAI:
-		// ok
+	case providerType == ProviderTypeOpenAICompatible:
+		// A private gateway the catalog does not list. Its base_url, model, and
+		// api_key_env must all be spelled out below.
 	default:
-		return fmt.Errorf(
-			"config: provider profile %q type must be %q, %q, %q, or %q",
-			label,
-			ProviderTypeDeepSeek,
-			ProviderTypeOllama,
-			ProviderTypeOpenAICompatible,
-			ProviderTypeXAI,
-		)
+		// Any provider the catalog knows is selectable by name.
+		if _, known := catalog.LookupProvider(catalog.ProviderID(providerType)); !known {
+			return fmt.Errorf(
+				"config: provider profile %q names an unknown provider %q; use %q for a private endpoint, or a provider in the catalog",
+				label,
+				providerType,
+				ProviderTypeOpenAICompatible,
+			)
+		}
 	}
 	if strings.TrimSpace(profile.BaseURL) == "" {
 		return fmt.Errorf("config: provider profile %q requires base_url for type %q", label, profile.Type)

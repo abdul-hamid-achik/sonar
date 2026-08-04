@@ -1,10 +1,10 @@
 package llm
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/abdul-hamid-achik/sonar/internal/catalog"
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 )
 
@@ -64,9 +64,6 @@ const (
 	DeepSeekOutputUSDPerMTok         = 0.28
 )
 
-// ErrUnsupportedModel rejects any model other than the pinned Flash build.
-var ErrUnsupportedModel = errors.New("unsupported model")
-
 // DeepSeekOptions configures the pinned DeepSeek client.
 type DeepSeekOptions struct {
 	// APIKey is the resolved secret value, read from the environment by the
@@ -84,19 +81,31 @@ type DeepSeekOptions struct {
 	ReasoningEffort string
 }
 
-// NormalizeDeepSeekModel accepts the pinned Flash model and rejects the rest.
-// sonar is deliberately single-model: the whole harness — context policy, cost
-// display, and thinking defaults — is calibrated to one set of published
-// numbers, and silently running another model would invalidate all three.
-func NormalizeDeepSeekModel(model string) (string, error) {
-	normalized := strings.ToLower(strings.TrimSpace(model))
-	if normalized == "" {
-		return DeepSeekFlashModel, nil
+// ResolveProviderModel fills in a provider's default model when the caller
+// left it empty, and otherwise passes the requested model through.
+//
+// sonar runs many models; DeepSeek Flash is only the default. An id the
+// catalog does not list is accepted rather than rejected: the catalog is a
+// pinned snapshot, so refusing unlisted models would make the harness unusable
+// the day a provider ships a new one. The cost is that such a model has no
+// catalog-derived context window or pricing, and surfaces that depend on those
+// must degrade rather than assume — see catalog.FindModel's miss path.
+func ResolveProviderModel(providerType, model string) (string, error) {
+	id := catalog.ProviderID(config.NormalizedProviderType(providerType))
+	provider, known := catalog.LookupProvider(id)
+	if !known {
+		// A private endpoint the catalog does not describe. Nothing to validate
+		// against, so the caller's model stands.
+		return strings.TrimSpace(model), nil
 	}
-	if normalized == DeepSeekFlashModel {
-		return DeepSeekFlashModel, nil
+	model = strings.TrimSpace(model)
+	if model == "" {
+		if fallback := strings.TrimSpace(provider.DefaultSmallModelID); fallback != "" {
+			return fallback, nil
+		}
+		return strings.TrimSpace(provider.DefaultLargeModelID), nil
 	}
-	return "", fmt.Errorf("%w %q: sonar runs %s only", ErrUnsupportedModel, model, DeepSeekFlashModel)
+	return model, nil
 }
 
 // NewDeepSeekClient builds the pinned DeepSeek chat client.
@@ -109,7 +118,7 @@ func NewDeepSeekClient(opts DeepSeekOptions) (*OpenAICompatibleClient, error) {
 			DeepSeekAPIKeyEnv,
 		)
 	}
-	model, err := NormalizeDeepSeekModel(opts.Model)
+	model, err := ResolveProviderModel(config.ProviderTypeDeepSeek, opts.Model)
 	if err != nil {
 		return nil, err
 	}
@@ -132,14 +141,26 @@ func NewDeepSeekClient(opts DeepSeekOptions) (*OpenAICompatibleClient, error) {
 }
 
 // NewProviderClient builds the chat client for a resolved provider profile.
-// Both the startup path and the runtime /provider switch go through here so a
-// DeepSeek profile can never be attached with the plain OpenAI dialect — which
-// would compile and connect, then fail at the second tool-call iteration.
+//
+// The dialect is chosen from the provider's identity, not from its endpoint
+// shape. The catalog calls DeepSeek "openai-compat", which is true about the
+// URL and wrong about the request contract: it needs a thinking toggle and a
+// reasoning_content round-trip no generic OpenAI client sends. Selecting on
+// wire type alone would produce a client that connects, answers once, and then
+// fails every tool-call turn with a 400.
+//
+// Both the startup path and the runtime /provider switch go through here so
+// the two can never disagree about which dialect a provider gets.
 func NewProviderClient(providerType, baseURL, model, apiKey string) (*OpenAICompatibleClient, error) {
-	if config.NormalizedProviderType(providerType) == config.ProviderTypeDeepSeek {
+	normalized := config.NormalizedProviderType(providerType)
+	resolved, err := ResolveProviderModel(normalized, model)
+	if err != nil {
+		return nil, err
+	}
+	if normalized == config.ProviderTypeDeepSeek {
 		return NewDeepSeekClient(DeepSeekOptions{
 			APIKey:  apiKey,
-			Model:   model,
+			Model:   resolved,
 			BaseURL: baseURL,
 			// Thinking matches the API default. Individual requests still opt
 			// out through ChatOptions.DisableReasoning.
@@ -147,9 +168,12 @@ func NewProviderClient(providerType, baseURL, model, apiKey string) (*OpenAIComp
 			ReasoningEffort: DeepSeekDefaultEffort,
 		})
 	}
+	// Everything else currently rides the plain OpenAI-compatible dialect. That
+	// covers 27 of the catalog's 40 providers; anthropic, google, and the
+	// cloud-credential families need their own dialects before they will work.
 	return NewOpenAICompatibleClient(OpenAICompatibleOptions{
 		BaseURL: baseURL,
-		Model:   model,
+		Model:   resolved,
 		APIKey:  apiKey,
 	})
 }

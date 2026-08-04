@@ -3,7 +3,6 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -174,21 +173,30 @@ func TestNonDeepSeekDialectSendsNoDeepSeekExtensions(t *testing.T) {
 	}
 }
 
-func TestNormalizeDeepSeekModel(t *testing.T) {
-	for _, input := range []string{"", DeepSeekFlashModel, "  DeepSeek-V4-Flash  "} {
-		got, err := NormalizeDeepSeekModel(input)
-		if err != nil {
-			t.Fatalf("NormalizeDeepSeekModel(%q) error = %v", input, err)
-		}
-		if got != DeepSeekFlashModel {
-			t.Errorf("NormalizeDeepSeekModel(%q) = %q, want %q", input, got, DeepSeekFlashModel)
-		}
+func TestResolveProviderModel(t *testing.T) {
+	// An empty model resolves to the provider's cheap default.
+	got, err := ResolveProviderModel("deepseek", "")
+	if err != nil {
+		t.Fatalf("empty model error = %v", err)
+	}
+	if got != DeepSeekFlashModel {
+		t.Errorf("default model = %q, want %q", got, DeepSeekFlashModel)
 	}
 
-	// sonar calibrates context policy, cost display, and thinking defaults to
-	// one published model. Silently accepting another invalidates all three.
-	if _, err := NormalizeDeepSeekModel("deepseek-v4-pro"); !errors.Is(err, ErrUnsupportedModel) {
-		t.Errorf("pro model error = %v, want ErrUnsupportedModel", err)
+	// sonar runs many models; a second model from the same provider is valid.
+	if got, err := ResolveProviderModel("deepseek", "deepseek-v4-pro"); err != nil || got != "deepseek-v4-pro" {
+		t.Errorf("pro model = %q, err = %v; want it accepted", got, err)
+	}
+
+	// The catalog is a pinned snapshot. An id it has not seen yet must still
+	// run, or the harness breaks the day a provider ships a new model.
+	if got, err := ResolveProviderModel("deepseek", "deepseek-v5-future"); err != nil || got != "deepseek-v5-future" {
+		t.Errorf("unlisted model = %q, err = %v; want it accepted", got, err)
+	}
+
+	// A private endpoint has no catalog entry to default from.
+	if got, err := ResolveProviderModel("openai_compatible", "my-model"); err != nil || got != "my-model" {
+		t.Errorf("private endpoint model = %q, err = %v", got, err)
 	}
 }
 
