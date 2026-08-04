@@ -2,8 +2,17 @@
 # Place at ./sonar.yaml, $XDG_CONFIG_HOME/sonar/config.yaml,
 # or the fallback $HOME/.config/sonar/config.yaml (in precedence order).
 
-# Inference. sonar runs deepseek-v4-flash and nothing else, so the whole block
-# below is optional — the defaults already resolve to it:
+# Inference. sonar runs hosted models; deepseek-v4-flash is the DEFAULT, not the
+# only option. Endpoint, credential variable, default model, and context window
+# all come from the embedded provider catalog, so naming a provider is enough:
+#
+#   provider: { type: groq }        # or cerebras, moonshot, fireworks, ...
+#
+# NOTE: only the OpenAI-compatible dialect exists today. That covers 27 of the
+# catalog's 40 providers; anthropic, google, azure, bedrock, and vertex need
+# their own dialects and will not work yet.
+#
+# The whole block below is optional — the defaults already resolve to:
 #
 #   type:        deepseek
 #   base_url:    https://api.deepseek.com
@@ -140,9 +149,9 @@ experts:
   max_eval_tokens: 768
   timeout: 90s
 
-# ICE (Infinite Context Engine) is enabled by default. Embeddings are computed
-# locally via Ollama (nomic-embed-text); no data leaves the machine. Set
-# `enabled: false` to disable. An empty store_path uses the managed
+# ICE (Infinite Context Engine) is DISABLED by default in sonar — see below.
+# Embeddings are computed locally via Ollama (nomic-embed-text); no data leaves
+# the machine. An empty store_path uses the managed
 # ~/.config/sonar/conversations.json default. A non-empty relative value
 # is rooted under ~/.config/sonar/ice/<workspace-hash>; absolute paths
 # and `..` escapes are rejected so repository config cannot write elsewhere or
