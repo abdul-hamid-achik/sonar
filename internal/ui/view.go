@@ -15,7 +15,7 @@ func (m *Model) View() tea.View {
 		// Bubble Tea has not delivered terminal dimensions yet, so centering would
 		// be guesswork. Keep the same product identity and startup language as the
 		// full shell instead of flashing an unrelated debug placeholder.
-		v := tea.NewView("LOCAL AGENT\nStarting…")
+		v := tea.NewView("SONAR\nStarting…")
 		v.AltScreen = true
 		v.WindowTitle = m.windowTitleBase()
 		m.applyViewTheme(&v)

@@ -1,5 +1,5 @@
 version: 1
-contractHash: sha256:9da76cf2c4b04ec9044ede00e0debcc754caa47caa1c472ee6107e560ee2ac36
+contractHash: sha256:578f7fa7bd469211d1c5f8df31f059dd98ee418e4f9e5fb8a0ca6551391dfa3b
 name: local_agent_cli_flags
 intent: |
     command-line users can discover and safely combine the public headless

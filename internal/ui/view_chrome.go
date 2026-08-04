@@ -91,7 +91,7 @@ func (m *Model) renderTerminalPauseView(titleText, hint string, controlCandidate
 }
 
 func (m *Model) windowTitleBase() string {
-	const product = "LOCAL AGENT"
+	const product = "SONAR"
 	workspace := ""
 	if m != nil && m.agent != nil {
 		workspace = strings.TrimSpace(m.agent.WorkDir())
@@ -408,7 +408,7 @@ func (m *Model) needsModelBootstrap() bool {
 //
 // On roomy frames the session top bar, composer placeholder, and shortcuts bar
 // already own product identity, invite, and model/mode — a mid-canvas
-// "LOCAL AGENT / Local-first / Ask…" block is pure noise. Keep a compact
+// "SONAR / API-first / Ask…" block is pure noise. Keep a compact
 // orientation surface only when session chrome is off (minimum terminals),
 // plus bootstrap/offline/Cloud/PLAN boundaries that must stay visible.
 func (m *Model) renderWelcome(b *strings.Builder) {
@@ -482,12 +482,14 @@ func (m *Model) renderWelcome(b *strings.Builder) {
 	}
 
 	// Minimum frames (no session header): keep a short orientation surface.
-	writeLine(m.styles.OverlayTitle, "LOCAL AGENT")
-	trust := "Local-first · Ollama · " + m.approvalPostureWelcomeLabel(false)
+	writeLine(m.styles.OverlayTitle, "SONAR")
+	// Name the provider actually in use rather than a hard-coded runtime; the
+	// welcome surface is where a user checks what they are about to pay for.
+	trust := "API-first · " + sanitizeTerminalSingleLine(m.activeProviderName()) + " · " + m.approvalPostureWelcomeLabel(false)
 	if micro {
-		trust = "Local-first · " + m.approvalPostureWelcomeMicroLabel()
+		trust = "API-first · " + m.approvalPostureWelcomeMicroLabel()
 	} else if compact {
-		trust = "Local-first · " + m.approvalPostureWelcomeLabel(true)
+		trust = "API-first · " + m.approvalPostureWelcomeLabel(true)
 	}
 	writeLine(m.styles.StatusText, trust)
 

@@ -45,4 +45,4 @@ outcomes:
       verify:
         process:
             exitCode: 0
-contractHash: sha256:55c38d9d77dc0c73aa8959a2e2f14bb5ccb77dcac4faf46523b5924e2e880e0d
+contractHash: sha256:93b32a2956b370f4f56e3cb90a849a109b94043fff04e45f548bcf16d8ae0bef

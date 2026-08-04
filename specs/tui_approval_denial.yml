@@ -1,5 +1,5 @@
 version: 1
-contractHash: sha256:067086de698f8a3cf74c1c7c86f57bcf4e3e3b81480fde97d6e7bfff74db0bb1
+contractHash: sha256:6dcdbff7ccfdad9504088fba49d9a4ffe723c2dc025af160fe007342b0e7ec43
 name: local_agent_tui_approval_denial
 # Runner note (2026-07-16): a restricted sandbox can deny the wrapper's
 # 127.0.0.1:0 listener before sonar starts. Glyphrun currently reports

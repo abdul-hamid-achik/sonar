@@ -1,5 +1,5 @@
 version: 1
-contractHash: sha256:cf9d4ad666bef7dd620461ebb970b3371f5474c8b906a7858c93ee66b34b5147
+contractHash: sha256:8c501e54eb1eda63ca921e97ae83b5f07c2095d35a3d99c39fb140f663200606
 name: local_agent_logs_empty
 intent: |
     a user can run sonar logs with an empty log directory and get a clear empty-state message.

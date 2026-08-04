@@ -36,7 +36,7 @@ steps:
         rows: 12
     - wait:
         screen:
-            contains: "LOCAL AGENT"
+            contains: "SONAR"
         timeoutMs: 2000
     - wait:
         screen:

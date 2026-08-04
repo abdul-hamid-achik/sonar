@@ -88,7 +88,12 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 				settled++
 			}
 		}
-		detail := "local runtime"
+		// Name the provider being contacted. "local runtime" described the
+		// Ollama-only past and is simply false for a hosted model.
+		detail := sanitizeTerminalSingleLine(m.activeProviderName())
+		if detail == "" {
+			detail = "provider"
+		}
 		if len(m.startupItems) > 0 {
 			detail += fmt.Sprintf(" · %d/%d", settled, len(m.startupItems))
 		}

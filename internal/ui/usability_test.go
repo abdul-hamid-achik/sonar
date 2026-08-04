@@ -19,7 +19,7 @@ func TestNarrowTerminalUsesFullWidthConversation(t *testing.T) {
 
 	view := m.View()
 	// Session chrome owns empty state on usable frames; no mid-canvas wall.
-	for _, noise := range []string{"LOCAL AGENT", "Local-first"} {
+	for _, noise := range []string{"SONAR", "API-first"} {
 		if strings.Contains(view.Content, noise) {
 			t.Fatalf("40×20 view still paints redundant welcome %q:\n%s", noise, view.Content)
 		}
@@ -42,7 +42,7 @@ func TestCompactWelcomeFitsActualChatPane(t *testing.T) {
 	if strings.Contains(got, "╦") {
 		t.Fatal("compact welcome should omit the wide ASCII logo")
 	}
-	for _, want := range []string{"LOCAL AGENT", "Local-first", "Ask · /help"} {
+	for _, want := range []string{"SONAR", "API-first", "Ask · /help"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("minimum welcome missing %q:\n%s", want, got)
 		}
@@ -51,7 +51,7 @@ func TestCompactWelcomeFitsActualChatPane(t *testing.T) {
 }
 
 func TestWelcomeUsesHonestLocalFirstCopy(t *testing.T) {
-	// Local-first copy is only painted when session chrome is off.
+	// API-first copy is only painted when session chrome is off.
 	m := newTestModel(t)
 	m.width = minTerminalWidth
 	m.height = minTerminalHeight
@@ -59,7 +59,7 @@ func TestWelcomeUsesHonestLocalFirstCopy(t *testing.T) {
 	var b strings.Builder
 	m.renderWelcome(&b)
 	got := b.String()
-	if !strings.Contains(got, "Local-first") {
+	if !strings.Contains(got, "API-first") {
 		t.Fatalf("welcome is missing the local-first boundary:\n%s", got)
 	}
 	for _, overclaim := range []string{"100% local", "Your data never leaves"} {
@@ -88,7 +88,7 @@ func TestWindowTitleIdentifiesOnlySanitizedWorkspaceBasename(t *testing.T) {
 	m.state = StateWaiting
 
 	title := m.View().WindowTitle
-	for _, want := range []string{"LOCAL AGENT", "project", "thinking"} {
+	for _, want := range []string{"SONAR", "project", "thinking"} {
 		if !strings.Contains(title, want) {
 			t.Fatalf("window title omitted %q: %q", want, title)
 		}
@@ -114,7 +114,7 @@ func TestMinimumTerminalCompactsOnlyKnownOllamaStartupRecovery(t *testing.T) {
 	}
 
 	visible := ansi.Strip(m.View().Content)
-	for _, want := range []string{"LOCAL AGENT", "Ollama model", "ctrl+o", "ctrl+p settings"} {
+	for _, want := range []string{"SONAR", "Ollama model", "ctrl+o", "ctrl+p settings"} {
 		if !strings.Contains(visible, want) {
 			t.Fatalf("minimum startup recovery omitted %q:\n%s", want, visible)
 		}

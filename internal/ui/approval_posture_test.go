@@ -87,8 +87,8 @@ func TestMinimumWelcomeUsesCompleteSafetyMicrocopy(t *testing.T) {
 		posture ApprovalPosture
 		want    string
 	}{
-		{name: "prompted", posture: ApprovalPosturePrompted, want: "Local-first · prompts on"},
-		{name: "skipped", posture: ApprovalPostureSkipApprovals, want: "Local-first · prompts skipped"},
+		{name: "prompted", posture: ApprovalPosturePrompted, want: "API-first · prompts on"},
+		{name: "skipped", posture: ApprovalPostureSkipApprovals, want: "API-first · prompts skipped"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			m := newTestModel(t)

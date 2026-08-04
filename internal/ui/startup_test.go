@@ -79,7 +79,7 @@ func TestStartupKeepsStableWelcomeShellAndOneFooterProgressLine(t *testing.T) {
 
 	content := m.renderEntries()
 	// Roomy empty canvas is quiet; startup progress lives only in the footer.
-	for _, noise := range []string{"LOCAL AGENT", "Local-first", "Ask, @mention files, or type /help"} {
+	for _, noise := range []string{"SONAR", "API-first", "Ask, @mention files, or type /help"} {
 		if strings.Contains(content, noise) {
 			t.Errorf("startup still paints mid-canvas welcome %q:\n%s", noise, content)
 		}
@@ -90,7 +90,7 @@ func TestStartupKeepsStableWelcomeShellAndOneFooterProgressLine(t *testing.T) {
 		}
 	}
 	status := m.renderStatusLine()
-	for _, want := range []string{"Starting", "local runtime", "1/2"} {
+	for _, want := range []string{"Starting", "ollama", "1/2"} {
 		if !strings.Contains(status, want) {
 			t.Fatalf("startup footer omitted %q: %q", want, status)
 		}
@@ -111,7 +111,7 @@ func TestPreWindowStartupUsesProductShellInsteadOfDebugPlaceholder(t *testing.T)
 	m := newTestModel(t)
 	m.ready = false
 	view := m.View()
-	for _, want := range []string{"LOCAL AGENT", "Starting"} {
+	for _, want := range []string{"SONAR", "Starting"} {
 		if !strings.Contains(view.Content, want) {
 			t.Fatalf("pre-window startup omitted %q: %q", want, view.Content)
 		}

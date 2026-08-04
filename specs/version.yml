@@ -1,5 +1,5 @@
 version: 1
-contractHash: sha256:ba330995539e41466e83903c8c92af759689f6242f46a5cfdc0f94550806ef42
+contractHash: sha256:be066bd383d905490f3ebbaf3293a6ed60effcd976e3b81efc262d321c826f94
 name: local_agent_version
 intent: |
     a user can run sonar --version and the command exits successfully.
