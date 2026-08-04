@@ -462,6 +462,136 @@ func TestApplyPatchRejectsStaleContext(t *testing.T) {
 	}
 }
 
+// TestApplyPatchAppliesVerifiedBodyDespiteBadMetadata reproduces the two
+// real failure shapes that were rejecting verified-correct edits: a header
+// whose -a,b +c,d counts don't match the (verified-correct) body, and an
+// interior context line whose trailing space was stripped to "".
+func TestApplyPatchAppliesVerifiedBodyDespiteBadMetadata(t *testing.T) {
+	tests := []struct {
+		name    string
+		content string
+		patch   string
+		want    string
+	}{
+		{
+			name:    "header count mismatch is ignored in favor of the verified body",
+			content: "a\nb\nc\nd\ne\nf\ng",
+			// Header claims -6,+11; the body actually walks -4/+6
+			// (a,b,c,d removed/kept vs a,B1..B4,d produced). Every line
+			// in the body is checked against source as it's consumed, so
+			// the header's miscounted totals must not block the edit.
+			patch: "@@ -1,6 +1,11 @@\n a\n-b\n-c\n+B1\n+B2\n+B3\n+B4\n d",
+			want:  "a\nB1\nB2\nB3\nB4\nd\ne\nf\ng",
+		},
+		{
+			name:    "interior empty context line stripped of its leading space still applies",
+			content: "line1\n\nline2\nline3",
+			// The blank second line of the patch has no leading space
+			// (as editors/models routinely emit), but it is not the
+			// final line of the patch, so it must still be treated as
+			// context rather than rejected as malformed.
+			patch: "@@ -1,4 +1,4 @@\n line1\n\n-line2\n+LINE2\n line3",
+			want:  "line1\n\nLINE2\nline3",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := applyPatch(tt.content, tt.patch)
+			if err != nil {
+				t.Fatalf("applyPatch: unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("patched content = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestApplyPatchContextMismatchReportsExpectedAndFound covers the third real
+// failure shape: a genuinely stale context line. This must still fail (the
+// patch really doesn't match), but the error must name what the patch
+// expected and what the file actually has, bounded and quoted, so the model
+// can repair the hunk instead of guessing from a bare line number.
+func TestApplyPatchContextMismatchReportsExpectedAndFound(t *testing.T) {
+	_, err := applyPatch("alpha\nbeta\ngamma", "@@ -1,3 +1,3 @@\n alpha\n WRONG_CONTEXT\n-gamma\n+GAMMA")
+	if err == nil {
+		t.Fatal("expected genuinely stale context to fail")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"patch context mismatch at old line 2",
+		`expected "WRONG_CONTEXT"`,
+		`found "beta"`,
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error %q does not contain %q", msg, want)
+		}
+	}
+}
+
+// TestApplyPatchRemovalMismatchReportsExpectedAndFound is the '-' line
+// analogue of the context-mismatch diagnostic above.
+func TestApplyPatchRemovalMismatchReportsExpectedAndFound(t *testing.T) {
+	_, err := applyPatch("alpha\nbeta\ngamma", "@@ -1,3 +1,3 @@\n alpha\n-WRONG_REMOVE\n+beta2\n gamma")
+	if err == nil {
+		t.Fatal("expected genuinely stale removal to fail")
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"patch removal mismatch at old line 2",
+		`expected "WRONG_REMOVE"`,
+		`found "beta"`,
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error %q does not contain %q", msg, want)
+		}
+	}
+}
+
+// TestApplyPatchMismatchSnippetIsBounded proves the mismatch error never
+// echoes a full, unbounded source line back into the transcript: the source
+// line at the mismatch position is much longer than the snippet cap, so the
+// error must contain a truncated prefix of it, not the whole line.
+func TestApplyPatchMismatchSnippetIsBounded(t *testing.T) {
+	longLine := strings.Repeat("x", maxPatchMismatchSnippetBytes*3)
+	_, err := applyPatch("alpha\n"+longLine+"\ngamma", "@@ -1,3 +1,3 @@\n alpha\n WRONG_CONTEXT\n-gamma\n+GAMMA")
+	if err == nil {
+		t.Fatal("expected mismatch to fail")
+	}
+	msg := err.Error()
+	if strings.Contains(msg, longLine) {
+		t.Fatalf("error echoed the full unbounded line (%d bytes)", len(longLine))
+	}
+	if len(msg) > maxPatchMismatchSnippetBytes*2 {
+		t.Fatalf("error message not bounded: %d bytes: %q", len(msg), msg)
+	}
+	if !strings.Contains(msg, strings.Repeat("x", 10)) {
+		t.Fatalf("error dropped the truncated prefix entirely: %q", msg)
+	}
+}
+
+func TestApplyPatchRejectsOverlappingHunk(t *testing.T) {
+	content := "one\ntwo\nthree\nfour\nfive"
+	patch := "@@ -1,2 +1,2 @@\n one\n-two\n+TWO\n@@ -1,2 +1,2 @@\n one\n-two\n+TWO2"
+	_, err := applyPatch(content, patch)
+	if err == nil {
+		t.Fatal("expected overlapping/backwards hunk to fail")
+	}
+	if !strings.Contains(err.Error(), "overlapping hunk") {
+		t.Fatalf("error = %q, want overlapping hunk message", err.Error())
+	}
+}
+
+func TestApplyPatchRejectsInvalidLineMarker(t *testing.T) {
+	_, err := applyPatch("one\ntwo", "@@ -1,2 +1,2 @@\n one\n*two")
+	if err == nil {
+		t.Fatal("expected invalid line marker to fail")
+	}
+	if !strings.Contains(err.Error(), "invalid patch line") {
+		t.Fatalf("error = %q, want invalid patch line message", err.Error())
+	}
+}
+
 func TestHandleBashUsesTurnContext(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("shell command is Unix-specific")

@@ -80,6 +80,12 @@ func (a *Agent) handleEdit(args map[string]any) (string, bool) {
 
 var hunkHeaderPattern = regexp.MustCompile(`^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@`)
 
+// maxPatchMismatchSnippetBytes bounds how much of a source/patch line is
+// echoed back in a mismatch error. These strings reach the model and the
+// transcript, so the line is truncated before formatting rather than
+// dumping unbounded file content.
+const maxPatchMismatchSnippetBytes = 200
+
 // applyPatch applies validated unified-diff hunks while preserving every
 // untouched prefix and suffix. Context and removed lines must match exactly;
 // a stale model-generated patch therefore fails instead of corrupting a file.
@@ -98,14 +104,6 @@ func applyPatch(content, patch string) (string, error) {
 		}
 		applied = true
 		oldStart, _ := strconv.Atoi(match[1])
-		oldCount := 1
-		if match[2] != "" {
-			oldCount, _ = strconv.Atoi(match[2])
-		}
-		newCount := 1
-		if match[4] != "" {
-			newCount, _ = strconv.Atoi(match[4])
-		}
 
 		hunkStart := oldStart
 		if hunkStart > 0 {
@@ -118,46 +116,53 @@ func applyPatch(content, patch string) (string, error) {
 		sourcePos = hunkStart
 		i++
 
-		oldSeen, newSeen := 0, 0
+		// The @@ -a,b +c,d @@ header counts are metadata the model
+		// frequently miscounts. Every context and removal line below is
+		// independently verified against source as the body is walked, so
+		// by the time a hunk finishes it has already been proven correct.
+		// The counts are fully derivable from that walk; recompute rather
+		// than reject a verified-correct edit over redundant metadata
+		// (matches `patch(1)` and `git apply --recount`).
 		for i < len(patchLines) && hunkHeaderPattern.FindStringSubmatch(patchLines[i]) == nil {
 			line := patchLines[i]
 			if strings.HasPrefix(line, "\\ No newline at end of file") {
 				i++
 				continue
 			}
-			if line == "" && i == len(patchLines)-1 {
-				break
-			}
 			if line == "" {
-				return "", fmt.Errorf("invalid empty patch line in hunk")
+				if i == len(patchLines)-1 {
+					break
+				}
+				// A context line whose content is empty should be a
+				// single space in unified diff, but editors and models
+				// routinely strip that trailing space. Treat it as one;
+				// the context check below still requires the source to
+				// actually have a blank line here, so this cannot apply
+				// a wrong edit.
+				line = " "
 			}
 
 			body := line[1:]
 			switch line[0] {
 			case ' ':
 				if sourcePos >= len(source) || source[sourcePos] != body {
-					return "", fmt.Errorf("patch context mismatch at old line %d", sourcePos+1)
+					return "", fmt.Errorf("patch context mismatch at old line %d: expected %s, found %s",
+						sourcePos+1, patchMismatchSnippet(body), patchMismatchSourceLine(source, sourcePos))
 				}
 				result = append(result, body)
 				sourcePos++
-				oldSeen++
-				newSeen++
 			case '-':
 				if sourcePos >= len(source) || source[sourcePos] != body {
-					return "", fmt.Errorf("patch removal mismatch at old line %d", sourcePos+1)
+					return "", fmt.Errorf("patch removal mismatch at old line %d: expected %s, found %s",
+						sourcePos+1, patchMismatchSnippet(body), patchMismatchSourceLine(source, sourcePos))
 				}
 				sourcePos++
-				oldSeen++
 			case '+':
 				result = append(result, body)
-				newSeen++
 			default:
 				return "", fmt.Errorf("invalid patch line %q", line)
 			}
 			i++
-		}
-		if oldSeen != oldCount || newSeen != newCount {
-			return "", fmt.Errorf("hunk count mismatch: saw -%d/+%d, header declares -%d/+%d", oldSeen, newSeen, oldCount, newCount)
 		}
 	}
 
@@ -166,4 +171,24 @@ func applyPatch(content, patch string) (string, error) {
 	}
 	result = append(result, source[sourcePos:]...)
 	return strings.Join(result, "\n"), nil
+}
+
+// patchMismatchSnippet bounds a patch/source line before it is quoted into a
+// mismatch error. %q (matching the "invalid patch line %q" error above)
+// escapes control characters and preserves the exact whitespace that
+// usually explains the mismatch.
+func patchMismatchSnippet(value string) string {
+	if value == "" {
+		return "<empty line>"
+	}
+	return fmt.Sprintf("%q", truncateUTF8Bytes(value, maxPatchMismatchSnippetBytes))
+}
+
+// patchMismatchSourceLine is patchMismatchSnippet for a source position,
+// reporting when the mismatch ran past the end of the file.
+func patchMismatchSourceLine(source []string, pos int) string {
+	if pos >= len(source) {
+		return "<end of file>"
+	}
+	return patchMismatchSnippet(source[pos])
 }
