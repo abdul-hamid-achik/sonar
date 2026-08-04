@@ -31,13 +31,11 @@ func restoreManualProviderPreference(cfg *config.Config, preferred string) strin
 		restored.Provider.Active = preferred
 	} else if !restored.Provider.HasProfiles() {
 		// Flat catalog: accept known type names as an active preference.
-		switch config.NormalizedProviderType(preferred) {
-		case config.ProviderTypeOllama, config.ProviderTypeXAI, config.ProviderTypeOpenAICompatible:
-			restored.Provider.Type = preferred
-			restored.Provider.Active = preferred
-		default:
+		if !config.IsKnownProviderType(preferred) {
 			return fmt.Sprintf("saved provider %q is not available; using configured default", preferred)
 		}
+		restored.Provider.Type = preferred
+		restored.Provider.Active = preferred
 	} else {
 		return fmt.Sprintf("saved provider %q is not in the catalog; using configured default", preferred)
 	}

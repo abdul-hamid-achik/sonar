@@ -90,6 +90,20 @@ func NormalizedProviderType(typ string) string {
 	}
 }
 
+// IsKnownProviderType reports whether a provider type can be selected. It is
+// the single answer to that question: a hard-coded list of type names is how
+// the catalog unlock leaks — one allowlist updated, another silently dropping
+// a valid provider back to the local runtime.
+func IsKnownProviderType(typ string) bool {
+	normalized := NormalizedProviderType(typ)
+	switch normalized {
+	case ProviderTypeOllama, ProviderTypeOpenAICompatible:
+		return true
+	}
+	_, known := catalog.LookupProvider(catalog.ProviderID(normalized))
+	return known
+}
+
 // NormalizedType returns the effective provider type after empty → deepseek.
 func (c ProviderConfig) NormalizedType() string {
 	return NormalizedProviderType(c.Type)
@@ -101,15 +115,13 @@ func (c ProviderConfig) IsRemote() bool {
 }
 
 // IsRemote reports whether this profile dispatches to a network endpoint.
-// Every sonar profile does; the distinction survives only so privacy and
-// credential checks keep one explicit predicate to ask.
+//
+// Everything except the local Ollama runtime does. Enumerating remote types
+// instead is what silently demoted a valid catalog provider to the local path
+// and produced "no compatible local chat model is installed" for a hosted
+// model that was configured correctly.
 func (p ProviderProfile) IsRemote() bool {
-	switch NormalizedProviderType(p.Type) {
-	case ProviderTypeDeepSeek, ProviderTypeOpenAICompatible, ProviderTypeXAI:
-		return true
-	default:
-		return false
-	}
+	return NormalizedProviderType(p.Type) != ProviderTypeOllama
 }
 
 func (c ProviderConfig) asProfile() ProviderProfile {

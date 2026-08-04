@@ -499,7 +499,14 @@ func run() int {
 		}
 		if err := modelManager.Ping(); err != nil {
 			if modelManager.RemoteProvider() {
-				fmt.Fprintln(os.Stderr, ui.ProviderFailureCopy)
+				// stderr at startup is not a transcript boundary, so the bounded
+				// status code can be shown here. Without it a spending-limit 403
+				// is indistinguishable from a typo'd key.
+				if status, ok := llm.ProviderHTTPStatus(err); ok {
+					fmt.Fprintf(os.Stderr, "%s\nHTTP %d — %s\n", ui.ProviderFailureCopy, status, llm.ProviderStatusHint(status))
+				} else {
+					fmt.Fprintln(os.Stderr, ui.ProviderFailureCopy)
+				}
 			} else {
 				fmt.Fprintf(os.Stderr, "ollama: %v\ntry: ollama serve · ollama pull %s\n", err, modelName)
 			}

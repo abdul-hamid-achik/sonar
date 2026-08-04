@@ -270,12 +270,10 @@ func resolveSwitchTarget(catalog config.ProviderConfig, name string) (string, co
 	}
 	// Flat / ad-hoc: treat name as a provider type.
 	profile := config.ProviderProfile{Type: name}.Resolve()
-	switch config.NormalizedProviderType(profile.Type) {
-	case config.ProviderTypeOllama, config.ProviderTypeXAI, config.ProviderTypeOpenAICompatible:
+	if config.IsKnownProviderType(profile.Type) {
 		return name, profile, nil
-	default:
-		return "", config.ProviderProfile{}, fmt.Errorf("unknown provider %q", name)
 	}
+	return "", config.ProviderProfile{}, fmt.Errorf("unknown provider %q", name)
 }
 
 // RemoteProvider reports whether chat inference uses a non-Ollama adapter.

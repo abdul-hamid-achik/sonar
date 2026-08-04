@@ -553,6 +553,40 @@ type openAIHTTPError struct {
 	Message    string
 }
 
+// ProviderHTTPStatus reports the HTTP status a provider returned, when the
+// error carries one.
+//
+// The status code alone is a bounded, host-safe fact: unlike the response body
+// it cannot contain provider prose, an endpoint, or a credential. That makes it
+// the one detail a startup diagnostic can surface without weakening the
+// transcript sanitization that ProviderFailureCopy exists to enforce.
+func ProviderHTTPStatus(err error) (int, bool) {
+	var httpErr *openAIHTTPError
+	if errors.As(err, &httpErr) && httpErr.StatusCode > 0 {
+		return httpErr.StatusCode, true
+	}
+	return 0, false
+}
+
+// ProviderStatusHint maps a provider HTTP status to an actionable cause. The
+// text is host-authored, never the provider's.
+func ProviderStatusHint(status int) string {
+	switch {
+	case status == 401:
+		return "the API key was rejected"
+	case status == 403:
+		return "the key is valid but the request was refused — usually exhausted credits, a spending limit, or a region restriction"
+	case status == 404:
+		return "the model or endpoint does not exist for this provider"
+	case status == 429:
+		return "rate limited"
+	case status >= 500:
+		return "the provider is failing on its side"
+	default:
+		return "the provider rejected the request"
+	}
+}
+
 func (e *openAIHTTPError) Error() string {
 	if e.Message == "" {
 		return e.Status
