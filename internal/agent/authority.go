@@ -8,6 +8,7 @@ import (
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 	executionpkg "github.com/abdul-hamid-achik/sonar/internal/execution"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
+	mcpPkg "github.com/abdul-hamid-achik/sonar/internal/mcp"
 	permissionpkg "github.com/abdul-hamid-achik/sonar/internal/permission"
 )
 
@@ -430,6 +431,147 @@ func (a *Agent) canonicalGatewayPermissionName(call llm.ToolCall) (string, bool)
 	default:
 		return "", false
 	}
+}
+
+// workspaceArgumentKey is the exact argument name host-catalogued
+// workspace-effectful MCP routes use to scope their effect to one repository.
+const workspaceArgumentKey = "workspace"
+
+// pinCataloguedWorkspaceArgument binds the harness's active workspace to a
+// host-catalogued workspace-effectful MCP call whose advertised input schema
+// declares a `workspace` property that the model left out. It returns the
+// pinned call and true only when the pin is what authorizes the call.
+//
+// This narrows authority; it never widens it. Downstream servers declare
+// `workspace` as optional and default it to their own working directory — a
+// directory the harness never resolved, never contained, and cannot name in an
+// approval prompt. Omitting the argument therefore does not mean "no
+// workspace", it means "some workspace chosen by the server". Before this pin,
+// mcpWorkspaceWithinAuthority had nothing to check and fell through to the
+// prompt, so a route the operator explicitly listed under workspace_effectful
+// still interrupted them, and approving it authorized an unnamed target. After
+// it, the effect is pinned to the workspace the host already owns and the
+// existing containment check verifies a real path.
+//
+// Every one of the following must hold, or the call is returned untouched:
+//
+//   - the turn holds AuthorityAutoScoped and the call dispatches as MCP, so
+//     NORMAL and PLAN turns are unaffected;
+//   - the exact host trust catalogue resolves the route to an automatic,
+//     workspace-scoped contract; read-only and uncatalogued routes are never
+//     rewritten, and neither is a route under an explicit permission deny;
+//   - the harness has an active workspace;
+//   - the route's own advertised schema in this turn's registry snapshot
+//     declares `workspace`, so the harness never invents an argument a server
+//     did not say it accepts;
+//   - the model supplied no value — a model-supplied workspace is left alone
+//     for mcpWorkspaceWithinAuthority to contain or reject;
+//   - the pinned call classifies to the same durable kind and effect, and
+//     actually passes containment.
+//
+// The lazy MCPHub `mcphub_call_tool` shape is deliberately excluded. Its
+// advertised schema describes the gateway's own `server`/`tool`/`arguments`
+// envelope, not the downstream target's inputs, so no advertised schema can
+// satisfy the rule above for the nested map. The only downstream schemas the
+// harness ever holds are the turn-scoped continuation contracts, which are
+// gateway-supplied, model-context-only state kept for rejecting malformed
+// continuation arguments; promoting them into an authorization input would let
+// remote describe output decide what the host injects. Nested gateway calls
+// therefore keep requiring an explicit workspace and keep prompting.
+func (a *Agent) pinCataloguedWorkspaceArgument(
+	mode AuthorityMode, call llm.ToolCall, kind executionpkg.Kind, snapshot mcpPkg.ToolSnapshot,
+) (llm.ToolCall, bool) {
+	if a == nil || mode != AuthorityAutoScoped || kind != executionpkg.KindMCP {
+		return call, false
+	}
+	if a.isTrustedLazyMCPHubCall(call.Name) {
+		return call, false
+	}
+	workspace := strings.TrimSpace(a.activeWorkDir())
+	if workspace == "" {
+		return call, false
+	}
+	contract, trusted := a.trustedMCPContract(call)
+	if !trusted || !contract.auto || !contract.workspaceScoped ||
+		contract.effect == executionpkg.EffectReadOnly {
+		return call, false
+	}
+	if a.authorityPermissionDeniedForCall(call) {
+		return call, false
+	}
+	if raw, present := call.Arguments[workspaceArgumentKey]; present && raw != nil {
+		return call, false
+	}
+	if !mcpSchemaDeclaresWorkspace(snapshot, call.Name) {
+		return call, false
+	}
+
+	pinned := call
+	pinned.Arguments = cloneApprovalArguments(call.Arguments)
+	if pinned.Arguments == nil {
+		pinned.Arguments = make(map[string]any, 1)
+	}
+	pinned.Arguments[workspaceArgumentKey] = workspace
+
+	// Route resolution for the direct shapes never reads arguments, so pinning
+	// cannot move the call to a different contract. Restate that as a check
+	// rather than a comment: a future route rule that did read arguments would
+	// otherwise silently let this rewrite reclassify a durable effect.
+	pinnedKind, pinnedEffect := a.executionKindForCall(pinned)
+	originalKind, originalEffect := a.executionKindForCall(call)
+	if pinnedKind != originalKind || pinnedEffect != originalEffect {
+		return call, false
+	}
+	// Mutate the request only when the mutation is what grants authority. If
+	// the pinned path is somehow not containable, leave the call exactly as the
+	// model wrote it so the operator approves the real request.
+	if !a.mcpWorkspaceWithinAuthority(pinned) {
+		return call, false
+	}
+	return pinned, true
+}
+
+// mcpSchemaDeclaresWorkspace reports whether the exact advertised definition for
+// name in this turn's registry snapshot declares a `workspace` property that an
+// absolute path string can satisfy. A declared type other than string is
+// refused: injecting a value the server's own schema rejects would turn a
+// prompt into a failed call.
+func mcpSchemaDeclaresWorkspace(snapshot mcpPkg.ToolSnapshot, name string) bool {
+	for _, definition := range snapshot.Tools {
+		if definition.Name != name {
+			continue
+		}
+		properties, ok := definition.Parameters["properties"].(map[string]any)
+		if !ok {
+			return false
+		}
+		declared, present := properties[workspaceArgumentKey]
+		if !present {
+			return false
+		}
+		schema, ok := declared.(map[string]any)
+		if !ok {
+			return false
+		}
+		switch declaredType := schema["type"].(type) {
+		case nil:
+			// cortex and friends describe `workspace` with a description and no
+			// type. An untyped property still declares the argument exists.
+			return true
+		case string:
+			return declaredType == "string"
+		case []any:
+			for _, entry := range declaredType {
+				if text, isText := entry.(string); isText && text == "string" {
+					return true
+				}
+			}
+			return false
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 func (a *Agent) mcpWorkspaceWithinAuthority(call llm.ToolCall) bool {

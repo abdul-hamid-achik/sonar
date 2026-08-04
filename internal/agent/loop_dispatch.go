@@ -103,6 +103,21 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 			block = true
 			reason = "tool hook attempted to change durable execution effect"
 		}
+		// A host-catalogued workspace-effectful route whose advertised schema
+		// declares an optional `workspace` is pinned to the active workspace
+		// here — after the hook boundary so a hook cannot observe or undo it,
+		// and before the hash below so approval, the durable ledger, the UI,
+		// and the backend all observe one set of bytes. Re-detach exactly as
+		// the hook path does, so nothing outside this frame owns the arguments
+		// that are about to be authorized.
+		// A request that is already refused is never rewritten: its failure
+		// receipt should record what the model asked for, not a host edit.
+		if pinned, pinnedOK := t.a.pinCataloguedWorkspaceArgument(
+			t.authorityMode, tc, tracked.identity.Kind, t.turnMCPSnapshot,
+		); pinnedOK && !block {
+			tc = pinned
+			tc.Arguments = cloneApprovalArguments(pinned.Arguments)
+		}
 		effectiveHash, hashErr := executionPkg.HashCanonicalArguments(tc.Arguments)
 		if hashErr != nil {
 			reason := capToolResultForContext(fmt.Sprintf("invalid effective tool arguments: %v", hashErr), t.turnNumCtx)
