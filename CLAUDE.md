@@ -8,8 +8,15 @@ package; `docs/` is internal reference prose, still largely inherited from the
 
 ## Provider Boundary
 
-sonar runs **DeepSeek V4 Flash and nothing else**, over the API, with an API
-key. Three parts of DeepSeek's contract diverge from the generic OpenAI shape,
+sonar runs hosted models over the API. **DeepSeek V4 Flash is the default, not
+the boundary** — provider metadata comes from the embedded Catwalk snapshot in
+`internal/catalog`, so adding a provider is data plus, only if its family is
+new, a dialect.
+
+Never enumerate provider types in a new allowlist. Ask
+`config.IsKnownProviderType`. Three separate enumerations once demoted a valid
+hosted provider to the local runtime path; that is why the predicate is
+single-sourced. Three parts of DeepSeek's contract diverge from the generic OpenAI shape,
 and all three are load-bearing — see `internal/llm/deepseek.go`:
 
 - Chain-of-thought is toggled by `{"thinking": {"type": ...}}`, not by
