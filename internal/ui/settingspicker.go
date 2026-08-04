@@ -223,15 +223,6 @@ func (m *Model) resizePickerOverlays() {
 		)
 		state.List.SetShowPagination(!compact && count*state.ItemHeight > state.List.Height()-2)
 	}
-	if state := m.cloudConsentState; state != nil {
-		state.Compact = m.width <= 40 || m.height <= 14
-		delegate := newPickerDelegate(m.isDark, state.Compact, m.themeID, m.glyphProfile)
-		state.List.SetDelegate(delegate)
-		state.List.SetSize(
-			pickerListWidth(m.width),
-			len(state.List.Items())*delegate.Height()+1,
-		)
-	}
 	if state := m.sessionsPickerState; state != nil {
 		if state.ready() {
 			state.List.SetSize(
@@ -299,9 +290,9 @@ func (m *Model) settingsItems() []settingsItem {
 		runtime += " · accept workspace edits"
 	}
 
-	modelDescription := "Choose an installed local model or Ollama Cloud model"
-	if len(m.ollamaModels) > 0 {
-		modelDescription = ollamaInventorySummary(m.ollamaModels)
+	modelDescription := "Choose a model"
+	if count := len(m.ollamaModels); count > 0 {
+		modelDescription = fmt.Sprintf("Choose a model (%d available)", count)
 	}
 	providerValue := m.activeProviderName()
 	if providerValue == "" {

@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"errors"
 	"strings"
 
 	"charm.land/bubbles/v2/key"
@@ -30,20 +29,6 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 				return tea.Batch(cmds...), true
 			}
 			m.closeModelPicker()
-		case OverlayCloudConsent:
-			m.closeCloudConsent()
-			return nil, true
-		case OverlayModelDetails:
-			m.closeModelDetails()
-			return nil, true
-		case OverlayModelPull:
-			if m.modelPullState != nil && m.modelPullState.Phase == ModelPullRunning {
-				m.cancelModelPull()
-				m.modelPullState.Apply(OllamaModelPullProgressMsg{Name: m.modelPullState.Name, Err: errors.New("model download cancelled")})
-				return nil, true
-			}
-			m.closeModelPull()
-			return nil, true
 		case OverlayPlanForm:
 			m.closePlanForm()
 		case OverlayGoalForm:
@@ -233,22 +218,6 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		}
 		handled := false
 		switch {
-		case msg.String() == "a":
-			cmds = append(cmds, m.openModelPull())
-			handled = true
-		case msg.String() == "d":
-			if descriptor, ok := m.modelPickerState.SelectedDescriptor(); ok {
-				m.openModelDetails(descriptor)
-				cmds = append(cmds, m.requestOllamaModelDetails(descriptor))
-			}
-			handled = true
-		case msg.String() == "r":
-			m.modelPickerState.Notice = "Refreshing Ollama inventory…"
-			if !m.reducedMotion {
-				cmds = append(cmds, m.modelPickerState.List.StartSpinner())
-			}
-			cmds = append(cmds, m.refreshOllamaInventory())
-			handled = true
 		case key.Matches(msg, m.keys.CompleteSelect):
 			if descriptor, ok := m.modelPickerState.SelectedDescriptor(); ok && descriptor.Selectable && descriptor.Fit {
 				m.selectModel(descriptor.Name)
@@ -262,28 +231,6 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			m.modelPickerState.List, cmd = m.modelPickerState.List.Update(msg)
 			cmds = append(cmds, cmd)
 		}
-		return tea.Batch(cmds...), true
-	}
-
-	if m.overlay == OverlayCloudConsent && m.cloudConsentState != nil {
-		if key.Matches(msg, m.keys.CompleteSelect) {
-			if item, ok := m.cloudConsentState.List.SelectedItem().(cloudConsentItem); ok {
-				if item.action == cloudConsentAllow {
-					cmds = append(cmds, m.confirmCloudModel(m.cloudConsentState.ModelName))
-				} else {
-					m.closeCloudConsent()
-				}
-			}
-		} else {
-			var cmd tea.Cmd
-			m.cloudConsentState.List, cmd = m.cloudConsentState.List.Update(msg)
-			cmds = append(cmds, cmd)
-		}
-		return tea.Batch(cmds...), true
-	}
-
-	if m.overlay == OverlayModelPull && m.modelPullState != nil {
-		cmds = append(cmds, m.modelPullState.Update(msg))
 		return tea.Batch(cmds...), true
 	}
 

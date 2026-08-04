@@ -83,55 +83,6 @@ func TestManualModelSelectionPersistsAcrossRestarts(t *testing.T) {
 	}
 }
 
-func TestModelAutoClearsManualPreferenceBeforeUnpinning(t *testing.T) {
-	m := newTestModel(t)
-	store := &modelPreferenceStoreStub{model: "qwen3.5:4b"}
-	m.SetModelPreferenceStore(store)
-	m.model = "qwen3.5:4b"
-	m.modelPinned = true
-
-	if err := m.enableAutomaticModelRouting(); err != nil {
-		t.Fatal(err)
-	}
-	if store.model != "" || store.clearCalls != 1 || m.modelPinned {
-		t.Fatalf("preference=%q clears=%d pinned=%v", store.model, store.clearCalls, m.modelPinned)
-	}
-}
-
-func TestModelAutoFailsClosedWhenPreferenceCannotBeCleared(t *testing.T) {
-	m := newTestModel(t)
-	store := &modelPreferenceStoreStub{model: "qwen3.5:4b", clearErr: errors.New("private absolute path must not leak")}
-	m.SetModelPreferenceStore(store)
-	m.model = "qwen3.5:4b"
-	m.modelPinned = true
-
-	err := m.enableAutomaticModelRouting()
-	if err == nil || strings.Contains(err.Error(), "absolute path") {
-		t.Fatalf("unsafe or missing error: %v", err)
-	}
-	if !m.modelPinned || store.model != "qwen3.5:4b" {
-		t.Fatalf("failed clear mutated state: pinned=%v preference=%q", m.modelPinned, store.model)
-	}
-}
-
-func TestCloudOnlyAutoFailureDoesNotClearSavedPreference(t *testing.T) {
-	m := newTestModel(t)
-	store := &modelPreferenceStoreStub{model: "cloud-code"}
-	m.SetModelPreferenceStore(store)
-	m.model = "cloud-code"
-	m.modelPinned = true
-	m.ollamaModels = []OllamaModelDescriptor{{
-		Name: "cloud-code", Source: OllamaModelCloud, Selectable: true, Fit: true, ConsentGranted: true,
-	}}
-
-	if err := m.enableAutomaticModelRouting(); err == nil {
-		t.Fatal("cloud-only automatic routing succeeded")
-	}
-	if store.clearCalls != 0 || store.model != "cloud-code" || !m.modelPinned {
-		t.Fatalf("cloud-only failure clears=%d preference=%q pinned=%v", store.clearCalls, store.model, m.modelPinned)
-	}
-}
-
 func TestManualPreferenceFailureDoesNotPersistSensitiveError(t *testing.T) {
 	m := newTestModel(t)
 	m.SetModelPreferenceStore(&modelPreferenceStoreStub{setErr: errors.New("/Users/private/runtime-preferences.json")})

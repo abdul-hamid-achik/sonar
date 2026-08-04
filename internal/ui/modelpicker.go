@@ -3,11 +3,13 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
 	"charm.land/bubbles/v2/list"
 	"github.com/abdul-hamid-achik/sonar/internal/config"
+	"github.com/abdul-hamid-achik/sonar/internal/llm"
 )
 
 const (
@@ -527,10 +529,6 @@ func (m *Model) selectModel(name string) {
 			m.resumeFollow()
 			return
 		}
-		if descriptor.RequiresConsent && !descriptor.ConsentGranted {
-			m.openCloudConsent(descriptor)
-			return
-		}
 	} else if err := config.CheckModelMemorySafe(name); err != nil {
 		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
 		m.closeModelPicker()
@@ -541,8 +539,7 @@ func (m *Model) selectModel(name string) {
 	m.switchSelectedModel(name)
 }
 
-// switchSelectedModel commits a model switch after all admission and consent
-// checks have succeeded. Ollama Cloud grants remain exact and session-scoped.
+// switchSelectedModel commits a model switch after admission checks succeed.
 func (m *Model) switchSelectedModel(name string) bool {
 	old := m.model
 	if config.CanonicalModelName(old) == config.CanonicalModelName(name) && strings.TrimSpace(old) != "" {
@@ -554,7 +551,6 @@ func (m *Model) switchSelectedModel(name string) bool {
 		for index := range m.ollamaModels {
 			m.ollamaModels[index].Current = config.CanonicalModelName(m.ollamaModels[index].Name) == config.CanonicalModelName(name)
 		}
-		m.cloudConsentState = nil
 		m.closeModelPicker()
 		m.refreshTranscript()
 		m.resumeFollow()
@@ -563,14 +559,6 @@ func (m *Model) switchSelectedModel(name string) bool {
 	if m.modelManager != nil {
 		m.prepareModelSwitch()
 		if err := m.modelManager.SetCurrentModel(name); err != nil {
-			if descriptor, ok := m.ollamaModelDescriptor(name); ok && descriptor.ConsentGranted {
-				m.modelManager.RevokeOllamaCloudModel(name)
-				m.setCloudConsentProjection(name, false)
-			}
-			if m.overlay == OverlayCloudConsent && m.cloudConsentState != nil {
-				m.cloudConsentState.Error = fmt.Sprintf("Could not switch: %v", err)
-				return false
-			}
 			m.entries = append(m.entries, ChatEntry{
 				Kind:    "error",
 				Content: fmt.Sprintf("Failed to switch model: %v", err),
@@ -594,7 +582,6 @@ func (m *Model) switchSelectedModel(name string) bool {
 	if m.conversationStarted() {
 		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "Model · " + m.currentModelSurfaceLabel(false)})
 	}
-	m.cloudConsentState = nil
 	m.closeModelPicker()
 	m.refreshTranscript()
 	m.resumeFollow()
@@ -634,4 +621,73 @@ func (m *Model) validateModelAdmission(name string) error {
 func (m *Model) closeModelPicker() {
 	m.modelPickerState = nil
 	m.closeOverlayToParent()
+}
+
+// hasOllamaCapability reports whether a locally discovered model advertises a
+// capability. Transitional: models reachable over an API answer this from the
+// provider catalog instead, and this helper retires with the Ollama surface.
+func hasOllamaCapability(capabilities []string, want string) bool {
+	for _, capability := range capabilities {
+		if strings.EqualFold(strings.TrimSpace(capability), want) {
+			return true
+		}
+	}
+	return false
+}
+
+// BuildOllamaModelDescriptors projects a locally discovered inventory into
+// picker descriptors.
+//
+// Transitional. The admission logic this replaced encoded local-runtime
+// concerns — memory fit, VRAM residency, automatic-routing eligibility, and
+// Ollama Cloud consent — none of which describe a model reached over an API.
+// Every discovered model is now simply selectable, and the catalog-driven
+// picker will supersede this projection entirely.
+func BuildOllamaModelDescriptors(
+	models []llm.OllamaModel,
+	running []llm.OllamaRunningModel,
+	currentModel string,
+	_ bool,
+) []OllamaModelDescriptor {
+	runningByName := make(map[string]llm.OllamaRunningModel, len(running))
+	for _, entry := range running {
+		runningByName[config.CanonicalModelName(entry.Model.Name)] = entry
+	}
+	out := make([]OllamaModelDescriptor, 0, len(models))
+	for _, model := range models {
+		canonical := config.CanonicalModelName(model.Name)
+		descriptor := OllamaModelDescriptor{
+			Name:          model.Name,
+			DisplayName:   model.Name,
+			Source:        OllamaModelLocal,
+			SizeBytes:     model.SizeBytes,
+			ParameterSize: model.ParameterSize,
+			Quantization:  model.Quantization,
+			ContextLength: boundedContextLength(model.ContextLength),
+			Capabilities:  append([]string(nil), model.Capabilities...),
+			Current:       canonical == config.CanonicalModelName(currentModel),
+			Selectable:    true,
+			Fit:           true,
+			AutoRoutable:  true,
+		}
+		if entry, ok := runningByName[canonical]; ok {
+			descriptor.Running = true
+			descriptor.AllocatedContext = boundedContextLength(int64(entry.ContextLength))
+			descriptor.SizeVRAM = entry.SizeVRAM
+		}
+		descriptor.EffectiveContext = descriptor.ContextLength
+		out = append(out, descriptor)
+	}
+	return out
+}
+
+// boundedContextLength clamps a reported context length into int range.
+func boundedContextLength(value int64) int {
+	if value <= 0 {
+		return 0
+	}
+	if value > int64(math.MaxInt32) {
+		return math.MaxInt32
+	}
+	return int(value)
 }

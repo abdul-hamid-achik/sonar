@@ -380,11 +380,10 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		return nil
 
 	case command.ActionEnableAutoModel:
-		if err := m.enableAutomaticModelRouting(); err != nil {
-			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
-		} else {
-			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: result.Text})
-		}
+		m.entries = append(m.entries, ChatEntry{
+			Kind:    "error",
+			Content: "automatic model routing was removed with the local model inventory; pick a model explicitly",
+		})
 		m.refreshTranscript()
 		m.resumeFollow()
 		return nil

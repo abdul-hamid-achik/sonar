@@ -229,14 +229,6 @@ type Model struct {
 	contextDoctorState       *ContextDoctorState
 	contextDoctorRequest     uint64
 	modelPickerState         *ModelPickerState
-	cloudConsentState        *CloudConsentState
-	cloudRestoreAuthorized   string
-	modelPullState           *ModelPullState
-	modelDetailsState        *OllamaModelDescriptor
-	modelPullCancel          context.CancelFunc
-	modelPullProgress        <-chan OllamaModelPullProgressMsg
-	modelPullRequest         uint64
-	modelPullRunning         bool
 	modelInventoryRequest    uint64
 	manualOnlyModels         map[string]struct{}
 	settingsPickerState      *SettingsPickerState
@@ -566,7 +558,6 @@ func (m *Model) beginShutdown() tea.Cmd {
 	m.cancelTerminalInputResume()
 	m.cancelSessionTitleGen()
 	m.pendingOllamaInventory = nil
-	m.cancelPendingCloudSessionRestore()
 	if m.providerSwitchCancel != nil {
 		m.providerSwitchCancel()
 	}
@@ -601,7 +592,6 @@ func (m *Model) beginShutdown() tea.Cmd {
 	if m.commitCancel != nil {
 		m.commitCancel()
 	}
-	m.cancelModelPull()
 	if m.cancel != nil {
 		m.cancel()
 	}
@@ -613,7 +603,7 @@ func (m *Model) beginShutdown() tea.Cmd {
 
 func (m *Model) shutdownReady() bool {
 	return m.cancel == nil && !m.commitRunning && !m.exportRunning && !m.goalOperationRunning &&
-		!m.modelPullRunning && !m.sessionLoading && !m.sessionListing && !m.imageAttachRunning && !m.ollamaInventoryCommitting &&
+		!m.sessionLoading && !m.sessionListing && !m.imageAttachRunning && !m.ollamaInventoryCommitting &&
 		!m.readScopeOpRunning && !m.providerSwitchRunning
 }
 
@@ -793,36 +783,6 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 			cmds = append(cmds, cmd)
 		}
 
-	case OllamaModelPullRequestedMsg:
-		cmds = m.handleModelPullRequested(msg, cmds)
-
-	case OllamaModelPullCancelRequestedMsg:
-		m.handleModelPullCancelRequested(msg)
-
-	case OllamaModelPullProgressMsg:
-		cmds = m.handleModelPullProgress(msg, cmds)
-
-	case OllamaModelInventoryMsg:
-		cmds = m.handleOllamaModelInventory(msg, cmds)
-
-	case ollamaModelInventoryCommittedMsg:
-		cmds = m.handleOllamaInventoryCommitted(msg, cmds)
-
-	case ollamaReconnectTickMsg:
-		if cmd := m.handleOllamaReconnectTick(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-
-	case modelLoadCheckMsg:
-		if m.state == StateWaiting {
-			if msg.Detail != "" {
-				cmds = append(cmds, m.setFooterNotice(noticeInfo, msg.Detail, 3*time.Second))
-			}
-			if !msg.Running && !m.shuttingDown {
-				cmds = append(cmds, m.scheduleModelLoadCheck())
-			}
-		}
-
 	case systemNoticeMsg:
 		kind := "system"
 		if msg.IsError {
@@ -837,9 +797,6 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 
 	case numCtxAppliedMsg:
 		cmds = append(cmds, m.handleNumCtxApplied(msg))
-
-	case OllamaModelDetailsResultMsg:
-		m.handleOllamaModelDetailsResult(msg)
 
 	case StartupStatusMsg:
 		m.handleStartupStatus(msg)
@@ -1076,21 +1033,11 @@ func (m *Model) updateActiveOverlayMessage(msg tea.Msg) tea.Cmd {
 			m.modelPickerState.List, cmd = m.modelPickerState.List.Update(msg)
 			return cmd
 		}
-	case OverlayCloudConsent:
-		if m.cloudConsentState != nil {
-			var cmd tea.Cmd
-			m.cloudConsentState.List, cmd = m.cloudConsentState.List.Update(msg)
-			return cmd
-		}
 	case OverlaySessionsPicker:
 		if m.sessionsPickerState != nil && m.sessionsPickerState.ready() {
 			var cmd tea.Cmd
 			m.sessionsPickerState.List, cmd = m.sessionsPickerState.List.Update(msg)
 			return cmd
-		}
-	case OverlayModelPull:
-		if m.modelPullState != nil {
-			return m.modelPullState.Update(msg)
 		}
 	case OverlayGoalForm:
 		if m.goalFormState != nil {

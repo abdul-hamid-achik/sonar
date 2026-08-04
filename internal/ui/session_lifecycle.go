@@ -151,7 +151,6 @@ func (m *Model) resetConversationSession() {
 	m.resetEntryMemo()
 	m.clearQueuedFollowUpForSessionReplacement()
 	m.clearBobWorkspaceContext()
-	m.revokeOllamaCloudConsent()
 	if m.imageAttachCancel != nil {
 		m.imageAttachCancel()
 	}

@@ -323,13 +323,13 @@ func TestSettingsCompactRowsShowOnlySelectedSingleLineDetail(t *testing.T) {
 	}
 
 	rendered := m.renderSettingsPicker()
-	if !strings.Contains(rendered, "Choose an installed local") {
+	if !strings.Contains(rendered, "Choose a model") {
 		t.Fatalf("selected Model detail missing:\n%s", rendered)
 	}
 	if strings.Contains(rendered, "Change prompt, skills") {
 		t.Fatalf("unselected Agent detail leaked into compact picker:\n%s", rendered)
 	}
-	if got := strings.Count(rendered, "Choose an installed local"); got != 1 {
+	if got := strings.Count(rendered, "Choose a model"); got != 1 {
 		t.Fatalf("selected detail rendered %d times, want once:\n%s", got, rendered)
 	}
 
@@ -338,7 +338,7 @@ func TestSettingsCompactRowsShowOnlySelectedSingleLineDetail(t *testing.T) {
 	if !strings.Contains(rendered, "Toggle the explicit compact") {
 		t.Fatalf("selected Compact detail missing:\n%s", rendered)
 	}
-	if strings.Contains(rendered, "Choose an installed local") {
+	if strings.Contains(rendered, "Choose a model") {
 		t.Fatalf("previous selected detail remained visible:\n%s", rendered)
 	}
 	assertRenderedLinesFit(t, rendered, 40)
@@ -425,7 +425,7 @@ func TestSettingsNormalRowsKeepAllDescriptions(t *testing.T) {
 
 	rendered := m.renderSettingsPicker()
 	for _, want := range []string{
-		"Choose an installed local model",
+		"Choose a model",
 		"Change prompt, skills, model, and MCP scope",
 		"Keyboard reference and slash commands",
 	} {

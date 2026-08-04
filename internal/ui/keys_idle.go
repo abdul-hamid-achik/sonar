@@ -220,16 +220,6 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			return nil, true
 		}
 
-	case msg.String() == "p":
-		if m.state == StateIdle && m.needsModelBootstrap() && !m.composerEditable() {
-			m.overlayParent = OverlayNone
-			m.openModelPull()
-			if m.modelPullState != nil {
-				m.modelPullState.Input.SetValue(defaultBootstrapModel)
-			}
-			return nil, true
-		}
-
 	case key.Matches(msg, m.keys.SettingsPicker):
 		if m.state == StateIdle {
 			m.openSettingsPicker()

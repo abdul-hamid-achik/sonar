@@ -197,11 +197,6 @@ func (m *Model) restylePickerOverlays() {
 		configurePickerListGlyphProfile(&state.List, m.glyphProfile)
 		setSettingsTitleDensity(&state.List, state.Compact)
 	}
-	if state := m.cloudConsentState; state != nil {
-		state.List.SetDelegate(newPickerDelegate(m.isDark, state.Compact, m.themeID, m.glyphProfile))
-		configurePickerList(&state.List, m.isDark, m.themeID, m.reducedMotion)
-		configurePickerListGlyphProfile(&state.List, m.glyphProfile)
-	}
 	if state := m.sessionsPickerState; state != nil && state.ready() {
 		state.List.SetDelegate(newPickerDelegate(m.isDark, false, m.themeID, m.glyphProfile))
 		configurePickerList(&state.List, m.isDark, m.themeID, m.reducedMotion)
@@ -216,8 +211,5 @@ func (m *Model) restylePickerOverlays() {
 				state.Fields[index].Input.SetStyles(semanticTextInputStyles(m.isDark, m.themeID, m.reducedMotion))
 			}
 		}
-	}
-	if state := m.modelPullState; state != nil {
-		state.SetTheme(m.isDark, m.themeID)
 	}
 }

@@ -1420,9 +1420,6 @@ func (m *Model) restoreSessionState(state persistedSessionState) error {
 	if targetModel == "" && targetProfile != nil {
 		targetModel = targetProfile.Model
 	}
-	if descriptor, ok := m.ollamaModelDescriptor(targetModel); ok && m.localOnly && descriptor.Source == OllamaModelCloud && m.cloudRestoreAuthorized != config.CanonicalModelName(targetModel) {
-		return fmt.Errorf("restore model: model %q requires fresh Ollama Cloud confirmation", targetModel)
-	}
 	oldModel := m.model
 	modelSwitched := false
 	if targetModel != "" && targetModel != m.model {

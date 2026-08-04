@@ -51,10 +51,6 @@ func (m *Model) handleSessionLoadedReceipt(message SessionLoadedMsg) tea.Cmd {
 		m.failLoadedSession(message, err)
 		return nil
 	}
-	if descriptor, ok := m.ollamaModelDescriptor(message.State.Model); ok && m.localOnly && descriptor.Source == OllamaModelCloud {
-		m.openCloudConsentForSession(descriptor, message)
-		return nil
-	}
 	_, cmd := m.finishLoadedSession(message)
 	return cmd
 }
@@ -85,13 +81,6 @@ func (m *Model) finishLoadedSession(message SessionLoadedMsg) (bool, tea.Cmd) {
 	if err := m.restoreSessionState(message.State); err != nil {
 		m.failLoadedSession(message, err)
 		return false, nil
-	}
-	targetIsCloud := false
-	if descriptor, ok := m.ollamaModelDescriptor(message.State.Model); ok {
-		targetIsCloud = m.localOnly && descriptor.Source == OllamaModelCloud
-	}
-	if !targetIsCloud {
-		m.revokeOllamaCloudConsent()
 	}
 	m.resetGoalRecoveryPresentation()
 	if message.ExecutionLease != nil {

@@ -224,11 +224,7 @@ func (m *Model) sendToAgentTurnPresentedWithAttachments(
 	)
 
 	m.scramble.Reset()
-	batch := []tea.Cmd{m.startActivityCmd(), runAgent}
-	if cmd := m.scheduleModelLoadCheck(); cmd != nil {
-		batch = append(batch, cmd)
-	}
-	return tea.Batch(batch...)
+	return tea.Batch(m.startActivityCmd(), runAgent)
 }
 
 func (m *Model) failPresentedTurnBeforeRun(text, message string, visible bool) tea.Cmd {

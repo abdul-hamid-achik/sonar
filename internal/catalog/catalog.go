@@ -137,6 +137,25 @@ func Models(providerID ProviderID) []Model {
 	return append([]Model(nil), provider.Models...)
 }
 
+// FindModel locates a model by ID across every provider, returning the first
+// match in provider order. Model IDs are distinctive enough in practice
+// ("deepseek-v4-flash", "claude-sonnet-4") that a bare ID identifies a model,
+// which lets surfaces that only know the active model name still ask about its
+// capabilities. Prefer LookupModel when the provider is known.
+func FindModel(modelID string) (Model, ProviderID, bool) {
+	load()
+	modelID = strings.TrimSpace(modelID)
+	if modelID == "" {
+		return Model{}, "", false
+	}
+	for _, id := range sortedIDs {
+		if model, ok := modelsBy[id][modelID]; ok {
+			return model, id, true
+		}
+	}
+	return Model{}, "", false
+}
+
 // APIKeyEnv returns the environment variable NAME a provider's key is read
 // from, derived from Catwalk's "$VAR" template. It returns "" for providers
 // that authenticate through a cloud credential chain (bedrock, vertexai) rather

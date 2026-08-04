@@ -14,6 +14,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/abdul-hamid-achik/sonar/internal/catalog"
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/imageasset"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
@@ -779,7 +780,18 @@ func messagesRequireVision(messages []llm.Message) bool {
 	return false
 }
 
+// currentModelSupportsVision asks the provider catalog first. The catalog is
+// authoritative for every model sonar can reach over an API, and it closes a
+// real gap: DeepSeek V4 reports no attachment support, so offering the
+// attachment affordance there would build a request the provider rejects.
+//
+// The Ollama descriptor path below is the transitional fallback for locally
+// discovered models, which have no catalog entry. It goes away with the rest
+// of the Ollama surface.
 func (m *Model) currentModelSupportsVision() bool {
+	if model, _, ok := catalog.FindModel(m.model); ok {
+		return model.SupportsImages
+	}
 	descriptor, ok := m.ollamaModelDescriptor(m.model)
 	if !ok || !hasOllamaCapability(descriptor.Capabilities, "vision") {
 		return false
@@ -790,6 +802,12 @@ func (m *Model) currentModelSupportsVision() bool {
 func (m *Model) ensureVisionModel() error {
 	if m.currentModelSupportsVision() {
 		return nil
+	}
+	// A catalog model's capabilities are a fact about the provider, not a
+	// routing preference. Searching the local Ollama inventory for a
+	// substitute would silently move the turn to a different provider.
+	if _, _, known := catalog.FindModel(m.model); known {
+		return fmt.Errorf("model %q does not accept image attachments", sanitizeTerminalSingleLine(m.model))
 	}
 	if m.modelPinned {
 		return fmt.Errorf("model %q is pinned but does not advertise vision; choose a vision model with Ctrl+P", sanitizeTerminalSingleLine(m.model))

@@ -77,12 +77,6 @@ func (m *Model) View() tea.View {
 			if m.modelPickerState != nil {
 				overlay = m.renderModelPicker()
 			}
-		case OverlayCloudConsent:
-			overlay = m.renderCloudConsent()
-		case OverlayModelDetails:
-			overlay = m.renderModelDetails()
-		case OverlayModelPull:
-			overlay, localCursor = m.renderModelPull()
 		case OverlaySessionsPicker:
 			if m.sessionsPickerState != nil {
 				overlay = m.renderSessionsPicker()

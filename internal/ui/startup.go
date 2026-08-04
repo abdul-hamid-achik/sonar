@@ -49,11 +49,8 @@ func (m *Model) handleStartupStatus(msg StartupStatusMsg) {
 // continue while the composer is usable.
 func (m *Model) handleCoreReady(msg CoreReadyMsg) {
 	m.setCurrentModelProjection(msg.Model)
-	m.ollamaModels = m.applyModelRoutingPolicy(msg.OllamaModels)
+	m.ollamaModels = msg.OllamaModels
 	m.modelList = append([]string(nil), msg.ModelList...)
-	if selectable := manuallySelectableOllamaModels(m.ollamaModels); len(selectable) > 0 {
-		m.modelList = selectable
-	}
 	m.localOnly = msg.LocalOnly
 	m.ollamaInventoryAttempted = msg.OllamaInventoryAttempted
 	m.setActiveProfileMetadata(msg.AgentProfile)
@@ -74,11 +71,8 @@ func (m *Model) handleCoreReady(msg CoreReadyMsg) {
 // the startup phase.
 func (m *Model) handleInitComplete(msg InitCompleteMsg, cmds []tea.Cmd) []tea.Cmd {
 	m.setCurrentModelProjection(msg.Model)
-	m.ollamaModels = m.applyModelRoutingPolicy(msg.OllamaModels)
+	m.ollamaModels = msg.OllamaModels
 	m.modelList = append([]string(nil), msg.ModelList...)
-	if selectable := manuallySelectableOllamaModels(m.ollamaModels); len(selectable) > 0 {
-		m.modelList = selectable
-	}
 	m.ollamaVersion = msg.OllamaVersion
 	m.localOnly = msg.LocalOnly
 	m.ollamaInventoryAttempted = msg.OllamaInventoryAttempted

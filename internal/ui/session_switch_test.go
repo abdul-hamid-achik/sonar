@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/abdul-hamid-achik/sonar/internal/db"
-	"github.com/abdul-hamid-achik/sonar/internal/llm"
 )
 
 func TestSessionSwitchBoundaryProtectsDraftAndImagesOnCancel(t *testing.T) {
@@ -159,9 +158,6 @@ func TestSessionSwitchTargetMismatchRestoresOriginalDraft(t *testing.T) {
 					textareaCursorRuneOffset(m.input.Value(), m.input.Line(), m.input.Column()))
 			}
 			assertPendingImagesEqual(t, m.pendingImages, wantImages)
-			if m.overlay == OverlayCloudConsent || m.cloudConsentState != nil {
-				t.Fatalf("mismatched target opened cloud consent: overlay=%d consent=%#v", m.overlay, m.cloudConsentState)
-			}
 			if len(m.entries) == 0 || !strings.Contains(m.entries[len(m.entries)-1].Content, "does not match") {
 				t.Fatalf("mismatched receipt has no exact failure notice: %#v", m.entries)
 			}
@@ -263,55 +259,6 @@ func TestDirectSuccessfulSessionRestoreClearsSyntheticComposer(t *testing.T) {
 	if m.sessionID != 9 || m.input.Value() != "" {
 		t.Fatalf("direct restore crossed synthetic draft: session=%d draft=%q", m.sessionID, m.input.Value())
 	}
-}
-
-func TestCloudConsentKeepsSessionSwitchBoundaryAtomic(t *testing.T) {
-	newCloudSwitch := func(t *testing.T) (*Model, SessionLoadedMsg) {
-		t.Helper()
-		m := newTestModel(t)
-		m.localOnly = true
-		m.model = "local-code"
-		m.modelManager = llm.NewModelManager("http://localhost:11434", 4096)
-		m.modelManager.ConfigureLocalInventory(true, []llm.LocalModel{{Name: "local-code", Size: 1 << 30}}, true)
-		m.modelManager.ConfigureOllamaInventory([]llm.OllamaModel{{Name: "qwen:cloud", Location: llm.OllamaModelLocationCloud, ContextLength: 262_144}}, true)
-		m.modelManager.ConfigureOllamaCloudInventory([]string{"qwen:cloud"}, true)
-		m.ollamaModels = []OllamaModelDescriptor{
-			{Name: "local-code", Source: OllamaModelLocal, Selectable: true, Fit: true, Current: true},
-			{Name: "qwen:cloud", Source: OllamaModelCloud, Selectable: true, Fit: true, RequiresConsent: true},
-		}
-		m.setComposerDraftAtRune("cloud-bound draft", 5)
-		m.beginSessionSwitch(42, "aaaaa2a", "cloud target")
-		m.pendingSessionSwitch.Choice = sessionSwitchKeep
-		m.sessionLoadToken = 7
-		m.sessionLoading = true
-		m.pendingSessionSwitch.LoadToken = 7
-		return m, SessionLoadedMsg{
-			LoadToken: 7, SessionID: 42, Title: "cloud target",
-			State:       persistedSessionState{Version: currentPersistedSessionVersion, Mode: ModeNormal, Model: "qwen:cloud", ModelPinned: true},
-			StateRecord: db.SessionStateRecord{SessionID: 42, Revision: 3},
-		}
-	}
-
-	t.Run("cancel preserves", func(t *testing.T) {
-		m, message := newCloudSwitch(t)
-		m.handleSessionLoadedReceipt(message)
-		if m.overlay != OverlayCloudConsent || m.pendingSessionSwitch == nil {
-			t.Fatalf("cloud consent did not retain switch boundary: overlay=%d pending=%#v", m.overlay, m.pendingSessionSwitch)
-		}
-		m.closeCloudConsent()
-		if m.pendingSessionSwitch != nil || m.input.Value() != "cloud-bound draft" || m.sessionID != 0 {
-			t.Fatalf("cloud cancel changed payload/session: pending=%#v draft=%q session=%d", m.pendingSessionSwitch, m.input.Value(), m.sessionID)
-		}
-	})
-
-	t.Run("allow keeps", func(t *testing.T) {
-		m, message := newCloudSwitch(t)
-		m.handleSessionLoadedReceipt(message)
-		_ = m.confirmCloudModel("qwen:cloud")
-		if m.pendingSessionSwitch != nil || m.input.Value() != "cloud-bound draft" || m.sessionID != 42 || m.model != "qwen:cloud" {
-			t.Fatalf("cloud allow did not commit atomically: pending=%#v draft=%q session=%d model=%q", m.pendingSessionSwitch, m.input.Value(), m.sessionID, m.model)
-		}
-	})
 }
 
 func TestPendingSessionSwitchIsNotPersisted(t *testing.T) {
