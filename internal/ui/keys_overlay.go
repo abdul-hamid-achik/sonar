@@ -219,7 +219,11 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		handled := false
 		switch {
 		case key.Matches(msg, m.keys.CompleteSelect):
-			if descriptor, ok := m.modelPickerState.SelectedDescriptor(); ok && descriptor.Selectable && descriptor.Fit {
+			// A catalog model carries no local admission state — the provider
+			// hosts it, so there is nothing to be unavailable about.
+			if model, ok := m.modelPickerState.SelectedCatalogModel(); ok {
+				m.selectModel(model.ID)
+			} else if descriptor, ok := m.modelPickerState.SelectedDescriptor(); ok && descriptor.Selectable && descriptor.Fit {
 				m.selectModel(descriptor.Name)
 			} else if reason := m.modelPickerState.SelectedReason(); reason != "" {
 				m.modelPickerState.List.Title = "Unavailable · " + reason

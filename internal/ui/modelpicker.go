@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"charm.land/bubbles/v2/list"
+	"github.com/abdul-hamid-achik/sonar/internal/catalog"
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
 )
@@ -167,14 +168,30 @@ func ollamaModelPickerTitle(string) string {
 }
 
 type ModelPickerState struct {
-	List         list.Model
-	Models       []config.Model // compatibility projection for existing callers
-	Inventory    []OllamaModelDescriptor
-	CurrentModel string
-	RequestID    uint64
-	Notice       string
-	Compact      bool
-	ItemHeight   int
+	List      list.Model
+	Models    []config.Model // compatibility projection for existing callers
+	Inventory []OllamaModelDescriptor
+	// CatalogModels is set when the picker was built from the provider catalog
+	// rather than a local inventory. The two are mutually exclusive.
+	CatalogModels []catalog.Model
+	CurrentModel  string
+	RequestID     uint64
+	Notice        string
+	Compact       bool
+	ItemHeight    int
+}
+
+// SelectedCatalogModel returns the highlighted catalog model, if the picker is
+// catalog-backed and something is highlighted.
+func (s *ModelPickerState) SelectedCatalogModel() (catalog.Model, bool) {
+	if s == nil || len(s.CatalogModels) == 0 {
+		return catalog.Model{}, false
+	}
+	item, ok := s.List.SelectedItem().(catalogModelItem)
+	if !ok {
+		return catalog.Model{}, false
+	}
+	return item.model, true
 }
 
 func (s *ModelPickerState) SelectedDescriptor() (OllamaModelDescriptor, bool) {
@@ -464,6 +481,17 @@ func compactCapabilities(values []string) string {
 
 // openModelPicker shows the model picker overlay.
 func (m *Model) openModelPicker() {
+	// The catalog is the authority for any provider it knows. The local
+	// inventory below is the fallback for a runtime it cannot describe.
+	if providerID, models, ok := m.catalogModelsForActiveProvider(); ok {
+		m.modelPickerState = newCatalogModelPickerState(
+			providerID, models, m.model, m.width, m.height, m.isDark, m.themeID, m.reducedMotion,
+		)
+		m.restylePickerOverlays()
+		m.overlay = OverlayModelPicker
+		m.input.Blur()
+		return
+	}
 	if m.router == nil {
 		return
 	}
@@ -529,6 +557,10 @@ func (m *Model) selectModel(name string) {
 			m.resumeFollow()
 			return
 		}
+	} else if _, _, hosted := catalog.FindModel(name); hosted {
+		// A hosted model runs on the provider's hardware. The local memory
+		// guard below describes this machine's RAM and would reject a perfectly
+		// valid remote model on the strength of its name.
 	} else if err := config.CheckModelMemorySafe(name); err != nil {
 		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
 		m.closeModelPicker()
