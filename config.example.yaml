@@ -76,6 +76,25 @@ privacy:
 # AUTO has room to inspect, implement, and verify without a premature stop.
 tools:
   timeout: 30s
+  # Bounds a single MCP tool call. The 60s default suits interactive tools, but
+  # a server that indexes a codebase first — vecgrep embeds through local
+  # Ollama, codemap builds a symbol graph — legitimately runs for minutes on a
+  # large repo.
+  #
+  # This matters more than it looks. A timeout is indistinguishable from a hung
+  # server, so the call is "unanswered"; an unanswered call whose effect class
+  # is unknown becomes an outcome_unknown, which halts the turn and demands a
+  # manual /recover. Two settings prevent that together:
+  #   1. this headroom, and
+  #   2. an exact read_only trust route for the tool (see servers[].trust
+  #      below), which both auto-authorizes it and makes a timeout a plain
+  #      failure the loop can continue past.
+  #
+  # For vecgrep specifically the real cure is operational: run its background
+  # daemon (`vecgrep daemon start`), which owns the index, watches files, and
+  # throttles Ollama, so calls answer from a warm index instead of building one
+  # inside the call.
+  # mcp_timeout: 5m
   max_grep_results: 500
   max_iterations: 10
   auto_max_iterations: 40

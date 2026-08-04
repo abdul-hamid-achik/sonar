@@ -343,6 +343,9 @@ func run() int {
 	}
 
 	registry := mcp.NewRegistryWithVersion(effectiveVersion(), mcp.WithLocalOnly(cfg.Privacy.LocalOnly))
+	if timeout := cfg.MCPCallTimeout(); timeout > 0 {
+		registry.SetCallTimeout(timeout)
+	}
 	defer registry.Close()
 
 	agentContext := cfg.Ollama.NumCtx
