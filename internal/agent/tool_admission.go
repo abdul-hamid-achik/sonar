@@ -99,6 +99,9 @@ func (t *turnRuntime) admitToolSchemasForContext(ctx context.Context) toolAdmiss
 		t.availableTools = append([]llm.ToolDef(nil), t.tools...)
 	}
 	candidates := append([]llm.ToolDef(nil), t.availableTools...)
+	// A tool that cannot be approved this turn can only be refused at dispatch.
+	// Offering it costs the model a call and the turn its tokens to learn that.
+	candidates = t.a.dropUnapprovableTools(candidates)
 	if !sameToolCatalog(t.tools, candidates) {
 		t.tools = candidates
 		t.rebuildSystem(ctx)
