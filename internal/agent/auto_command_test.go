@@ -66,8 +66,11 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 	commands := []string{
 		"rm -rf .",
 		"git push origin main",
-		"git status --short",
-		"git diff --stat",
+		// `git status --short` and `git diff --stat` moved to the read-only git
+		// catalogue: they cannot mutate under any accepted argument, and gating
+		// them cost an approval on the most common thing an agent does. Their
+		// admission is covered by TestGitReadSubcommandsAreAutoScoped, and every
+		// mutating neighbour below still belongs here.
 		"git add .",
 		"git commit -m done",
 		"git tag v0.1.0",

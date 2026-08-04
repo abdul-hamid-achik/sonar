@@ -554,7 +554,7 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 	case "go":
 		allowed = autoScopedGoCommandAllowed(args)
 	case "git":
-		allowed = false
+		allowed = autoScopedGitCommandAllowed(args)
 	case "npm":
 		allowed = autoScopedPackageCommandAllowed(args, "test")
 	case "pnpm", "yarn":
@@ -932,6 +932,50 @@ func autoScopedGoCommandAllowed(args []string) bool {
 		"-ldflags", "--ldflags", "-gccgoflags", "--gccgoflags", "-gcflags", "--gcflags", "-asmflags", "--asmflags",
 		"-fuzz", "--fuzz",
 	)
+}
+
+// autoScopedGitCommandAllowed admits the git subcommands that inspect history
+// or working-tree state, and only in argument forms that cannot write a file or
+// hand control to another program.
+//
+// Git was previously excluded outright. That made orienting — the single most
+// common thing an agent does before touching anything — cost an interactive
+// approval, and because dispatch preserves model order, one `git status` stalled
+// every read-only tool queued behind it in the same batch.
+//
+// Subcommands are allowlisted, never denylisted, because too many git verbs read
+// in one argument form and destroy in another: `branch -D` deletes, a bare
+// `tag <name>` creates, `config k v` writes, a bare `stash` pushes the worktree.
+// None of those appear here, and adding one requires proving it cannot mutate
+// under ANY accepted argument.
+//
+// A global option before the subcommand (-c, -C, --git-dir, --work-tree,
+// --exec-path, --config-env) is refused implicitly: args[0] must itself be a
+// catalogued subcommand, and such an option would occupy that slot. This matters
+// more than it looks — `git -c diff.external=... diff` turns a read into an
+// arbitrary execution. Aliases need no handling: git does not permit an alias to
+// shadow a built-in subcommand.
+//
+// Caveat worth stating: a repository or user gitconfig that already sets
+// diff.external or core.pager will run that program under `git diff` with no
+// flag at all. That is the operator's own configured tooling, not something a
+// model can introduce here, and it is equally true of everything else on PATH.
+func autoScopedGitCommandAllowed(args []string) bool {
+	if !firstArgIn(args,
+		"status", "log", "show", "diff", "rev-parse", "ls-files", "blame", "describe", "shortlog",
+	) {
+		return false
+	}
+	// --output makes diff/show write a file; --ext-diff, --extcmd, and
+	// --textconv each hand the content to an external program named by config;
+	// --no-index escapes the repository into arbitrary filesystem paths.
+	// containsLongOptionPrefix also refuses unique-prefix abbreviations such as
+	// --out for --output.
+	if containsLongOptionPrefix(args, "--output", "--ext-diff", "--extcmd", "--textconv", "--no-index") {
+		return false
+	}
+	// Short forms the long-option guard cannot see.
+	return !containsArg(args, "-o", "-O")
 }
 
 func autoScopedCargoCommandAllowed(args []string) bool {
