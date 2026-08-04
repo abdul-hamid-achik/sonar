@@ -32,6 +32,15 @@
 # peak-hour pricing at 2x every billing item (09:00-12:00 and 14:00-18:00
 # Beijing time), so treat any in-app cost figure as an estimate.
 
+# Optional: read provider API keys from a KEY=VALUE file instead of exporting
+# them by hand. Only names the catalog recognises as credential variables are
+# applied, and never over something already exported — a shared secrets file
+# commonly also defines PATH or EDITOR, and applying those would corrupt the
+# process. Override with SONAR_ENV_FILE.
+#
+# credentials:
+#   env_file: ~/.config/secrets/env
+
 ollama:
   # Ollama is NOT used for chat. These keys only matter if you re-enable ICE
   # retrieval below, which needs an embeddings endpoint that DeepSeek's API does

@@ -24,6 +24,19 @@ task build
 ./bin/sonar
 ```
 
+Or keep keys in a file and point sonar at it:
+
+```yaml
+# sonar.yaml
+credentials:
+  env_file: ~/.config/secrets/env
+```
+
+Only names the catalog recognises as provider credentials are read from that
+file, and never over an already-exported variable — a shared secrets file
+usually also defines `PATH` and `EDITOR`, and applying those would corrupt the
+process.
+
 Without a key, sonar exits `1` and names the missing variable. There is no unauthenticated mode.
 
 Configuration is optional — the defaults already resolve to DeepSeek. See `config.example.yaml` for the full surface.

@@ -50,6 +50,7 @@ type Config struct {
 	Continuations ContinuationsConfig `yaml:"continuations,omitempty"`
 	Experts       ExpertsConfig       `yaml:"experts,omitempty"`
 	Privacy       PrivacyConfig       `yaml:"privacy,omitempty"`
+	Credentials   CredentialsConfig   `yaml:"credentials,omitempty"`
 	UI            UIConfig            `yaml:"ui,omitempty"`
 }
 
@@ -84,6 +85,19 @@ func (c *Config) UnmarshalYAML(node *yaml.Node) error {
 	}
 	*c = Config(decoded)
 	return nil
+}
+
+// CredentialsConfig points at an optional KEY=VALUE file holding provider API
+// keys, so they need not be exported by hand on every launch.
+type CredentialsConfig struct {
+	// EnvFile is read at startup. Only names the catalog recognises as provider
+	// credential variables are applied, and never over an existing environment
+	// variable — a shared secrets file commonly also defines PATH or EDITOR, and
+	// applying those would corrupt the process.
+	//
+	// Values are read from the file into the process environment and never
+	// stored in configuration, logged, or printed.
+	EnvFile string `yaml:"env_file,omitempty"`
 }
 
 type PrivacyConfig struct {
@@ -805,6 +819,9 @@ func configFileCandidates() []string {
 func applyEnvOverrides(cfg *Config) error {
 	if v := os.Getenv("OLLAMA_HOST"); v != "" {
 		cfg.Ollama.BaseURL = v
+	}
+	if v := os.Getenv("SONAR_ENV_FILE"); v != "" {
+		cfg.Credentials.EnvFile = v
 	}
 	// Provider selection first so model overrides can target the remote profile.
 	if v := os.Getenv("SONAR_PROVIDER"); v != "" {

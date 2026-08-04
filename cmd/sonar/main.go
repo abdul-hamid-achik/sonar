@@ -228,6 +228,21 @@ func run() int {
 		manualChatModels []string
 	)
 	if provider.IsRemote() {
+		// Provider keys may live in an operator-nominated env file rather than
+		// the shell. Load before resolving so the file counts as "set", while an
+		// explicit export still wins.
+		if applied, warning, loadErr := config.LoadCredentialEnvFile(cfg.Credentials.EnvFile, provider.APIKeyEnv); loadErr != nil {
+			fmt.Fprintf(os.Stderr, "credentials: %v\n", loadErr)
+		} else {
+			if warning != "" {
+				fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
+			}
+			if len(applied) > 0 {
+				// Names only. A value must never reach a terminal or a log.
+				fmt.Fprintf(os.Stderr, "credentials: loaded %s from %s\n",
+					strings.Join(applied, ", "), cfg.Credentials.EnvFile)
+			}
+		}
 		apiKey, keyErr := provider.ResolveAPIKey()
 		if keyErr != nil {
 			fmt.Fprintf(os.Stderr, "provider: %v\n", keyErr)
