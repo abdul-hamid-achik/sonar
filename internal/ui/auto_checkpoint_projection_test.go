@@ -324,11 +324,19 @@ func TestAutoCheckpointStopsCleanlyWhenProjectionBoundaryFails(t *testing.T) {
 		t.Fatalf("failed projection boundary still dispatched %d provider calls", got)
 	}
 	if command != nil {
-		for message := range commandMessages(command) {
-			if done, ok := message.(AgentDoneMsg); ok {
-				t.Fatalf("failed projection boundary launched a segment: %#v", done)
+		// Any batched presentation clock may still tick; a second segment may not.
+		messages := commandMessages(command)
+		settle := time.NewTimer(250 * time.Millisecond)
+		defer settle.Stop()
+		for done := false; !done; {
+			select {
+			case message := <-messages:
+				if segment, ok := message.(AgentDoneMsg); ok {
+					t.Fatalf("failed projection boundary launched a segment: %#v", segment)
+				}
+			case <-settle.C:
+				done = true
 			}
-			break
 		}
 	}
 	stopped := false
