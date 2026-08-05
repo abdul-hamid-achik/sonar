@@ -63,7 +63,7 @@ func (m *Model) buildHelpContent(innerW int) string {
 		{"@file / @agent", "Insert file or agent mention text"},
 		{"ctrl+v", "Paste text; on macOS convert a clipboard image to PNG and attach it"},
 		{"paste/drag images", "Attach up to four PNG, JPEG, or GIF files to the pending prompt"},
-		{"shift+drag", "Use the terminal selection override while mouse scrolling is active"},
+		{"shift+drag", "Select and copy: Ghostty, kitty, WezTerm, Alacritty, xterm — Option in iTerm2, and alt+m for terminals with no override"},
 		{"~/… or /…", "Review temporary read-only access; MCP tools require separate approval"},
 		{"#skill", "Insert skill mention text"},
 		{"/cmd", "Run slash command"},

@@ -71,7 +71,11 @@ type Model struct {
 	// themePickerBase is the committed theme captured when the theme picker
 	// opens. Live preview mutates themeID while the user navigates; cancelling
 	// restores this value without persisting, Enter persists the previewed one.
-	themePickerBase       string
+	themePickerBase string
+	// mouseCaptureOff disables mouse reporting so the terminal can do native
+	// text selection. Presentation-only and deliberately not persisted: it is
+	// a "let me grab this one thing" gesture, not a preference.
+	mouseCaptureOff       bool
 	reducedMotion         bool
 	glyphProfile          GlyphProfile
 	evalCount             int

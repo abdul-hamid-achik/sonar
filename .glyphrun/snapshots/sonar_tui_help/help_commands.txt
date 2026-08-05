@@ -1,6 +1,8 @@
                      ╭────────────────────────────────────────────────────────────────────────────╮
                      │ Help                                                                       │
                      │                                                                            │
+                     │   ctrl+g            Open agents                                            │
+                     │   ctrl+n            New conversation                                       │
                      │   ctrl+l            Clear screen                                           │
                      │   f1                Show help (empty input)                                │
                      │                                                                            │
@@ -14,8 +16,9 @@
                      │                     and attach it                                          │
                      │   paste/drag imag…  Attach up to four PNG, JPEG, or GIF files to the       │
                      │                     pending prompt                                         │
-                     │   shift+drag        Use the terminal selection override while mouse        │
-                     │                     scrolling is active                                    │
+                     │   shift+drag        Select and copy: Ghostty, kitty, WezTerm, Alacritty,   │
+                     │                     xterm — Option in iTerm2, and alt+m for terminals      │
+                     │                     with no override                                       │
                      │   ~/… or /…         Review temporary read-only access; MCP tools require   │
                      │                     separate approval                                      │
                      │   #skill            Insert skill mention text                              │
@@ -28,8 +31,5 @@
                      │                     the turn                                               │
                      │ Slash Commands                                                             │
                      │   /help             Show help overlay with shortcuts and commands          │
-                     │   /clear            Clear conversation history                             │
-                     │   /plan             Open a guided read-only planning form                  │
-                     │   /goal             Create, inspect, pause, resume, budget, or drop a      │
-                     │ esc/q close · j/k scroll · pgup/pgdn page · 28%                            │
+                     │ esc/q close · j/k scroll · pgup/pgdn page · 27%                            │
                      ╰────────────────────────────────────────────────────────────────────────────╯

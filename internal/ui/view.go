@@ -126,12 +126,26 @@ func (m *Model) View() tea.View {
 
 	v := tea.NewView(content.String() + "\n")
 	v.AltScreen = true
-	// Cell-motion reports wheel + clicks for tool hit targets. Native terminal
-	// selection still works via Shift-drag in most terminals (iTerm, Ghostty,
-	// Kitty, WezTerm). Ctrl+Y copies the last assistant message when idle.
-	// Prefer Shift-drag over disabling mouse: wheel scroll of the transcript
-	// is a daily-driver affordance.
-	v.MouseMode = tea.MouseModeCellMotion
+	// Cell-motion (DEC 1002) reports wheel and clicks. It also consumes press
+	// and release, which is what stops the terminal doing native drag-select —
+	// the single most common complaint about this UI.
+	//
+	// Most terminals offer a modifier that withholds mouse events from the
+	// application so selection works anyway, but the modifier is NOT uniform:
+	// Shift in Ghostty, kitty, WezTerm, Alacritty, xterm and VTE; **Option in
+	// iTerm2**; and Terminal.app has none at all. An earlier version of this
+	// comment claimed Shift for iTerm, and the help overlay repeated it, which
+	// made the documented escape hatch wrong for those users.
+	//
+	// So there is a real toggle now (alt+m). Turning capture off gives every
+	// terminal native selection at the cost of wheel scrolling; the keyboard
+	// paging keys keep working. Bubble Tea diffs MouseMode between frames and
+	// emits the reset sequence itself, so this takes effect on the next paint.
+	if m.mouseCaptureOff {
+		v.MouseMode = tea.MouseModeNone
+	} else {
+		v.MouseMode = tea.MouseModeCellMotion
+	}
 	v.Cursor = viewCursor
 	m.applyViewTheme(&v)
 

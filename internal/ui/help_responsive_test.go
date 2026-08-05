@@ -69,8 +69,16 @@ func TestHelpKeepsKeysAndContextTruthfulAtNarrowWidth(t *testing.T) {
 		if !strings.Contains(compact, "shift+enter New line · ctrl+j/alt+enter also") || strings.Contains(plain, "shift+ent…") {
 			t.Fatalf("width %d help omitted or truncated newline fallbacks:\n%s", width, plain)
 		}
-		if !strings.Contains(compact, "shift+drag") || !strings.Contains(compact, "terminal selection override") {
+		// Both routes to copying text with the mouse must survive the narrow
+		// tier, and their keys must not be truncated — a key you cannot read
+		// is a key you cannot press. The wording is free to reflow; the keys
+		// are not. shift+drag is the terminal's own override, alt+m is the
+		// harness toggle for the terminals that have none.
+		if !strings.Contains(compact, "shift+drag") || !strings.Contains(compact, "alt+m") {
 			t.Fatalf("width %d help omitted mouse selection guidance:\n%s", width, plain)
+		}
+		if strings.Contains(plain, "shift+dra…") || strings.Contains(plain, "alt+…") {
+			t.Fatalf("width %d truncated a mouse selection key:\n%s", width, plain)
 		}
 	}
 

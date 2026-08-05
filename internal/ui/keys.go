@@ -23,6 +23,7 @@ type KeyMap struct {
 	CompleteToggle    key.Binding
 	CompleteSelect    key.Binding
 	CopyLast          key.Binding
+	ToggleMouse       key.Binding
 	CycleMode         key.Binding
 	ModelPicker       key.Binding
 	SettingsPicker    key.Binding
@@ -120,6 +121,10 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("ctrl+y"),
 			key.WithHelp("ctrl+y", "copy last response (empty input)"),
 		),
+		ToggleMouse: key.NewBinding(
+			key.WithKeys("alt+m"),
+			key.WithHelp("alt+m", "mouse capture off/on — turn off to select and copy with the mouse"),
+		),
 		CycleMode: key.NewBinding(
 			key.WithKeys("shift+tab"),
 			key.WithHelp("shift+tab", "cycle mode (NORMAL/PLAN/AUTO)"),
@@ -200,7 +205,8 @@ func (k KeyMap) HelpSections() []KeyHelpSection {
 			k.PageUp, k.PageDown, k.HalfPageUp, k.HalfPageDn, k.JumpLatest, k.TranscriptSearch,
 		}},
 		{"Inspect", []key.Binding{
-			k.ToggleTools, k.ToggleFocusedTool, k.ToggleThinking, k.CopyLast, k.CompactToggle,
+			k.ToggleTools, k.ToggleFocusedTool, k.ToggleThinking, k.CopyLast, k.ToggleMouse,
+			k.CompactToggle,
 		}},
 		{"Session", []key.Binding{
 			k.CycleMode, k.ModelPicker, k.SettingsPicker, k.AgentHub, k.NewConvo, k.ClearView, k.Help,

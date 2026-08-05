@@ -165,6 +165,18 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			return m.openExternalEditor(), true
 		}
 
+	case key.Matches(msg, m.keys.ToggleMouse):
+		// Mouse reporting consumes press and release, which is what stops the
+		// terminal from doing native drag-select. Turning it off hands the
+		// mouse back to the terminal; the notice says what was traded away,
+		// because a dead scroll wheel with no explanation reads as a bug.
+		m.mouseCaptureOff = !m.mouseCaptureOff
+		if m.mouseCaptureOff {
+			return m.setFooterNotice(noticeInfo,
+				"mouse capture off · select and copy with the mouse · pgup/pgdn still scroll · alt+m restores", 6*time.Second), true
+		}
+		return m.setFooterNotice(noticeInfo, "mouse capture on · wheel scrolling restored", 3*time.Second), true
+
 	case key.Matches(msg, m.keys.CopyLast):
 		// Prefer last assistant answer; allow copy while a turn is live when the
 		// draft is empty so users can grab text without waiting for idle.
