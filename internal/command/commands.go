@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+
+	"github.com/abdul-hamid-achik/sonar/internal/config"
 )
 
 // RegisterBuiltins adds all built-in slash commands to the registry.
@@ -249,9 +251,14 @@ func RegisterBuiltins(r *Registry) {
 					}
 				}
 			}
-			// Allow switching to a known type even if not listed (flat catalog).
-			switch strings.ToLower(target) {
-			case "ollama", "xai", "openai_compatible":
+			// A provider type is selectable even when no profile is named after
+			// it (the flat catalog). config.IsKnownProviderType is the single
+			// answer to which types exist; the list this replaced predated the
+			// catalog and rejected "deepseek" — sonar's own default provider —
+			// along with the other 39 catalog entries. The switch layer already
+			// resolves a bare type through the same predicate, so this gate was
+			// the only thing standing in the way.
+			if strings.TrimSpace(target) != "" && config.IsKnownProviderType(target) {
 				return Result{
 					Text:   fmt.Sprintf("Switching to provider: %s", target),
 					Action: ActionSwitchProvider,
