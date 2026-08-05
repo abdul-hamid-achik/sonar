@@ -82,6 +82,11 @@ exempt: specs point it at a dead port on purpose.
 Re-baseline with `--update-snapshots` only after reading the diff and
 confirming the new render is the intended one.
 
+`specs/pending/` is outside the glob and is not run. It holds specs that
+describe behaviour sonar does not have for a decided reason rather than a bug;
+each is listed in that directory's README with what would move it back. Prefer
+it to deleting a spec, and prefer either to leaving CI red.
+
 ## Provider boundary
 
 **DeepSeek V4 Flash is the default, not the boundary.** Provider metadata comes

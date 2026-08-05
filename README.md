@@ -167,11 +167,13 @@ Two providers complete real tool-call turns end to end, not just unit tests:
   27 catalog providers on the plain OpenAI-compatible dialect work. **Google
   and the cloud-credential families (azure, bedrock, vertex) do not**, and need
   their own dialects.
-- **Inherited Ollama code.** The adapter and inventory are still compiled into
-  `internal/llm` and reachable via an explicit `provider: {type: ollama}`. 23
-  non-test UI files still reference it — no file exists *only* for Ollama, so
-  removing it is an untangling rather than a deletion. Undecided whether it
-  goes or stays supported.
+- **Inherited Ollama code is half-removed.** The adapter and inventory are
+  still compiled into `internal/llm` and reachable via an explicit
+  `provider: {type: ollama}`, and 23 non-test UI files reference it — but the
+  UI can no longer classify an Ollama Cloud model, so the picker badges one
+  `LOCAL`. No file exists *only* for Ollama, so finishing the removal is an
+  untangling rather than a deletion. Undecided whether it goes or is rewired;
+  `specs/pending/` holds the spec that covers it.
 - **The catalog is a pinned snapshot.** `sonar providers refresh` does not
   exist yet.
 - **No published binaries yet.** The release pipeline is wired
