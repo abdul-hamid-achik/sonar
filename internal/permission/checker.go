@@ -198,7 +198,14 @@ type ApprovalPreview struct {
 	// rule a bash command tripped). It is static policy text, never raw model
 	// or MCP content, and must be stable across rebuilds so preview
 	// revalidation can compare it safely.
-	Reason            string
+	Reason string
+	// CommandPrefix is the bash grant prefix that would actually cure THIS
+	// refusal: derived by the host from the segment it refused, not from the
+	// command's first non-trivial segment. Empty whenever the host cannot name
+	// a curable segment, and hosts then fall back to DeriveBashPrefix — the
+	// field narrows an offer, it never creates one. Deterministic and bounded
+	// like Reason, so preview revalidation still compares it by value.
+	CommandPrefix     string
 	Path              string
 	SourcePath        string
 	DestinationPath   string

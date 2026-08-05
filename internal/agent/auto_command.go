@@ -77,10 +77,17 @@ const (
 // execution request. The typed effect and provenance flags keep the authority
 // boundary inspectable without turning arbitrary shell text into policy.
 type autoCommandAssessment struct {
-	disposition         autoCommandDisposition
-	effect              autoCommandEffect
-	reason              autoCommandReason
-	segments            int
+	disposition autoCommandDisposition
+	effect      autoCommandEffect
+	reason      autoCommandReason
+	segments    int
+	// refusedSegment indexes the static split segment whose catalog verdict
+	// refused the command, or -1 when the refusal was not a per-segment one
+	// (empty, bounds, dynamic syntax, composition, redirect, cd path). It is an
+	// index rather than the segment's words on purpose: an index cannot carry a
+	// private value into an approval surface or the durable ledger, and every
+	// caller that needs the words already holds the command text they came from.
+	refusedSegment      int
 	usesReadGrant       bool
 	workspaceExecutable bool
 }
@@ -212,6 +219,48 @@ func (a *Agent) autoCommandApprovalReason(mode AuthorityMode, command string) st
 	return autoCommandReasonLabel(assessment.reason, command)
 }
 
+// autoCommandGrantPrefix names the bash prefix a saved grant must carry to
+// cure this refusal — the one derived from the segment the host refused.
+//
+// The host is the only party that knows which segment that was, and the
+// difference is not academic. Every prompt in the audited session 8c7ca7f read
+// `cd … && sed -n … && echo … && grep …`: the grep segment refused, whole-
+// command derivation offered "sed" (cd and echo are skipped as trivial, sed is
+// simply first), and the ledger shows the consequence — always pressed at
+// iterations 10 and 12, iterations 11, 14, 16 and 17 prompting again with the
+// identical reason. Three grants, none of which could ever match the segment
+// that would be re-assessed.
+//
+// It returns "" rather than guessing whenever the refusal is not curable by a
+// prefix at all (composition, dynamic syntax, path and redirect refusals are
+// re-checked identically under a grant), leaving callers on the whole-command
+// derivation. Narrowing an offer is the whole job here; widening one is not.
+func (a *Agent) autoCommandGrantPrefix(mode AuthorityMode, command string) string {
+	if mode != AuthorityAutoScoped {
+		return ""
+	}
+	assessment := a.assessAutoScopedCommand(command)
+	if assessment.admitted() || assessment.refusedSegment < 0 ||
+		!autoCommandGrantEligibleReason(assessment.reason) {
+		return ""
+	}
+	commands, _, _, ok := splitStaticShellCommands(command)
+	if !ok || assessment.refusedSegment >= len(commands) {
+		return ""
+	}
+	words := commands[assessment.refusedSegment]
+	// Strip leading assignments exactly as the admission and grant paths do, so
+	// the offered prefix lines up with the executable those matchers compare.
+	for len(words) > 0 && autoCommandAssignmentAllowed(words[0]) {
+		words = words[1:]
+	}
+	prefix, ok := permissionpkg.DeriveBashPrefixFromSegment(words)
+	if !ok {
+		return ""
+	}
+	return prefix
+}
+
 type autoSimpleCommandAssessment struct {
 	allowed             bool
 	effect              autoCommandEffect
@@ -239,7 +288,7 @@ func (a *Agent) autoScopedCommandAllowed(command string) bool {
 }
 
 func (a *Agent) assessAutoScopedCommand(command string) autoCommandAssessment {
-	assessment := autoCommandAssessment{disposition: autoCommandRequiresApproval}
+	assessment := autoCommandAssessment{disposition: autoCommandRequiresApproval, refusedSegment: -1}
 	// The policy scanner and the POSIX shell must observe the same character
 	// stream. Invalid UTF-8 can otherwise be normalized differently by rune
 	// iteration and by the child process, turning a rejected token boundary into
@@ -325,6 +374,11 @@ func (a *Agent) assessAutoScopedCommand(command string) autoCommandAssessment {
 		}
 		if !simple.allowed {
 			assessment.reason = simple.reason
+			// Name the segment that objected, after the grant re-assessment
+			// above has already failed to cure it. This is the only refusal in
+			// this function a saved bash prefix can ever reach, so it is the
+			// only one worth offering a prefix for.
+			assessment.refusedSegment = index
 			return assessment
 		}
 		if simple.workspaceExecutable {
@@ -849,12 +903,38 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 		allowed = autoScopedSwiftCommandAllowed(args)
 	case "sed":
 		allowed = autoScopedSedCommandAllowed(args)
-	case "find", "rg", "grep", "tree", "du", "ls":
-		// Recursive shell inspection can discover or read descendants that the
-		// host-owned ignore policy excludes (for example `rg --no-ignore .`,
-		// `tree -a .`, or `ls -Ra .`). Built-in list/grep/read operations enforce
-		// that policy, so raw search and directory-enumeration processes remain
-		// approval-gated in AUTO even for workspace operands.
+	case "grep":
+		// Walking is the property that matters, not the executable's name.
+		//
+		// The bypass this refusal exists to prevent is a search that DISCOVERS
+		// descendants: the per-operand loop above resolves every named path
+		// through the workspace and the host secret policy, so an operand the
+		// ignore policy excludes is already denied — `grep -n SECRET .env` is
+		// refused by path authority whether or not this case admits grep. What
+		// path authority never sees is a file the command finds for itself, and
+		// only a directory walk finds one.
+		//
+		// Without a recursion option grep reads exactly the operands it was
+		// given. A directory among them yields EISDIR on Linux and is skipped on
+		// BSD; neither enumerates, so there is no unchecked read either way.
+		// That is a structural claim about grep's traversal, not a flag
+		// denylist over its behaviour.
+		//
+		// Refusing the non-recursive form cost real work and explained itself
+		// wrongly: seven of the nine approvals in session 8c7ca7f were
+		// `grep -n <pattern> <explicit files>`, told they were "raw recursive
+		// search" when nothing about them recursed.
+		if autoGrepWalksDirectories(args) {
+			assessment.reason = autoCommandReasonHostToolAvailable
+			return assessment
+		}
+		allowed = true
+	case "find", "rg", "tree", "du", "ls":
+		// These enumerate by construction — walking is what they are for, and
+		// rg walks the working directory when given no operand at all — so
+		// there is no non-walking form to admit. Built-in list/grep/read
+		// operations enforce the ignore policy, so they stay approval-gated in
+		// AUTO even for workspace operands.
 		//
 		// The refusal is reported as its own reason because this one has a
 		// remedy. In a measured session four of six approval prompts were
@@ -1261,6 +1341,36 @@ func searchLongOptionTakesValue(name string, ripgrep bool) bool {
 // assessAutoScopedSimpleCommand, which is where an installed one lands.
 // TestSearchRefusalNamesTheToolThatWouldWork walks every name through the
 // public entry point, so the two lists cannot silently drift apart.
+// autoGrepWalksDirectories reports whether this grep invocation can reach a
+// file it was not handed, which is the only way a search escapes the
+// per-operand workspace and secret-policy checks.
+//
+// Three families do it, and nothing else in grep's grammar does:
+//
+//   - recursion (-r, -R, --recursive, --dereference-recursive), including
+//     inside a POSIX short cluster such as -rn;
+//   - --directories / -d in any form, because `-d recurse` is a spelling of
+//     recursion and the other modes are not worth distinguishing here;
+//   - --include / --exclude / --exclude-dir / --exclude-from, which only have
+//     meaning while walking and whose presence signals a form this admission
+//     was not reasoned about.
+//
+// Everything else grep accepts changes what it matches or how it prints, never
+// which files it opens.
+func autoGrepWalksDirectories(args []string) bool {
+	if containsArg(args, "-r", "-R", "-d", "--recursive", "--dereference-recursive", "--directories") ||
+		containsLongOptionPrefix(args,
+			"--recursive", "--dereference-recursive", "--directories",
+			"--include", "--exclude", "--exclude-dir", "--exclude-from") {
+		return true
+	}
+	// A short cluster hides the same options: -rn recurses, and -dr takes
+	// "recurse" from the next word. containsClusteredShortOption already knows
+	// that a value-taking letter ends the cluster it can speak for.
+	return containsClusteredShortOption(args, "rR", "ABCDdfm") ||
+		containsClusteredShortOption(args, "d", "ABCDfm")
+}
+
 func autoCommandHasBuiltinSearchRemedy(executable string) bool {
 	return stringIn(executable, "find", "rg", "grep", "tree", "du", "ls")
 }

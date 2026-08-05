@@ -142,3 +142,84 @@ func TestBashGrantNeverCuresWorkspaceExecutableProvenance(t *testing.T) {
 		})
 	}
 }
+
+// TestBashGrantPrefixNamesTheRefusingSegment replays the exact command shape
+// from the audited session 8c7ca7f, where the offer was aimed one segment too
+// early. Fourteen presses in the session before it and three in that one bought
+// nothing: `cd … && sed -n … && echo … && grep …` refuses on the grep, and
+// whole-command derivation offers "sed" because cd and echo are trivial and
+// sed is simply first. The ledger recorded always at iterations 10 and 12 and
+// the identical refusal again at 11, 14, 16 and 17.
+func TestBashGrantPrefixNamesTheRefusingSegment(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	installGrantTestExecutables(t, "sed", "grep")
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "notes.go"), []byte("package notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(workspace)
+
+	// The recursive spelling from the session's later prompts: a walk is what
+	// path authority cannot see, so this is the form that still refuses.
+	command := "cd " + workspace + " && sed -n 1,5p notes.go && echo ==== && grep -rn TODO notes.go"
+	assessment := ag.assessAutoScopedCommand(command)
+	if assessment.admitted() {
+		t.Fatal("the grep segment gained AUTO authority before any grant")
+	}
+	if assessment.reason != autoCommandReasonHostToolAvailable {
+		t.Fatalf("unexpected refusal reason: %#v", assessment)
+	}
+
+	// The bug, stated as the test's own baseline: whole-command derivation
+	// still answers "sed" here, and a grant for it cures nothing.
+	if derived, ok := permission.DeriveBashPrefix(command); !ok || derived != "sed" {
+		t.Fatalf("baseline derivation changed; this test no longer covers the reported shape: %q %v", derived, ok)
+	}
+
+	call := llm.ToolCall{Name: "bash", Arguments: map[string]any{"command": command}}
+	request := ag.newApprovalRequest(context.Background(), AuthorityAutoScoped, call, "hash")
+	if request.Preview.CommandPrefix != "grep" {
+		t.Fatalf("preview offered a prefix for the wrong segment: %q", request.Preview.CommandPrefix)
+	}
+	applySessionScope(&request, permission.ScopeSessionBashPrefix)
+	if request.Scope.Resource != "grep" {
+		t.Fatalf("session grant bound the wrong prefix: %#v", request.Scope)
+	}
+
+	ag.rememberSessionApproval(request)
+	if assessment := ag.assessAutoScopedCommand(command); !assessment.admitted() {
+		t.Fatalf("the always press did not cure its own refusal: %#v", assessment)
+	}
+}
+
+// TestBashGrantPrefixLeavesUncurableRefusalsToWholeCommandDerivation pins the
+// narrowing direction. A refusal no prefix can reach — dynamic syntax,
+// composition, a path outside the workspace — is re-checked identically under a
+// grant, so the host names no segment and the offer stays exactly what it was.
+func TestBashGrantPrefixLeavesUncurableRefusalsToWholeCommandDerivation(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	installGrantTestExecutables(t, "sed", "grep")
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+
+	for name, command := range map[string]string{
+		"dynamic syntax": "grep -n TODO $(ls)",
+		"outside path":   "sed -n 1,5p /etc/hosts",
+		"normal mode":    "grep -n TODO notes.go",
+	} {
+		t.Run(name, func(t *testing.T) {
+			mode := AuthorityAutoScoped
+			if name == "normal mode" {
+				mode = AuthorityNormal
+			}
+			if prefix := ag.autoCommandGrantPrefix(mode, command); prefix != "" {
+				t.Fatalf("host named a segment for an uncurable refusal: %q", prefix)
+			}
+		})
+	}
+}

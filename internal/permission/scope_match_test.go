@@ -168,3 +168,68 @@ func TestNormalizeWritePathAndMatch(t *testing.T) {
 		t.Fatal("outside workspace rejected")
 	}
 }
+
+func TestDeriveBashPrefixFromSegment(t *testing.T) {
+	cases := []struct {
+		name   string
+		words  []string
+		prefix string
+		ok     bool
+	}{
+		{name: "executable", words: []string{"grep", "-rn", "TODO", "src"}, prefix: "grep", ok: true},
+		{name: "runner keeps its subcommand", words: []string{"go", "test", "./..."}, prefix: "go test", ok: true},
+		// Quoting is resolved by the time a segment reaches here, so an argv
+		// word may hold a space. A bare runner would be a wider grant than the
+		// segment needs, and the field-wise matcher could never confirm the
+		// two-field form, so the derivation refuses instead of widening.
+		{name: "runner without a derivable subcommand", words: []string{"go", "test extra"}, ok: false},
+		{name: "runner alone", words: []string{"git"}, ok: false},
+		{name: "leading word with whitespace", words: []string{"my prog", "-v"}, ok: false},
+		{name: "leading word with a marker", words: []string{"gr$ep", "-n"}, ok: false},
+		{name: "empty", words: nil, ok: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			prefix, ok := DeriveBashPrefixFromSegment(tc.words)
+			if ok != tc.ok || prefix != tc.prefix {
+				t.Fatalf("got (%q, %v), want (%q, %v)", prefix, ok, tc.prefix, tc.ok)
+			}
+			if !ok {
+				return
+			}
+			// Whatever is derived here must be matched by the matcher that will
+			// re-assess the same segment, or the grant is another placebo.
+			if !BashSegmentPatternMatches(tc.words, prefix) {
+				t.Fatalf("derived prefix %q does not match its own segment %q", prefix, tc.words)
+			}
+		})
+	}
+}
+
+func TestApprovalBashPrefixPrefersTheHostNamedSegment(t *testing.T) {
+	compound := "cd /w && sed -n 1,5p a.go && echo x && grep -n TODO a.go"
+
+	// No host-named segment: unchanged whole-command derivation.
+	prefix, ok := ApprovalBashPrefix(ApprovalPreview{Command: compound}, "")
+	if !ok || prefix != "sed" {
+		t.Fatalf("fallback derivation changed: %q %v", prefix, ok)
+	}
+
+	// Host named one: it wins.
+	prefix, ok = ApprovalBashPrefix(ApprovalPreview{Command: compound, CommandPrefix: "grep"}, "")
+	if !ok || prefix != "grep" {
+		t.Fatalf("host-named prefix ignored: %q %v", prefix, ok)
+	}
+
+	// A malformed host value can never become a grant; the fallback answers.
+	prefix, ok = ApprovalBashPrefix(ApprovalPreview{Command: compound, CommandPrefix: "grep | rm"}, "")
+	if !ok || prefix != "sed" {
+		t.Fatalf("malformed host prefix was not rejected: %q %v", prefix, ok)
+	}
+
+	// The command may live only on the request when no preview carries it.
+	prefix, ok = ApprovalBashPrefix(ApprovalPreview{}, "go test ./...")
+	if !ok || prefix != "go test" {
+		t.Fatalf("fallback command was not consulted: %q %v", prefix, ok)
+	}
+}

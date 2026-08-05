@@ -198,6 +198,67 @@ func DeriveBashPrefix(command string) (string, bool) {
 	return deriveBashPrefixFields(fields, true)
 }
 
+// ApprovalBashPrefix resolves the one prefix a bash approval should offer,
+// save, and grant. Every surface that touches a bash grant goes through it so
+// the label the user reads, the session grant, and the durable rule cannot name
+// three different prefixes for one press.
+//
+// The host's refusing-segment prefix wins when it named one; otherwise this
+// falls back to whole-command derivation, which is still the best available
+// guess when nothing knows which segment objected (a NORMAL-mode prompt, a
+// refusal no prefix can cure).
+func ApprovalBashPrefix(preview ApprovalPreview, fallbackCommand string) (string, bool) {
+	if prefix, ok := NormalizeBashPrefix(preview.CommandPrefix); ok {
+		return prefix, true
+	}
+	command := strings.TrimSpace(preview.Command)
+	if command == "" {
+		command = strings.TrimSpace(fallbackCommand)
+	}
+	return DeriveBashPrefix(command)
+}
+
+// DeriveBashPrefixFromSegment derives a prefix from ONE already-split command
+// segment, taken as the host's static splitter produced it: argv words with
+// quoting resolved and every unquoted control marker already consumed.
+//
+// It is the derivation counterpart to BashSegmentPatternMatches — a prefix
+// from here is matched by that — and exists because DeriveBashPrefix answers a
+// different question. That one picks the command's first non-trivial segment,
+// which is the right guess when nobody knows which segment objected. A host
+// that DOES know reaches for this instead: in the audited session 8c7ca7f
+// every prompted command read `cd … && sed -n … && echo … && grep …`, the
+// refusal came from the grep, and the offer said "sed". Three always presses,
+// four later prompts with the identical reason, zero grants fired.
+//
+// Quoting is already resolved here, so a word may legitimately contain a space
+// or a marker that plainBashLeadingField accepts in a raw command. Such a word
+// can never satisfy the field-wise matcher — `grep "a b"` is one argv word and
+// two pattern fields — so a field bearing whitespace refuses rather than
+// offering a grant that cannot fire.
+func DeriveBashPrefixFromSegment(words []string) (string, bool) {
+	if len(words) == 0 {
+		return "", false
+	}
+	derivable := func(word string) bool {
+		return plainBashLeadingField(word) && !strings.ContainsFunc(word, unicode.IsSpace)
+	}
+	if !derivable(words[0]) {
+		return "", false
+	}
+	fields := words[:1]
+	if _, multi := multiWordBashRunners[words[0]]; multi {
+		// A bare "go" or "git" is a wider grant than the segment needs, and the
+		// runner forms are exactly where that width is dangerous. Refuse rather
+		// than widen when the subcommand is not itself derivable.
+		if len(words) < 2 || !derivable(words[1]) {
+			return "", false
+		}
+		fields = words[:2]
+	}
+	return deriveBashPrefixFields(fields, true)
+}
+
 func deriveBashPrefixFields(fields []string, compound bool) (string, bool) {
 	if len(fields) == 0 {
 		return "", false

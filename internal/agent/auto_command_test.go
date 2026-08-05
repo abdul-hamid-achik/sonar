@@ -1192,3 +1192,84 @@ func TestAutoCommandApprovalReasonIsGatedToAUTOAndNonAdmitted(t *testing.T) {
 		})
 	}
 }
+
+// TestNonWalkingGrepIsAdmittedAndWalkingGrepIsNot pins where the search
+// boundary actually sits: at directory traversal, not at the executable's name.
+//
+// Refusing every grep cost seven of the nine approvals in session 8c7ca7f, and
+// explained itself wrongly — each was `grep -n <pattern> <explicit files>`,
+// told it was "raw recursive search" when nothing about it recursed. The
+// per-operand loop resolves a named path through the workspace and the host
+// secret policy, so the only read that escapes those checks is one the command
+// finds for itself.
+func TestNonWalkingGrepIsAdmittedAndWalkingGrepIsNot(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	workspace := t.TempDir()
+	for _, name := range []string{"app.go", "notes.md", ".env"} {
+		if err := os.WriteFile(filepath.Join(workspace, name), []byte("TODO\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(workspace, "internal"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(workspace)
+
+	for _, command := range []string{
+		"grep -n TODO app.go",
+		"grep -n TODO app.go notes.md",
+		"grep -c TODO app.go",
+		"grep -in TODO app.go",
+		"grep -A2 -B2 TODO app.go",
+		"grep -E 'TODO|FIXME' app.go",
+		"grep -e TODO -- app.go",
+		"cat app.go | grep TODO",
+		"sed -n 1,5p app.go && echo ==== && grep -n TODO app.go | head",
+	} {
+		t.Run("admits/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); !assessment.admitted() {
+				t.Fatalf("non-walking grep still costs an approval: %#v", assessment)
+			}
+		})
+	}
+
+	for _, command := range []string{
+		// Every spelling of a walk, including inside a POSIX cluster and the
+		// forms that reach recursion through --directories rather than -r.
+		"grep -r TODO internal",
+		"grep -R TODO internal",
+		"grep -rn TODO internal",
+		"grep -nr TODO internal",
+		"grep -Rn TODO internal",
+		"grep -rln TODO .",
+		"grep --recursive TODO internal",
+		"grep --dereference-recursive TODO internal",
+		"grep -d recurse TODO internal",
+		"grep -nd recurse TODO internal",
+		"grep --directories=recurse TODO internal",
+		"grep --exclude-dir=vendor -rn TODO .",
+		// Path authority is unchanged and independent: an operand the ignore
+		// policy or the workspace boundary excludes is refused either way.
+		"grep -n SECRET .env",
+		"grep -n TODO /etc/hosts",
+	} {
+		t.Run("refuses/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); assessment.admitted() {
+				t.Fatalf("a walking or out-of-bounds grep gained AUTO authority: %#v", assessment)
+			}
+		})
+	}
+
+	// The tools whose whole purpose is enumeration keep their refusal: there is
+	// no non-walking form of them to admit, and rg walks with no operand at all.
+	for _, command := range []string{"rg TODO", "rg TODO app.go", "find . -name '*.go'", "ls -R .", "tree .", "du -sh ."} {
+		t.Run("still-gated/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); assessment.admitted() {
+				t.Fatalf("a directory enumerator gained AUTO authority: %#v", assessment)
+			}
+		})
+	}
+}
