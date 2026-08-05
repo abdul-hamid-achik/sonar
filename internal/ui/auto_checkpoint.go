@@ -190,6 +190,25 @@ func (m *Model) handleAutoIterationCheckpoint(message AgentDoneMsg) (tea.Cmd, bo
 	if err != nil {
 		return nil, false, fmt.Errorf("AUTO continuation identity: %w", err)
 	}
+	// Settle the finished segment's stream into the transcript before the
+	// boundary saves it, so the durable snapshot describes the work the cursor
+	// is about to certify as projected.
+	m.flushStream()
+	// A segment boundary is a projection boundary. Without it the next segment
+	// scans the execution ledger from the logical turn's original cursor, where
+	// this segment's own completed non-read-only effects read as unprojected
+	// hazards and stop the run before any provider work. Fail closed: stopping
+	// the continuation here is strictly better than launching a segment that
+	// cannot survive its own pre-provider scan.
+	if err := m.advanceExecutionProjectionBoundary(); err != nil {
+		m.entries = append(m.entries, ChatEntry{
+			Kind: "error",
+			Content: "AUTO stopped safely at a continuation checkpoint: the execution projection boundary could not be advanced · " +
+				sanitizeTerminalSingleLine(err.Error()) + ".",
+		})
+		m.invalidateEntryCache()
+		return nil, false, fmt.Errorf("AUTO continuation stopped: %w", err)
+	}
 	// A continuation is invisible provider plumbing, but a long autonomous run
 	// must stay legible: leave one bounded counters-only receipt in the
 	// transcript. No arguments, paths, tool output, or prose cross this line.
@@ -201,7 +220,6 @@ func (m *Model) handleAutoIterationCheckpoint(message AgentDoneMsg) (tea.Cmd, bo
 			checkpoint.ToolCalls, formatWorkingElapsed(checkpoint.Elapsed),
 		),
 	})
-	m.flushStream()
 	m.compactingContext = false
 	m.capabilityRoute = nil
 	m.clearContinuationAction()

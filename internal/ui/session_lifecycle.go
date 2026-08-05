@@ -103,6 +103,50 @@ func (m *Model) discardCreatedExecutionSession() error {
 	return errors.Join(leaseErr, deleteErr)
 }
 
+// executionProjectionBoundaryTimeout bounds the durable work one projection
+// boundary may perform on the update thread. It matches the settlement budget
+// in handleAgentDone so neither boundary can stall the event loop longer than
+// the other.
+const executionProjectionBoundaryTimeout = 2 * time.Second
+
+// advanceExecutionProjectionBoundary settles the durable projection exactly the
+// way turn settlement does: prove every post-cursor hazard is already answered
+// in the transcript, save that transcript, and only then advance the snapshot
+// cursor that the agent's strict pre-provider scan reads.
+//
+// An AUTO segment boundary needs this. The previous Run settled every receipt
+// into the message history before it returned, so the projection check passes
+// by construction; skipping it left the next segment scanning from the old
+// cursor, where its own completed non-read-only effects look like unprojected
+// hazards and kill the run before any provider work. Advancing here also makes
+// a long AUTO run crash-safe per segment instead of only per logical turn.
+//
+// Callers must hold the update thread with no turn running: this writes the
+// cursor the agent reads under its own lock, and there is no second writer
+// while the agent is idle between segments.
+func (m *Model) advanceExecutionProjectionBoundary() error {
+	if m == nil || m.agent == nil || m.sessionStore == nil || m.sessionID <= 0 {
+		return nil
+	}
+	if m.executionLease == nil {
+		return errors.New("the execution session lease is unavailable, so the snapshot cursor cannot advance")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), executionProjectionBoundaryTimeout)
+	defer cancel()
+	previousCursor := m.executionCursor
+	cursor, err := m.snapshotExecutionCursor(ctx)
+	if err != nil {
+		return err
+	}
+	m.executionCursor = cursor
+	if err := m.persistSessionState(ctx); err != nil {
+		m.executionCursor = previousCursor
+		return err
+	}
+	m.agent.SetExecutionSnapshotCursor(m.executionCursor)
+	return nil
+}
+
 func (m *Model) snapshotExecutionCursor(ctx context.Context) (int64, error) {
 	workspaceID, err := canonicalWorkspaceID(m.agent.WorkDir())
 	if err != nil {
