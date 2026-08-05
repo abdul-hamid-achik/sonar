@@ -1,4 +1,4 @@
-   main · local-agent                                                     qwen3.5:2b · offline · 0/16.4k · 0%
+   main · sonar                                   DEEPSEEK · remote prompts · deepseek-v4-flash · 0/1.0M · 0%
 
 
 ▌  Review the release receipts.

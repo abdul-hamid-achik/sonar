@@ -86,11 +86,15 @@ type wireRequest struct {
 func main() { os.Exit(run()) }
 
 func run() int {
-	if len(os.Args) != 3 {
-		fmt.Fprintln(os.Stderr, "usage: fake-deepseek SONAR_BINARY RECEIPT_PATH")
+	if len(os.Args) < 3 {
+		fmt.Fprintln(os.Stderr, "usage: fake-deepseek SONAR_BINARY RECEIPT_PATH [ARG...]")
 		return 2
 	}
+	// Anything after the receipt path is forwarded, so a spec that needs
+	// `--resume <id>` can still run under the fixture instead of launching the
+	// binary directly and inheriting whatever the developer's shell exports.
 	binary, receiptPath := os.Args[1], os.Args[2]
+	forwarded := os.Args[3:]
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -102,7 +106,7 @@ func run() int {
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- server.Serve(listener) }()
 
-	command := exec.Command(binary)
+	command := exec.Command(binary, forwarded...)
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr

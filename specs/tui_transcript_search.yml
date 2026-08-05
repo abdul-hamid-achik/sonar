@@ -5,7 +5,14 @@ intent: |
     a reader can search the safe transcript projection, navigate matches, and
     close search without changing an existing draft or paused reading intent.
 target:
-    cmd: ["./bin/sonar", "--resume", "c0ffee1"]
+    # Through the fixture so the spec, not the developer's shell,
+    # decides which provider answers. See specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/transcript-search-protocol.txt"
+        - "--resume"
+        - "c0ffee1"
     cwd: "."
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/transcript-search-home"
@@ -17,7 +24,7 @@ terminal:
     rows: 22
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/transcript-search-home .glyphrun/tmp/transcript-search-agents && mkdir -p .glyphrun/tmp/transcript-search-home/.config/sonar .glyphrun/tmp/transcript-search-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/transcript-search-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/transcript-search-protocol.txt .glyphrun/tmp/transcript-search-home .glyphrun/tmp/transcript-search-agents && mkdir -p .glyphrun/tmp/transcript-search-home/.config/sonar .glyphrun/tmp/transcript-search-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/transcript-search-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
         - run: "go run ./specs/fixtures/session_receipts .glyphrun/tmp/transcript-search-home/.config/sonar/sonar.db '${projectRoot}'"
