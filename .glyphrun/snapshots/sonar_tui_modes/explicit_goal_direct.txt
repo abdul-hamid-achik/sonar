@@ -1,18 +1,18 @@
-   main · local-agent               qwen3.5:2b · offline · 0/16.4k · 0%
+   main · sonar                DEEPSEEK · remote prompts · 12/1.0M · 0%
 
-   notice · ollama: no model selected
-   try: ollama serve · ollama pull qwen3.5:2b
-    ✗ error
-   Inference not started: no model selected
+
+▌  design a safe migration
+
+
+   Fixture answer 1.
+
    notice · Goal saved · Cortex is not configured; starting one
    bounded local turn…
-    ✗ error
-   Inference not started: no model selected
-   notice · Goal paused · unproductive turn: inference not
-   started: no model selected
 
+   Fixture answer 3.
 
-
+   notice · Goal paused · unproductive turn: assistant yielded
+   without a concrete tool receipt
 
 
 
@@ -22,6 +22,6 @@
 plan · paused · 0/2 verified
   □ pending · Demonstrate every requested outcome and constraint in th…
   □ pending · Record passing evidence from focused or reproducible ver…
- [ AUTO ] · Ⅱ paused · ship a bounded durable migra… · 0s/30m · <session>
+ [ AUTO ] · Ⅱ paused · ship a… · 0s/30m · <session> · ✓ Done · 0.0s · ↑ 4
 ▌❯ Ask
    enter send · shift+tab mode · esc · f1

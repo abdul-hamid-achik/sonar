@@ -8,24 +8,25 @@ intent: |
     <prompt>` starts a bounded durable goal without a redundant form. An active
     goal keeps effective AUTO authority while Shift+Tab selects the next ambient mode.
 target:
-    cmd: ["./bin/sonar"]
+    # Driven through the fake DeepSeek fixture: a spec that sends a prompt and
+    # then tests what the UI does next needs the turn to complete, and a dead
+    # endpoint only moves the failure. See specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/modes-protocol.txt"
     cwd: "."
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/modes-home"
         SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/modes-agents"
         SONAR_REDUCED_MOTION: "1"
         OLLAMA_HOST: "http://127.0.0.1:1"
-        # sonar exits 1 without a provider credential, so an interactive spec
-        # cannot start at all without one. This key is never sent anywhere: the
-        # base_url below is a dead port, and none of these steps reach
-        # inference — they exercise mode cycling and chrome.
-        DEEPSEEK_API_KEY: "glyphrun-not-a-real-key"
 terminal:
     cols: 72
     rows: 28
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/modes-home .glyphrun/tmp/modes-agents && mkdir -p .glyphrun/tmp/modes-home/.config/sonar .glyphrun/tmp/modes-agents && printf '%s\n' 'provider:' '  type: deepseek' '  base_url: https://127.0.0.1:1/v1' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/modes-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/modes-home .glyphrun/tmp/modes-agents .glyphrun/tmp/modes-protocol.txt && mkdir -p .glyphrun/tmp/modes-home/.config/sonar .glyphrun/tmp/modes-agents && printf '%s\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/modes-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
 steps:
@@ -63,10 +64,9 @@ steps:
     - press: "enter"
     - wait:
         screen:
-            # local-agent's "no model selected"; sonar has a model and fails
-            # at the dead endpoint instead. The host-authored copy — with no
-            # provider response body in it — is the redaction contract holding.
-            contains: "Remote model response failed"
+            # The fixture answers, so this asserts a completed turn rather
+            # than local-agent's "no model selected" failure.
+            contains: "Fixture answer"
         timeoutMs: 2000
     - wait:
         screen:
@@ -74,8 +74,16 @@ steps:
         timeoutMs: 2000
     - wait:
         screen:
-            contains: "▌❯ design a safe migration"
+            contains: "design a safe migration"
         timeoutMs: 2000
+    # The prompt appearing is not the turn finishing. Snapshotting here caught
+    # the composer mid-run on one pass and settled on the next, which is a
+    # flake in the spec rather than nondeterminism in the app: wait for the
+    # settled footer before capturing a frame that is compared byte for byte.
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
     - snapshot: plan_read_only
     - press: "shift+tab"
     - wait:
@@ -88,7 +96,7 @@ steps:
         timeoutMs: 2000
     - wait:
         screen:
-            contains: "▌❯ design a safe migration"
+            contains: "design a safe migration"
         timeoutMs: 2000
     - snapshot: auto_mode
     - press: "ctrl+u"
@@ -104,7 +112,9 @@ steps:
         timeoutMs: 5000
     - wait:
         screen:
-            contains: "Ⅱ paused · ship a b"
+            # Truncated at 72 columns; the footer also carries the goal's
+            # time budget now, which takes width the objective used to have.
+            contains: "Ⅱ paused · ship a"
         timeoutMs: 2000
     - wait:
         screen:

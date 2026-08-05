@@ -1,11 +1,10 @@
-   main · local-agent               qwen3.5:2b · offline · 0/16.4k · 0%
-
-   notice · ollama: no model selected
-   try: ollama serve · ollama pull qwen3.5:2b
-    ✗ error
-   Inference not started: no model selected
+   main · sonar                DEEPSEEK · remote prompts · 12/1.0M · 0%
 
 
+▌  design a safe migration
+
+
+   Fixture answer 1.
 
 
 
@@ -23,5 +22,6 @@
 
 
 ───────────────────────────────────────────────────────────────────────
-▌❯ design a safe migration
+   approvals on · ✓ Done · 0.0s · ↑ 4 · <session>
+▌❯ Ask
    enter send · shift+tab mode · esc · f1                          AUTO
