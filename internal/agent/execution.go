@@ -488,7 +488,10 @@ func (a *Agent) executionKindForCall(call llm.ToolCall) (executionpkg.Kind, exec
 	}
 	if a.isToolsTool(name) {
 		switch name {
-		case "grep", "read", "glob", "ls", "find", "diff", "exists", "load_skill", "consult_experts":
+		// bash_output only reads a bounded buffer this host already captured
+		// from a process it already started; it cannot signal, start, or
+		// otherwise reach a backend, so the read is genuinely effect-free.
+		case "grep", "read", "glob", "ls", "find", "diff", "exists", "bash_output", "load_skill", "consult_experts":
 			return executionpkg.KindBuiltin, executionpkg.EffectReadOnly
 		case "bash":
 			// Shell remains approval-gated unless the separate AUTO policy admits
@@ -744,6 +747,13 @@ func (a *Agent) preflightToolCall(kind executionpkg.Kind, tc llm.ToolCall) error
 			return preflightRequiredString(tc.Arguments, "pattern", false)
 		case "bash":
 			return preflightRequiredString(tc.Arguments, "command", false)
+		case "bash_output":
+			if raw, present := tc.Arguments["id"]; present {
+				if _, ok := raw.(string); !ok {
+					return errors.New("id must be a string")
+				}
+			}
+			return nil
 		case "ls":
 			return nil
 		case "find":

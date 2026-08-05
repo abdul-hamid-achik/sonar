@@ -39,6 +39,7 @@ var toolActionRegistry = map[string]toolActionLabels{
 	"apply_patch":        {running: "Patching", success: "Patched", failure: "Patch failed"},
 	"patch":              {running: "Patching", success: "Patched", failure: "Patch failed"},
 	"bash":               {running: "Running", success: "Ran", failure: "Run failed"},
+	"bash_output":        {running: "Reading background output", success: "Read background output", failure: "Background read failed"},
 	"exec":               {running: "Running", success: "Ran", failure: "Run failed"},
 	"exec_command":       {running: "Running", success: "Ran", failure: "Run failed"},
 	"shell":              {running: "Running", success: "Ran", failure: "Run failed"},

@@ -56,6 +56,8 @@ func (a *Agent) handleToolsTool(ctx context.Context, tc llm.ToolCall) (string, b
 		return a.handleGlob(ctx, tc.Arguments)
 	case "bash":
 		return a.handleBash(ctx, tc.Arguments)
+	case "bash_output":
+		return a.handleBashOutput(tc.Arguments)
 	case "ls":
 		return a.handleLs(ctx, tc.Arguments)
 	case "find":

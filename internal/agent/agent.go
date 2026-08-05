@@ -83,10 +83,14 @@ type Agent struct {
 	turnDone            chan struct{}
 	closed              bool
 	readOnlySlots       chan struct{}
-	hooks               []ToolHook
-	mcpServerScope      map[string]struct{}
-	mcpScopeSet         bool
-	trustedMCP          map[string]trustedMCPServer
+	// background owns every shell process started with bash(background=true).
+	// It is created on first use and terminated by Close, so no backgrounded
+	// process can outlive the session that started it.
+	background     *backgroundRegistry
+	hooks          []ToolHook
+	mcpServerScope map[string]struct{}
+	mcpScopeSet    bool
+	trustedMCP     map[string]trustedMCPServer
 	// mcpRouteVersion changes only when exact MCP route trust or scope changes.
 	// It intentionally excludes approval-renderer churn so opaque continuation
 	// contexts survive the UI installing a per-turn callback.
@@ -1095,6 +1099,7 @@ func (a *Agent) Close() {
 	if done != nil {
 		<-done
 	}
+	a.closeBackgroundShells()
 	a.mcphubResults.Reset()
 	a.clearContinuationContracts()
 	if engine := a.ICEEngine(); engine != nil {

@@ -46,6 +46,15 @@ func (a *Agent) handleBash(parent context.Context, args map[string]any) (string,
 		return "error: command is required", true
 	}
 
+	// Backgrounding is decided after the command has already cleared the same
+	// permission policy, workspace rules, session grants, and AUTO scoped-command
+	// classifier the foreground path uses: every one of those reads `command`
+	// and none of them reads this flag, so a background start can never be
+	// authorized where the identical foreground start would not be.
+	if a.getArgBool(args, "background", false) {
+		return a.startBackgroundShellCommand(command)
+	}
+
 	timeout := a.getArgInt(args, "timeout", int(a.ToolTimeout().Seconds()))
 	maxTimeoutSecs := int(a.ToolTimeout().Seconds())
 	if maxTimeoutSecs > 120 {

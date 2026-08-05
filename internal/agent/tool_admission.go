@@ -39,9 +39,9 @@ var essentialLocalToolRank = map[string]int{
 }
 
 var localToolNames = map[string]struct{}{
-	"grep": {}, "read": {}, "write": {}, "glob": {}, "bash": {}, "ls": {},
-	"find": {}, "diff": {}, "edit": {}, "mkdir": {}, "remove": {}, "copy": {},
-	"move": {}, "exists": {}, "load_skill": {}, "consult_experts": {},
+	"grep": {}, "read": {}, "write": {}, "glob": {}, "bash": {}, "bash_output": {},
+	"ls": {}, "find": {}, "diff": {}, "edit": {}, "mkdir": {}, "remove": {},
+	"copy": {}, "move": {}, "exists": {}, "load_skill": {}, "consult_experts": {},
 }
 
 var memoryToolNames = map[string]struct{}{

@@ -101,7 +101,7 @@ func GlobToolDef() llm.ToolDef {
 func BashToolDef() llm.ToolDef {
 	return llm.ToolDef{
 		Name:        "bash",
-		Description: "Execute a shell command. Use this to run git, npm, go, or other command-line tools. Output is returned after completion.",
+		Description: "Execute a shell command. Use this to run git, npm, go, or other command-line tools. Output is returned after completion. Set background to true for a long-running command such as a dev server, watch build, or log tail.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -111,10 +111,36 @@ func BashToolDef() llm.ToolDef {
 				},
 				"timeout": map[string]any{
 					"type":        "integer",
-					"description": "Timeout in seconds (default: 30, max: 120).",
+					"description": "Timeout in seconds (default: 30, max: 120). Ignored when background is true.",
+				},
+				"background": map[string]any{
+					"type":        "boolean",
+					"description": "Return a background id instead of waiting for the command to finish (default: false). It ignores timeout, keeps running across turns, and dies with the session. Read its output with bash_output; stop it with a normal 'kill <pid>'. Approval is unchanged.",
 				},
 			},
 			"required": []string{"command"},
+		},
+	}
+}
+
+// BashOutputToolDef describes reading a background command back. It is a
+// separate tool rather than another `bash` argument because it is a read-only
+// observation of a host-owned buffer: it accepts no command string, so it
+// cannot become a path around the shell approval classifier, and the durable
+// ledger can classify it read-only by name instead of by inspecting arguments.
+func BashOutputToolDef() llm.ToolDef {
+	return llm.ToolDef{
+		Name:        "bash_output",
+		Description: "Read output from a command started by bash with background true: only what it produced since your last read of that id, whether it is still running, and its exit status once known. Omit id to list this session's background processes. An identical repeated read inside one turn is suppressed.",
+		Parameters: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"id": map[string]any{
+					"type":        "string",
+					"description": "Background id from bash, such as 'bg_1'. Omit to list all.",
+				},
+			},
+			"additionalProperties": false,
 		},
 	}
 }

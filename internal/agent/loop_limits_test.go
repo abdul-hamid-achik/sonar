@@ -576,7 +576,11 @@ func TestRunTurnDispatchesAtMostOneExpertConsultation(t *testing.T) {
 			EvalTokens: 1, ChargedEvalTokens: 1,
 		}},
 	}}
-	agent := New(client, nil, 4096)
+	// The window size is incidental here: this test asserts expert dispatch
+	// accounting, and only needs a window that holds the built-in tool schemas
+	// plus two expert receipts. The bounded-turn context gate itself is covered
+	// on purpose by TestRunRejectsUncompactableToolResultBeforeSecondProviderCall.
+	agent := New(client, nil, 8192)
 	agent.SetWorkDir(t.TempDir())
 	agent.SetExpertConsultant(consultant)
 	agent.AddUserMessage("Try consulting twice, then answer.")
@@ -606,7 +610,9 @@ func TestRunTurnCanCorrectInventedExpertProfilesWithoutConsumingDispatch(t *test
 			return nil
 		},
 	}
-	agent := New(client, nil, 4096)
+	// Window size is incidental; see the note in
+	// TestRunTurnDispatchesAtMostOneExpertConsultation.
+	agent := New(client, nil, 8192)
 	agent.SetWorkDir(t.TempDir())
 	agent.SetExpertConsultant(consultant)
 	agent.AddUserMessage("Use a swarm to compare game engines.")
