@@ -24,7 +24,7 @@ func TestAutoScopedCommandAllowsRoutineWorkspaceDevelopment(t *testing.T) {
 	// provenance check without executing any fixture binary.
 	hostBin := t.TempDir()
 	for _, name := range []string{
-		"bun", "cargo", "date", "go", "gofmt", "grep", "head", "npm", "rg", "sed",
+		"bun", "cargo", "date", "go", "gofmt", "grep", "head", "npm", "rg", "sed", "swift",
 	} {
 		if err := os.WriteFile(filepath.Join(hostBin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 			t.Fatalf("install host executable %s: %v", name, err)
@@ -41,6 +41,10 @@ func TestAutoScopedCommandAllowsRoutineWorkspaceDevelopment(t *testing.T) {
 		"go vet ./... 1>/dev/null",
 		"go test ./... >/dev/null 2>&1",
 		"go test ./... 2>/dev/null | head -30",
+		"go test ./... > result.txt",
+		"swift test > build.log",
+		"swift test 2>&1 > build.log",
+		"echo done >> notes.md",
 		"cd internal/queue && go test ./...",
 		"gofmt -w internal/queue/policy.go && go test ./internal/queue",
 		"sed -n '1,120p' internal/queue/policy.go",
@@ -198,7 +202,15 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 		"golangci-lint custom",
 		"date -s 2030-01-01",
 		"curl https://example.test",
-		"go test ./... > result.txt",
+		// Workspace redirects are admitted, so every refusal below is about the
+		// target, not the operator: /tmp is world-writable (a pre-planted symlink
+		// there would let > truncate an arbitrary file), and traversal, home
+		// expansion, and workspace-symlink escapes all resolve outside.
+		"go test ./... > /tmp/results.txt",
+		"echo hi >> /tmp/results.txt",
+		"go test ./... > ../escape.log",
+		"echo hi > ~/notes.txt",
+		"swift test >",
 		// The /dev/null sink is admitted only as the byte-exact tokens; a stray
 		// suffix or a different sink path is a real file redirect again.
 		"go test 2>/dev/nullx",
@@ -321,6 +333,7 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 			t.Fatal(err)
 		}
 		commands = append(commands, "cat outside-link/secret.txt")
+		commands = append(commands, "echo hi > outside-link/pwn.txt")
 		commands = append(commands, "make -foutside-link/Makefile test")
 		commands = append(commands, "cat 'outside2>&1/secret.txt'")
 		commands = append(commands, "touch 'name=value/new.txt'")
@@ -383,8 +396,14 @@ func TestAutoScopedCommandGatesRawDirectoryEnumerators(t *testing.T) {
 }
 
 func TestSplitStaticShellCommandsRejectsAmbiguousSyntax(t *testing.T) {
-	for _, command := range []string{"go test &", "go test &&", "'unterminated", "go test < input"} {
-		if _, _, ok := splitStaticShellCommands(command); ok {
+	for _, command := range []string{
+		"go test &", "go test &&", "'unterminated", "go test < input",
+		// Output redirects need a bare operator and a target: a trailing >, a
+		// separator before the target, a doubled pending form, and the glued
+		// descriptor spelling all stay outside the static subset.
+		"go test >", "echo x > | cat", "echo x > > f", "go test 2> log",
+	} {
+		if _, _, _, ok := splitStaticShellCommands(command); ok {
 			t.Fatalf("ambiguous shell syntax accepted: %q", command)
 		}
 	}
@@ -430,7 +449,7 @@ func TestAutoCommandPolicyHelpersRejectDelegationAndPersistentModes(t *testing.T
 }
 
 func TestSplitStaticShellCommandsPreservesQuotedEmptyArguments(t *testing.T) {
-	commands, separators, ok := splitStaticShellCommands(`grep '' README.md && rg -e "" .`)
+	commands, separators, _, ok := splitStaticShellCommands(`grep '' README.md && rg -e "" .`)
 	if !ok {
 		t.Fatal("static command with quoted-empty arguments was rejected")
 	}
@@ -971,6 +990,55 @@ func TestAutoCommandAssessmentClassifiesSortOutputAsMutation(t *testing.T) {
 	}
 }
 
+func TestAutoCommandRedirectsRequireWorkspaceTargets(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	workspace := t.TempDir()
+	outside := t.TempDir()
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(workspace)
+
+	// A workspace target is exactly the authority the auto-approved write
+	// builtin already has, so the command is admitted and classified as a
+	// workspace mutation even when the producing command is read-only.
+	mutation := ag.assessAutoScopedCommand("echo x > note.txt")
+	if !mutation.admitted() || mutation.effect != autoCommandEffectWorkspaceMutation {
+		t.Fatalf("workspace redirect assessment = %#v, want admitted workspace mutation", mutation)
+	}
+	appendAssessment := ag.assessAutoScopedCommand("echo x >> note.txt")
+	if !appendAssessment.admitted() || appendAssessment.effect != autoCommandEffectWorkspaceMutation {
+		t.Fatalf("workspace append assessment = %#v, want admitted workspace mutation", appendAssessment)
+	}
+	// The spaced /dev/null spelling must classify like the glued token: it
+	// discards output and mutates nothing.
+	discard := ag.assessAutoScopedCommand("echo x > /dev/null")
+	if !discard.admitted() || discard.effect != autoCommandEffectReadOnly {
+		t.Fatalf("spaced /dev/null redirect assessment = %#v, want admitted read-only", discard)
+	}
+
+	if err := os.Symlink(outside, filepath.Join(workspace, "escape-link")); err != nil {
+		t.Fatal(err)
+	}
+	for _, command := range []string{
+		"echo x > " + filepath.Join(outside, "pwn.txt"),
+		"echo x >> " + filepath.Join(outside, "pwn.txt"),
+		"echo x > ../pwn.txt",
+		"echo x > ~/pwn.txt",
+		"echo x > escape-link/pwn.txt",
+	} {
+		t.Run(command, func(t *testing.T) {
+			assessment := ag.assessAutoScopedCommand(command)
+			if assessment.admitted() {
+				t.Fatalf("external redirect target gained AUTO authority: %#v", assessment)
+			}
+			if assessment.reason != autoCommandReasonRedirectTarget {
+				t.Fatalf("external redirect refusal reason = %#v, want autoCommandReasonRedirectTarget", assessment)
+			}
+		})
+	}
+}
+
 func TestAutoCommandAssessmentIsBounded(t *testing.T) {
 	ag := New(nil, nil, 4096)
 	ag.SetWorkDir(t.TempDir())
@@ -1016,6 +1084,7 @@ func TestAutoCommandReasonLabelIsBoundedOperatorFacingText(t *testing.T) {
 		{name: "executable", reason: autoCommandReasonExecutable, command: "custom-tool", want: "executable outside the host catalog"},
 		{name: "arguments", reason: autoCommandReasonArguments, command: "go build -ldflags x", want: "arguments outside the host catalog"},
 		{name: "path authority", reason: autoCommandReasonPathAuthority, command: "cat ../secret.txt", want: "operand outside the workspace"},
+		{name: "redirect target", reason: autoCommandReasonRedirectTarget, command: "go test ./... > /tmp/out.txt", want: "redirect only into workspace files; this redirect target resolves outside the workspace"},
 		{name: "allowed", reason: autoCommandReasonAllowed, command: "go test ./...", want: "admitted by the scoped shell policy"},
 		{name: "unknown reason fails closed", reason: autoCommandReason(255), command: "", want: "outside the scoped shell policy"},
 	}

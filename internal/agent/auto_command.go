@@ -54,6 +54,11 @@ const (
 	// outside the host catalog" tells the model nothing it can act on, so it
 	// re-sends the same shell command and collects another approval prompt.
 	autoCommandReasonHostToolAvailable
+	// autoCommandReasonRedirectTarget follows the same precedent: > and >> are
+	// admitted when the target resolves inside the workspace, so the remedy is
+	// to redirect into a workspace file, and the reason says so instead of
+	// failing the whole command as "outside the bounded shell subset".
+	autoCommandReasonRedirectTarget
 )
 
 // autoCommandAssessment is the bounded host-owned projection of one AUTO
@@ -98,6 +103,8 @@ func autoCommandReasonLabel(reason autoCommandReason, command string) string {
 		return "arguments outside the host catalog"
 	case autoCommandReasonHostToolAvailable:
 		return "raw recursive search bypasses the workspace ignore policy; use the grep, glob, ls or read tools instead"
+	case autoCommandReasonRedirectTarget:
+		return "redirect only into workspace files; this redirect target resolves outside the workspace"
 	case autoCommandReasonPathAuthority:
 		return "operand outside the workspace"
 	case autoCommandReasonAllowed:
@@ -242,14 +249,14 @@ func (a *Agent) assessAutoScopedCommand(command string) autoCommandAssessment {
 		assessment.reason = autoCommandReasonDynamicSyntax
 		return assessment
 	}
-	commands, separators, ok := splitStaticShellCommands(command)
+	commands, separators, redirects, ok := splitStaticShellCommands(command)
 	if !ok || len(commands) == 0 || len(commands) > maxAutoCommandSegments {
 		assessment.reason = autoCommandReasonBounds
 		return assessment
 	}
 	assessment.segments = len(commands)
-	for _, words := range commands {
-		if len(words) > maxAutoCommandWords {
+	for index, words := range commands {
+		if len(words)+len(redirects[index]) > maxAutoCommandWords {
 			assessment.reason = autoCommandReasonBounds
 			return assessment
 		}
@@ -325,6 +332,26 @@ func (a *Agent) assessAutoScopedCommand(command string) autoCommandAssessment {
 		}
 		if simple.effect > assessment.effect {
 			assessment.effect = simple.effect
+		}
+		for _, target := range redirects[index] {
+			// A redirect target gets the same containment the auto-approved
+			// write builtin applies to its path argument: resolved against the
+			// segment's effective directory, with ~, parent traversal, and
+			// symlink escapes all refused. That last one is why this cannot be
+			// a lexical check — /tmp is world-writable, and a pre-planted
+			// symlink under the workspace (or an external target outright)
+			// would let > truncate an arbitrary file. Temporary external write
+			// grants are typed host capabilities and, like read grants above,
+			// deliberately never widen raw-shell authority.
+			if target == "" || a.autoCommandCandidatePathAssessment(target, baseDir, false) != autoPathWorkspace {
+				assessment.reason = autoCommandReasonRedirectTarget
+				return assessment
+			}
+			// `> /dev/null` in its spaced spelling discards output exactly like
+			// the glued token the scanner admits; only a real file is a mutation.
+			if target != "/dev/null" && assessment.effect < autoCommandEffectWorkspaceMutation {
+				assessment.effect = autoCommandEffectWorkspaceMutation
+			}
 		}
 		assessment.usesReadGrant = assessment.usesReadGrant || simple.usesReadGrant
 		assessment.workspaceExecutable = assessment.workspaceExecutable || simple.workspaceExecutable
@@ -466,38 +493,58 @@ func hasUnquotedShellGlob(command string) bool {
 }
 
 // splitStaticShellCommands accepts quoted words and foreground &&, ||, ; and
-// pipe composition. Expansion, grouping, backgrounding, and file redirection
+// pipe composition. Expansion, grouping, backgrounding, and input redirection
 // are rejected before this point or by the scanner. This keeps command-name
 // checks meaningful even when several routine development commands are joined.
-func splitStaticShellCommands(command string) ([][]string, []string, bool) {
+//
+// A bare > or >> token at a word boundary is parsed rather than refused: its
+// target word is collected into the per-segment redirects slice so the
+// assessment can hold it to the same workspace containment the auto-approved
+// write builtin uses. Before this, AUTO wrote any workspace file through the
+// write tool with no prompt while refusing `swift test > build.log` — the same
+// effect, spelled as a shell redirect. Every other unquoted < or > (mid-word
+// forms such as `2>file`, and all input redirection) still fails the split.
+func splitStaticShellCommands(command string) ([][]string, []string, [][]string, bool) {
 	trimmed := strings.TrimSpace(command)
 	if strings.HasSuffix(trimmed, "&&") || strings.HasSuffix(trimmed, "||") ||
 		strings.HasSuffix(trimmed, "|") || strings.HasSuffix(trimmed, "&") {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 	var (
-		commands   [][]string
-		separators []string
-		words      []string
-		word       strings.Builder
-		quote      rune
-		escaped    bool
-		wordOpen   bool
+		commands         [][]string
+		separators       []string
+		redirects        [][]string
+		segmentRedirects []string
+		words            []string
+		word             strings.Builder
+		quote            rune
+		escaped          bool
+		wordOpen         bool
+		redirectPending  bool
 	)
 	flushWord := func() {
 		if wordOpen {
-			words = append(words, word.String())
+			if redirectPending {
+				segmentRedirects = append(segmentRedirects, word.String())
+				redirectPending = false
+			} else {
+				words = append(words, word.String())
+			}
 			word.Reset()
 			wordOpen = false
 		}
 	}
 	flushCommand := func() bool {
 		flushWord()
-		if len(words) == 0 {
+		// A separator while a redirect still awaits its target (`echo x > | y`)
+		// and a segment that is only a redirect (`x && > f`) both fail closed.
+		if redirectPending || len(words) == 0 {
 			return false
 		}
 		commands = append(commands, words)
+		redirects = append(redirects, segmentRedirects)
 		words = nil
+		segmentRedirects = nil
 		return true
 	}
 	runes := []rune(command)
@@ -544,7 +591,7 @@ func splitStaticShellCommands(command string) ([][]string, []string, bool) {
 			flushWord()
 		case '\n', ';', '|', '&':
 			if r == '&' && (i+1 >= len(runes) || runes[i+1] != '&') {
-				return nil, nil, false
+				return nil, nil, nil, false
 			}
 			separator := string(r)
 			if r == '|' && i+1 < len(runes) && runes[i+1] == '|' {
@@ -557,30 +604,47 @@ func splitStaticShellCommands(command string) ([][]string, []string, bool) {
 				separator = ";"
 			}
 			if !flushCommand() {
-				return nil, nil, false
+				return nil, nil, nil, false
 			}
 			separators = append(separators, separator)
-		case '<', '>':
-			return nil, nil, false
+		case '<':
+			return nil, nil, nil, false
+		case '>':
+			// Only a bare > or >> that begins its own token opens a validated
+			// output redirect. Mid-word (`foo2>bar`) and doubled-pending forms
+			// stay refused: the shell would parse them as redirects too, but
+			// modeling descriptor-numbered targets is not worth the surface.
+			if wordOpen || redirectPending {
+				return nil, nil, nil, false
+			}
+			if i+1 < len(runes) && runes[i+1] == '>' {
+				i++
+			}
+			redirectPending = true
 		default:
 			if unicode.IsControl(r) {
-				return nil, nil, false
+				return nil, nil, nil, false
 			}
 			word.WriteRune(r)
 			wordOpen = true
 		}
 	}
 	if escaped || quote != 0 {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 	flushWord()
+	if redirectPending {
+		// Trailing `>` with no target names no file; there is nothing to validate.
+		return nil, nil, nil, false
+	}
 	if len(words) > 0 {
 		commands = append(commands, words)
+		redirects = append(redirects, segmentRedirects)
 	}
 	if len(separators) != len(commands)-1 {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
-	return commands, separators, len(commands) > 0
+	return commands, separators, redirects, len(commands) > 0
 }
 
 // staticDescriptorRedirectLength recognizes the byte-exact redirect tokens
