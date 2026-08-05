@@ -439,7 +439,25 @@ func bootstrapPullHint() string {
 
 // needsModelBootstrap returns true when Ollama is reachable but no local
 // models are installed, indicating a first-run state.
+// needsModelBootstrap reports whether this session has no model to talk to and
+// the user must install one before anything works.
+//
+// A remote provider answers that question on its own. sonar's opening frame
+// read "DEEPSEEK · remote prompts · deepseek-v4-flash" in the top bar and
+// "No local model installed / press p to pull qwen3.5:2b (~2.7 GB)"
+// immediately underneath — a correctly configured, fully working session
+// telling a new user to download 2.7 GB they do not need, as the first thing
+// they see. The check only ever asked the Ollama inventory, which is empty by
+// construction on a harness that does not use Ollama.
+//
+// Bootstrap is about having no model at all, not about having no *local* one.
 func (m *Model) needsModelBootstrap() bool {
+	if m == nil {
+		return false
+	}
+	if m.modelManager != nil && m.modelManager.RemoteProvider() {
+		return false
+	}
 	if m.ollamaOffline || len(m.ollamaModels) > 0 {
 		return false
 	}
