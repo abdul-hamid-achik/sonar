@@ -220,11 +220,15 @@ func (m *Model) renderStickyUserStrip(paneW int) string {
 	}
 
 	palette := newSemanticPalette(m.isDark, m.themeID)
-	// Subtle elevated band — close to Grok's sticky strip without a harsh chip.
-	elevated := lipgloss.LightDark(m.isDark)(
-		lipgloss.Color("#ECEFF4"), // nord snow storm 2
-		lipgloss.Color("#3B4252"), // nord polar night 1 (readable band)
-	)
+	// Subtle elevated band — a surface lifted off the page without a harsh
+	// chip. Border is the scheme's own value for exactly that, and it is what
+	// inline code uses for the same reason.
+	//
+	// These were two literal hexes whose own comments named them: "nord snow
+	// storm 2" and "nord polar night 1". The palette was already computed on
+	// the line above and used for the foreground, so the band painted Nord on
+	// nine schemes while the text over it followed the theme correctly.
+	elevated := palette.Border
 	barStyle := lipgloss.NewStyle().
 		Width(paneW).
 		MaxWidth(paneW).
