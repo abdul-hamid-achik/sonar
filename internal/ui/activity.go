@@ -619,9 +619,15 @@ func (m *Model) renderContextStatus() string {
 // measured against is the turn's — so it does not duplicate the per-activity
 // elapsed counter, which times the current operation.
 func (m *Model) autoContinuationBudgetDetail() string {
+	// The nil guard has to precede the first dereference. It sat below the
+	// Sprintf that reads m.autoCheckpoints, so a nil receiver would have
+	// panicked one line before the check that exists to prevent it.
+	if m == nil {
+		return ""
+	}
 	segments := fmt.Sprintf("checkpoint %d/%d",
 		m.autoCheckpoints.segmentsContinued, m.autoCheckpoints.segmentCeiling())
-	if m == nil || m.autoCheckpoints.startedAt.IsZero() {
+	if m.autoCheckpoints.startedAt.IsZero() {
 		return segments
 	}
 	ceiling := m.autoCheckpoints.elapsedCeiling()

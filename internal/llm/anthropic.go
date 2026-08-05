@@ -387,7 +387,6 @@ func (c *AnthropicClient) consumeSSE(ctx context.Context, body io.ReadCloser, fn
 	promptTokens := 0
 	completionTokens := 0
 	finish := ""
-	sawStop := false
 
 	for {
 		line, err := reader.ReadString('\n')
@@ -396,18 +395,22 @@ func (c *AnthropicClient) consumeSSE(ctx context.Context, body io.ReadCloser, fn
 				return cause
 			}
 			if errors.Is(err, io.EOF) {
-				if !sawStop {
-					// Some proxies close without a terminal message_stop event.
-					chunk := StreamChunk{
-						Done:            true,
-						ToolCalls:       finalizeToolCalls(toolAccum),
-						FinishReason:    finish,
-						EvalCount:       completionTokens,
-						PromptEvalCount: promptTokens,
-					}
-					if err := fn(chunk); err != nil {
-						return err
-					}
+				// Reaching EOF here IS the no-terminal-event case: the
+				// message_stop branch below returns from this function, so the
+				// loop cannot come back around after one. A sawStop flag used
+				// to guard this block and could never be observed true.
+				//
+				// Some proxies close without a terminal message_stop event, so
+				// the Done chunk is synthesized rather than dropped.
+				chunk := StreamChunk{
+					Done:            true,
+					ToolCalls:       finalizeToolCalls(toolAccum),
+					FinishReason:    finish,
+					EvalCount:       completionTokens,
+					PromptEvalCount: promptTokens,
+				}
+				if err := fn(chunk); err != nil {
+					return err
 				}
 				return nil
 			}
@@ -479,7 +482,6 @@ func (c *AnthropicClient) consumeSSE(ctx context.Context, body io.ReadCloser, fn
 				completionTokens = event.Usage.OutputTokens
 			}
 		case "message_stop":
-			sawStop = true
 			chunk := StreamChunk{
 				Done:            true,
 				ToolCalls:       finalizeToolCalls(toolAccum),

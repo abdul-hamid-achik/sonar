@@ -572,10 +572,10 @@ func validateProviderProfile(name string, profile ProviderProfile) error {
 		return fmt.Errorf("config: provider profile %q context_size cannot be negative", label)
 	}
 	providerType := NormalizedProviderType(profile.Type)
-	switch {
-	case providerType == ProviderTypeOllama:
+	switch providerType {
+	case ProviderTypeOllama:
 		return nil
-	case providerType == ProviderTypeOpenAICompatible:
+	case ProviderTypeOpenAICompatible:
 		// A private gateway the catalog does not list. Its base_url, model, and
 		// api_key_env must all be spelled out below.
 	default:

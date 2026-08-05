@@ -150,11 +150,11 @@ func (m *Model) sonarWaitTrace(cells int) string {
 	glyphs := glyphSet(m.glyphProfile)
 	marker := sonarTraceCells / 2
 	var b strings.Builder
-	for cell := 0; cell < sonarTraceCells; cell++ {
-		switch {
-		case cell == head:
+	for cell := range sonarTraceCells {
+		switch cell {
+		case head:
 			b.WriteString(headStyle.Render(glyphs.Selected))
-		case cell == marker:
+		case marker:
 			b.WriteString(markerStyle.Render(glyphs.Vertical))
 		default:
 			b.WriteString(trackStyle.Render("·"))

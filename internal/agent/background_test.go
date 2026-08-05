@@ -326,8 +326,14 @@ func TestBackgroundFlagNeverChangesShellAuthorization(t *testing.T) {
 		}
 		// The scoped-shell classifier is the gate AUTO consults, and it only
 		// ever sees the command string.
-		if ag.assessAutoScopedCommand(command) != ag.assessAutoScopedCommand(command) {
-			t.Errorf("%q: scoped-command assessment is not deterministic", command)
+		// Two separate evaluations, bound before comparison: written as one
+		// expression it reads to a linter (and to a reader) as a tautology
+		// rather than as the repeat call it is.
+		first := ag.assessAutoScopedCommand(command)
+		second := ag.assessAutoScopedCommand(command)
+		if first != second {
+			t.Errorf("%q: scoped-command assessment is not deterministic (%v vs %v)",
+				command, first, second)
 		}
 	}
 	if autoApprovals == 0 {
