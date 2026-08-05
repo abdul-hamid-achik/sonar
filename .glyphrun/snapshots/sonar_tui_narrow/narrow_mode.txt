@@ -1,6 +1,6 @@
-   qwen3.5:2b … · 0/16.4k · 0%
-   PLAN · read-only
+   DEEPSEEK · remote…
 
+   PLAN · read-only
 
  ╭────────────────────────────────────╮
  │ Mode                               │

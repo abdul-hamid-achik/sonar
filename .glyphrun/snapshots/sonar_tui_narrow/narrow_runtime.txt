@@ -1,13 +1,10 @@
  ╭────────────────────────────────────╮
  │ Runtime                            │
  │                                    │
- │ Workspace  ~/workspace/local-agent │
- │ Model      Pinned · qwen3.5:2b     │
- │ Ollama     setup needed · ctrl+o   │
- │            select or install a     │
- │            model; run ollama serve │
- │            if the host is          │
- │            unavailable             │
+ │ Workspace  ~/workspace/sonar       │
+ │ Model      Pinned · DEEPSEEK ·     │
+ │            remote prompts ·        │
+ │            deepseek-v4-flash       │
  │ Profile    Default                 │
  │ Mode       PLAN                    │
  │ Approval   Prompted for            │
@@ -15,5 +12,8 @@
  │ Read scope workspace only          │
  │ Tools      21 ready · 21 local · 0 │
  │            MCP                     │
+ │ MCP        not configured · 0      │
+ │            servers                 │
+ │ Context r… not exposed ·           │
  │ esc/q back · j/k scroll · ↓ more   │
  ╰────────────────────────────────────╯

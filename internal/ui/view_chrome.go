@@ -501,6 +501,23 @@ func (m *Model) renderWelcome(b *strings.Builder) {
 	// surface, plus operational exceptions that have no other home. The
 	// dedup-by-scanning-infoParts dance this replaces existed because the model
 	// name could be appended twice through two different branches.
+	// welcomeModeLabel is the authority badge this frame owes the reader, or ""
+	// when the welcome does not own it or the mode is the unremarkable default.
+	welcomeModeLabel := func() string {
+		presentedMode := m.presentedMode()
+		if !plan.owns(factMode, surfaceWelcome) || presentedMode == ModeNormal {
+			return ""
+		}
+		switch {
+		case presentedMode != ModePlan:
+			return m.modeConfigs[presentedMode].Label
+		case compact || micro:
+			return "PLAN · read-only"
+		default:
+			return "PLAN · mutation tools removed"
+		}
+	}
+
 	welcomeAmbientLine := func() string {
 		var infoParts []string
 		modelLabel := m.currentModelReachabilityLabel(compact)
@@ -511,15 +528,15 @@ func (m *Model) renderWelcome(b *strings.Builder) {
 		} else if plan.owns(factModel, surfaceWelcome) && modelLabel != "" {
 			infoParts = append(infoParts, modelLabel)
 		}
-		if presentedMode := m.presentedMode(); plan.owns(factMode, surfaceWelcome) &&
-			presentedMode != ModeNormal {
-			switch {
-			case presentedMode != ModePlan:
-				infoParts = append(infoParts, m.modeConfigs[presentedMode].Label)
-			case compact || micro:
-				infoParts = append(infoParts, "PLAN · read-only")
-			default:
-				infoParts = append(infoParts, "PLAN · mutation tools removed")
+		// At the 30-column minimum the remote boundary alone fills the row, so
+		// joining the mode after it means the ellipsis eats the authority
+		// badge — the exact failure planStatus warns about, a fact assigned to
+		// a surface that silently drops it. Both are safety facts and neither
+		// should lose to the other, so micro frames give the mode its own row
+		// below instead of competing for this one.
+		if !micro {
+			if mode := welcomeModeLabel(); mode != "" {
+				infoParts = append(infoParts, mode)
 			}
 		}
 		// Reachability rides along with the model label above rather than being
@@ -533,6 +550,11 @@ func (m *Model) renderWelcome(b *strings.Builder) {
 	if headerActive {
 		if line := welcomeAmbientLine(); line != "" {
 			writeLine(m.styles.StatusText, line)
+		}
+		if micro {
+			if mode := welcomeModeLabel(); mode != "" {
+				writeLine(m.styles.StatusText, mode)
+			}
 		}
 		if m.needsModelBootstrap() {
 			writeLine(m.styles.StatusWarning, "No local model installed")
@@ -555,6 +577,11 @@ func (m *Model) renderWelcome(b *strings.Builder) {
 
 	if line := welcomeAmbientLine(); line != "" {
 		writeLine(m.styles.StatusText, line)
+	}
+	if micro {
+		if mode := welcomeModeLabel(); mode != "" {
+			writeLine(m.styles.StatusText, mode)
+		}
 	}
 
 	if m.needsModelBootstrap() {

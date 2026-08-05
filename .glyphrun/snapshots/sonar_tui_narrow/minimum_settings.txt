@@ -1,7 +1,7 @@
  ╭──────────────────────────╮
  │ Settings                 │
- │ │ Model · Pinned · qwen… │
- │   Provider · ollama · l… │
+ │ │ Model · DEEPSEEK · re… │
+ │   Provider · deepseek ·… │
  │   Agent profile · Defau… │
  │   Mode · NORMAL          │
  │   Sessions · Resume      │

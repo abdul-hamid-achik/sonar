@@ -8,7 +8,12 @@ intent: |
     remain legible while strict slash-command parsing fails closed before
     quitting cleanly.
 target:
-    cmd: ["${projectRoot}/bin/sonar"]
+    # Driven through the fake DeepSeek fixture so a turn can complete; see
+    # specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/narrow-protocol.txt"
     cwd: ".glyphrun/tmp/narrow-home/workspace/sonar"
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/narrow-home"
@@ -19,7 +24,7 @@ terminal:
     rows: 24
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/narrow-home .glyphrun/tmp/narrow-agents && mkdir -p .glyphrun/tmp/narrow-home/.config/sonar .glyphrun/tmp/narrow-home/workspace/sonar .glyphrun/tmp/narrow-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/narrow-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/narrow-home .glyphrun/tmp/narrow-agents .glyphrun/tmp/narrow-protocol.txt && mkdir -p .glyphrun/tmp/narrow-home/.config/sonar .glyphrun/tmp/narrow-home/workspace/sonar .glyphrun/tmp/narrow-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/narrow-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
 steps:
