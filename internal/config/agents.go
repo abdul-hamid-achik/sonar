@@ -57,47 +57,67 @@ type ModelsConfig struct {
 
 var agentsMetadataReader = safeio.NewReader()
 
+// agentsDirCandidates returns shared agent/skill directories in precedence
+// order: the historical ~/.agents first, then the XDG config location.
+//
+// XDG_CONFIG_HOME is honored on the same terms as configFileCandidates —
+// absolute paths only, cleaned and de-duplicated. It used to be ignored here
+// while the config loader respected it, so a machine with XDG_CONFIG_HOME set
+// somewhere other than ~/.config found its config and silently failed to find
+// its agents and skills. Two halves of one convention must not disagree.
+func agentsDirCandidates() []string {
+	candidates := make([]string, 0, 3)
+	seen := make(map[string]struct{}, 3)
+	appendCandidate := func(path string) {
+		if path == "" {
+			return
+		}
+		path = filepath.Clean(path)
+		if _, exists := seen[path]; exists {
+			return
+		}
+		seen[path] = struct{}{}
+		candidates = append(candidates, path)
+	}
+
+	home, homeErr := os.UserHomeDir()
+	if homeErr == nil {
+		appendCandidate(filepath.Join(home, ".agents"))
+	}
+	if xdgConfigHome := os.Getenv("XDG_CONFIG_HOME"); filepath.IsAbs(xdgConfigHome) {
+		appendCandidate(filepath.Join(xdgConfigHome, "agents"))
+	}
+	if homeErr == nil {
+		appendCandidate(filepath.Join(home, ".config", "agents"))
+	}
+	return candidates
+}
+
 func FindAgentsDir() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-
-	candidates := []string{
-		filepath.Join(home, ".agents"),
-		filepath.Join(home, ".config", "agents"),
-	}
-
-	for _, dir := range candidates {
+	for _, dir := range agentsDirCandidates() {
 		if _, err := os.Stat(dir); err == nil {
 			return dir
 		}
 	}
-
 	return ""
 }
 
 func FindAgentsDirWithCreate() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("get home dir: %w", err)
+	dirs := agentsDirCandidates()
+	if len(dirs) == 0 {
+		return "", fmt.Errorf("get home dir: no candidate agents directory")
 	}
-
-	dirs := []string{
-		filepath.Join(home, ".agents"),
-		filepath.Join(home, ".config", "agents"),
-	}
-
 	for _, dir := range dirs {
 		if _, err := os.Stat(dir); err == nil {
 			return dir, nil
 		}
 	}
-
+	// Creating targets the first candidate, so a fresh install lands in
+	// ~/.agents rather than inventing a directory under a variable the user
+	// set for something else.
 	if err := os.MkdirAll(dirs[0], 0755); err != nil {
 		return "", fmt.Errorf("create agents dir: %w", err)
 	}
-
 	return dirs[0], nil
 }
 
@@ -202,7 +222,13 @@ func (d *AgentsDir) loadMCP(path string) error {
 }
 
 func (d *AgentsDir) loadGlobalInstructions(path string) error {
+	// AGENTS.md is the cross-harness convention and the name `sonar init`
+	// writes, so it is what a user will create here. It was missing from this
+	// list, which only worked because macOS is case-insensitive by default —
+	// on Linux a perfectly correct ~/.agents/AGENTS.md was silently ignored.
+	// The lowercase spellings stay for directories already using them.
 	paths := []string{
+		filepath.Join(path, "AGENTS.md"),
 		filepath.Join(path, "agents.md"),
 		filepath.Join(path, "instructions.md"),
 	}
