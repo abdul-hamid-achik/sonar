@@ -6,7 +6,7 @@ MIT licensed. Built on [Charm](https://charm.land) and the [Catwalk](https://git
 
 **DeepSeek V4 Flash is the default, not the boundary.** Provider metadata comes from an embedded [Catwalk](https://github.com/charmbracelet/catwalk) snapshot — 40 providers, 1403 models — so selecting `groq`, `cerebras`, or `moonshot` needs a provider name and a key, not code.
 
-Forked from `local-agent` and cut down. The agent loop, tool dispatch, permission model, durable goals, session store, and MCP surface came across intact; the local-first inference machinery did not.
+Forked from [`local-agent`](https://github.com/abdul-hamid-achik/local-agent) and cut down. The agent loop, tool dispatch, permission model, durable goals, session store, and MCP surface came across intact; the local-first inference machinery did not.
 
 ```
 $ sonar
@@ -18,12 +18,23 @@ $ sonar
 › refactor internal/llm to drop the inventory layer
 ```
 
+> **Alpha.** This is a working harness the author uses daily, not a finished
+> product. It is not a sandbox: tools run with your user's permissions, gated by
+> an approval model you can loosen. Read [Safety](#safety) before running it
+> unattended.
+
 ## Quick start
 
 ```bash
 export DEEPSEEK_API_KEY=sk-...
-task build
-./bin/sonar
+task install     # builds and puts `sonar` on your PATH
+sonar
+```
+
+Or without installing:
+
+```bash
+task build && ./bin/sonar
 ```
 
 Or keep keys in a file and point sonar at it:
@@ -42,6 +53,58 @@ process.
 Without a key, sonar exits `1` and names the missing variable. There is no unauthenticated mode.
 
 Configuration is optional — the defaults already resolve to DeepSeek. See `config.example.yaml` for the full surface.
+
+## Using it
+
+Type to talk. `/help` lists every key and command. The parts worth knowing up front:
+
+| | |
+| --- | --- |
+| `shift+tab` | cycle **NORMAL → PLAN → AUTO**. PLAN is read-only; AUTO runs tools under a scoped-shell policy and still asks before anything outside it |
+| `enter` while running | slash commands run immediately; other drafts queue for after the turn |
+| `alt+d` | full diff of what the agent changed |
+| `ctrl+f` | search the transcript |
+| `/goal` | a durable objective with its own budget, criteria, and receipts — it survives a restart |
+| `/recover` | inspect an execution whose outcome was never recorded, and log what actually happened |
+| `/runtime` | provider, model, approval posture, MCP health, and this model's typical first-response time |
+| `-p "…"` | headless: one prompt, `--json` for a machine-readable turn receipt |
+
+The waiting indicator is a measurement, not decoration: a head travels a fixed
+track against this model's own typical first response, so a wait that is slow
+*for this model* looks different from one that is normal. Position carries the
+fact, so it reads the same with `NO_COLOR`.
+
+### Long unattended runs
+
+`tools.auto_max_iterations` bounds a single provider segment; AUTO chains
+segments after it fires. The ceiling on the whole turn is
+`tools.auto_max_segments` and `tools.auto_max_wall_time` — up to 512 segments
+and 24 hours. Both were fixed host constants until recently, which meant no
+setting could take a run past 90 minutes and nothing said why.
+
+`tools.approval_timeout` decides what an unanswered approval prompt does when
+nobody is watching. It **refuses and continues** rather than cancelling: the
+model sees the refusal and takes another route, and the run keeps going. A
+timeout can only ever withhold permission, never grant it.
+
+## Safety
+
+Read this before `--skip-approvals` or a long AUTO run.
+
+- **This is not a sandbox.** Tools run as your user. The workspace boundary,
+  the ignore policy, and the approval model are the controls; there is no
+  kernel-level isolation.
+- **AUTO is scoped, not unrestricted.** A bounded shell subset runs without
+  asking; anything else is approval-gated, and every dispatch is recorded in a
+  durable ledger before it runs.
+- **Approvals are auditable.** Each prompt names the rule the request tripped,
+  and grants are scoped — one path, one command prefix, one MCP tool — never
+  "allow everything".
+- **`privacy.local_only` bounds tool endpoints, not inference.** It refuses
+  remote MCP servers. It cannot make sonar private: every request leaves your
+  machine by construction, because that is what a hosted model is.
+- **Your prompts, code, and tool output go to the provider.** Check their
+  retention policy before pointing sonar at anything you cannot send.
 
 ## Why this is a fork and not a config profile
 
@@ -77,8 +140,17 @@ A cache hit is ~50x cheaper than a miss, which makes prompt-prefix stability the
 task build     # -> bin/sonar
 task test      # go test ./...
 task verify    # tidy, lint, vet, race tests, govulncheck
+task glyphrun  # deterministic terminal specs, in a real PTY
 task dev       # go run ./cmd/sonar
 ```
+
+`specs/` drives the real binary in a pseudo-terminal and compares full-screen
+snapshots, which is how layout and truncation regressions get caught. Its
+fixtures scrub provider credentials from the environment, so a test run cannot
+reach a metered endpoint with your real key.
+
+Contributor guidance, including the parts that are easy to get wrong, is in
+[AGENTS.md](AGENTS.md).
 
 ## Verified
 
@@ -91,6 +163,18 @@ Two providers complete real tool-call turns end to end, not just unit tests:
 
 ## Known gaps
 
-- Only the OpenAI-compatible dialect exists. That covers 27 of the catalog's 40 providers; **anthropic (4), google, azure, bedrock, and vertex will not work** until their dialects land.
-- The Ollama adapter and inventory are still compiled into `internal/llm` and reachable via an explicit `provider: {type: ollama}`. 23 non-test UI files still reference them, down from 49.
-- The catalog is a pinned snapshot; `sonar providers refresh` does not exist yet.
+- **Dialect coverage.** DeepSeek, the four anthropic-family providers, and the
+  27 catalog providers on the plain OpenAI-compatible dialect work. **Google
+  and the cloud-credential families (azure, bedrock, vertex) do not**, and need
+  their own dialects.
+- **Inherited Ollama code.** The adapter and inventory are still compiled into
+  `internal/llm` and reachable via an explicit `provider: {type: ollama}`. 23
+  non-test UI files still reference it — no file exists *only* for Ollama, so
+  removing it is an untangling rather than a deletion. Undecided whether it
+  goes or stays supported.
+- **The catalog is a pinned snapshot.** `sonar providers refresh` does not
+  exist yet.
+- **No published binaries yet.** The release pipeline is wired
+  (`.goreleaser.yaml`, triggered by a `v*` tag, Homebrew upload skipped when no
+  tap token is present) but nothing has been tagged. Build it yourself with
+  `task install`.
