@@ -583,8 +583,20 @@ func splitStaticShellCommands(command string) ([][]string, []string, bool) {
 	return commands, separators, len(commands) > 0
 }
 
+// staticDescriptorRedirectLength recognizes the byte-exact redirect tokens
+// that provably cannot create or modify a file: the descriptor merges 2>&1 and
+// 1>&2, and the /dev/null discards 2>/dev/null, 1>/dev/null, and >/dev/null.
+// /dev/null is a fixed kernel sink, so these are output-shaping, not writes.
+//
+// Each token is matched only at a word boundary. The general scanner rejects
+// every other unquoted < or >, which is how `2>/tmp/leak` (a real file write)
+// and `foo2>/dev/null` (a redirect glued to the word "foo2") stay refused. The
+// glued case matters: before the /dev/null tokens were listed here the scanner
+// was already inside the word "2" when it met ">", so `swift test 2>/dev/null`
+// — half of one audited session's "bounded shell subset" refusals — prompted
+// even though it discards output exactly like the admitted 2>&1.
 func staticDescriptorRedirectLength(command []rune, offset int) int {
-	for _, redirect := range []string{"2>&1", "1>&2"} {
+	for _, redirect := range []string{"2>&1", "1>&2", "2>/dev/null", "1>/dev/null", ">/dev/null"} {
 		candidate := []rune(redirect)
 		if offset+len(candidate) > len(command) {
 			continue

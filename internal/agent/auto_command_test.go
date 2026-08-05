@@ -37,6 +37,10 @@ func TestAutoScopedCommandAllowsRoutineWorkspaceDevelopment(t *testing.T) {
 	for _, command := range []string{
 		"go test ./...",
 		"cd " + workspace + " && go build ./... 2>&1",
+		"go build ./... 2>/dev/null",
+		"go vet ./... 1>/dev/null",
+		"go test ./... >/dev/null 2>&1",
+		"go test ./... 2>/dev/null | head -30",
 		"cd internal/queue && go test ./...",
 		"gofmt -w internal/queue/policy.go && go test ./internal/queue",
 		"sed -n '1,120p' internal/queue/policy.go",
@@ -195,6 +199,11 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 		"date -s 2030-01-01",
 		"curl https://example.test",
 		"go test ./... > result.txt",
+		// The /dev/null sink is admitted only as the byte-exact tokens; a stray
+		// suffix or a different sink path is a real file redirect again.
+		"go test 2>/dev/nullx",
+		"go test 2>/tmp/leak",
+		"go test 2>>/dev/null",
 		"go env -w GOPROXY=https://example.test",
 		"go test -exec=curl ./...",
 		"go test -fuzz=FuzzParser ./...",
