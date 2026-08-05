@@ -10,10 +10,13 @@ intent: |
     exact typed-write directory for the turn without a modal while keeping raw
     shell authority confined to the startup workspace.
 target:
+    # Through the fixture so the spec, not the developer's shell, decides which
+    # provider answers. The Ollama model pin is gone with it: this spec is
+    # about external read scope, and the fixture supplies the model.
     cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
         - "${projectRoot}/bin/sonar"
-        - "--model"
-        - "qwen3.5:0.8b"
+        - "${projectRoot}/.glyphrun/tmp/external-read-protocol.txt"
     cwd: ".glyphrun/tmp/external-read-workspace"
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/external-read-home"
@@ -25,7 +28,7 @@ terminal:
     rows: 28
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/external-read-home .glyphrun/tmp/external-read-agents .glyphrun/tmp/external-read-workspace .glyphrun/tmp/external-read-evidence .glyphrun/tmp/external-auto-target && mkdir -p .glyphrun/tmp/external-read-home/.config/sonar .glyphrun/tmp/external-read-agents .glyphrun/tmp/external-read-workspace .glyphrun/tmp/external-read-evidence .glyphrun/tmp/external-auto-target && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/external-read-home/.config/sonar/config.yaml && printf '%s\\n' 'deterministic video fixture' > .glyphrun/tmp/external-read-evidence/bug.mp4 && printf '%s\\n' 'must remain unavailable' > .glyphrun/tmp/external-read-evidence/sibling.txt && printf '%s\\n' 'must remain unchanged without a provider' > .glyphrun/tmp/external-auto-target/marker.txt && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/external-read-protocol.txt .glyphrun/tmp/external-read-home .glyphrun/tmp/external-read-agents .glyphrun/tmp/external-read-workspace .glyphrun/tmp/external-read-evidence .glyphrun/tmp/external-auto-target && mkdir -p .glyphrun/tmp/external-read-home/.config/sonar .glyphrun/tmp/external-read-agents .glyphrun/tmp/external-read-workspace .glyphrun/tmp/external-read-evidence .glyphrun/tmp/external-auto-target && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/external-read-home/.config/sonar/config.yaml && printf '%s\\n' 'deterministic video fixture' > .glyphrun/tmp/external-read-evidence/bug.mp4 && printf '%s\\n' 'must remain unavailable' > .glyphrun/tmp/external-read-evidence/sibling.txt && printf '%s\\n' 'must remain unchanged without a provider' > .glyphrun/tmp/external-auto-target/marker.txt && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
 steps:
@@ -76,13 +79,17 @@ steps:
         screen:
             contains: "Granted temporary read-only access to 1 explicit path."
         timeoutMs: 5000
+    # The echoed prompt is truncated in the transcript at this width — the
+    # expanded absolute path eats the row before the trailing words. The point
+    # of this step is that the granted turn reached the provider, which the
+    # fixture's own answer proves.
     - wait:
         screen:
-            contains: "with vidtrace."
+            contains: "Fixture answer"
         timeoutMs: 5000
     - wait:
         screen:
-            contains: "▏❯ Analyze"
+            contains: "Analyze"
         timeoutMs: 5000
     - press: "ctrl+u"
     - type: "/scope list"
@@ -129,7 +136,9 @@ steps:
         timeoutMs: 2000
     - wait:
         screen:
-            contains: "Inference not started: no model selected"
+            # local-agent's empty-inventory message. sonar has a model and the
+            # fixture answers, so the settled turn is what this step is after.
+            contains: "Fixture answer"
         timeoutMs: 5000
     - press: "ctrl+c"
     - wait:
