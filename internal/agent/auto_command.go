@@ -949,6 +949,17 @@ func autoScopedGoCommandAllowed(args []string) bool {
 // None of those appear here, and adding one requires proving it cannot mutate
 // under ANY accepted argument.
 //
+// That "under ANY accepted argument" proof was originally attempted with a flag
+// denylist, and a denylist cannot carry it. It has now failed three times, twice
+// for the same structural reason: --textconv was missing, and then -S<file> and
+// -O<file> were admitted because a denied option is only recognized as its own
+// token or =-joined, while git also accepts the value attached to the letter.
+// The generic operand loop cannot see through that either — it reads
+// `-S/etc/passwd` as one relative word and joins it under the workspace. So the
+// short-option surface is now an allowlist too: autoGitShortOptionTokenAllowed
+// refuses every attached-value token that is not provably value-free, which is
+// what makes the proof obligation above discharge for options nobody enumerated.
+//
 // A global option before the subcommand (-c, -C, --git-dir, --work-tree,
 // --exec-path, --config-env) is refused implicitly: args[0] must itself be a
 // catalogued subcommand, and such an option would occupy that slot. This matters
@@ -975,7 +986,116 @@ func autoScopedGitCommandAllowed(args []string) bool {
 		return false
 	}
 	// Short forms the long-option guard cannot see.
-	return !containsArg(args, "-o", "-O")
+	if containsArg(args, "-o", "-O") {
+		return false
+	}
+	return autoGitShortOptionsAllowed(args)
+}
+
+// Short options git accepts with the value attached to the letter, across the
+// catalogued read subcommands, name files (-O<orderfile>, -o<output>,
+// blame's -S<revs-file>, ls-files' -X<exclude-from>), regular expressions
+// (-G, -I, -S as diff/log's pickaxe), and ranges (-L). The meaning is not even
+// stable per letter: -S is a pickaxe string for log and diff but a revs-FILE
+// for blame, and -l is a numeric rename limit for diff but a boolean for blame.
+// Enumerating them per subcommand is exactly the exercise that already leaked
+// twice, so the direction is inverted: an attached-value token is refused
+// unless it is provably free of a value.
+//
+// The allowlist below admits only letters, digits, and the similarity `%`. That
+// charset is the actual security property, and it holds regardless of whether
+// every letter below was classified correctly: a token built from it cannot
+// contain `/`, `.`, `~`, or `=`, so it cannot express an absolute path, a
+// parent traversal, a home expansion, or an =-joined value. Whatever a
+// misclassified letter attaches can therefore only resolve inside the
+// workspace, where the operand loop already grants authority.
+const (
+	// Short options that never consume a value under any catalogued
+	// subcommand, so they may appear anywhere in a POSIX cluster (`-sn`).
+	autoGitValuelessShortOptions = "abcdefghikmpqrstvwzDERW"
+	// Short options whose value, when present, is numeric: -U<n> context,
+	// -M<n>/-C<n>/-B<n> similarity, -l<num> rename limit, -n<num> commit
+	// count. Each is also valid bare, which is how blame's boolean -l and -n
+	// and `shortlog -sn` keep working.
+	autoGitNumericShortOptions = "BCMUln"
+)
+
+// autoGitUntrackedModes are the fixed enum values `git status -u<mode>` takes.
+// They are spelled out because the mode rides attached to the letter far more
+// often than not (`git status -uno`).
+var autoGitUntrackedModes = []string{"no", "normal", "all"}
+
+func autoGitShortOptionsAllowed(args []string) bool {
+	for _, argument := range args {
+		// Deliberately no `--` early exit. git stops parsing options there, so a
+		// later `-S…` word is a pathspec rather than a revs-file — but that is a
+		// per-subcommand claim about git's own argument grammar (blame's operand
+		// order differs from log's), and this guard exists precisely because
+		// per-subcommand claims about git's grammar have been wrong twice. A
+		// pathspec that looks like an attached short option costs one approval.
+
+		// A two-character token carries no attached value. Its detached value,
+		// if any, is a separate word that the operand loop resolves — which is
+		// why `git log -S needle` and `git blame -L 1,10 file` still pass while
+		// `git blame -S /etc/passwd` does not.
+		if len(argument) < 3 || argument[0] != '-' || argument[1] == '-' {
+			continue
+		}
+		if !autoGitShortOptionTokenAllowed(argument) {
+			return false
+		}
+	}
+	return true
+}
+
+// autoGitShortOptionTokenAllowed reports whether one `-xyz` token is safe
+// without knowing which subcommand will interpret it.
+func autoGitShortOptionTokenAllowed(argument string) bool {
+	cluster := argument[1:]
+	if autoGitAllDigits(cluster) {
+		// `git log -10`: a bare commit count, not an option letter at all.
+		return true
+	}
+	for index := 0; index < len(cluster); index++ {
+		option := cluster[index]
+		switch {
+		case strings.IndexByte(autoGitValuelessShortOptions, option) >= 0:
+			continue
+		case strings.IndexByte(autoGitNumericShortOptions, option) >= 0:
+			end := index + 1
+			for end < len(cluster) && (autoGitDigit(cluster[end]) || cluster[end] == '%') {
+				end++
+			}
+			index = end - 1
+		case option == 'u':
+			// `git status -u`, `-uno`, `-uall`. Anything else attached to -u is
+			// ambiguous between a mode and more flags, so it fails closed.
+			rest := cluster[index+1:]
+			if rest == "" {
+				continue
+			}
+			return stringIn(rest, autoGitUntrackedModes...)
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+func autoGitAllDigits(value string) bool {
+	if value == "" {
+		return false
+	}
+	for index := 0; index < len(value); index++ {
+		if !autoGitDigit(value[index]) {
+			return false
+		}
+	}
+	return true
+}
+
+func autoGitDigit(character byte) bool {
+	return character >= '0' && character <= '9'
 }
 
 func autoScopedCargoCommandAllowed(args []string) bool {
