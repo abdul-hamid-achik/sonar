@@ -32,14 +32,32 @@ func (a *Agent) handleWrite(args map[string]any) (string, bool) {
 	defer func() { _ = parent.Close() }()
 
 	mode := os.FileMode(0o644)
+	created := true
+	// Read what is being replaced so the receipt can say what changed.
+	// "Written to x (500 bytes)" hides an overwrite that deleted 300 lines,
+	// and under AUTO no approval modal shows the diff first. The read is
+	// bounded by maxFileReadBytes and is the same one the approval preview
+	// already performs on the NORMAL path.
+	var previous string
 	if info, statErr := parent.Stat(name); statErr == nil {
 		mode = info.Mode().Perm()
+		created = false
+		if existing, _, readErr := readPinnedRootFile(parent, name, maxFileReadBytes); readErr == nil {
+			previous = string(existing)
+		}
 	}
 	if err := atomicWriteRoot(parent, name, []byte(content), mode); err != nil {
 		return fmt.Sprintf("error writing file: %v", err), true
 	}
 
-	return fmt.Sprintf("Written to %s (%d bytes)", path, len(content)), false
+	if created {
+		return fmt.Sprintf("Created %s (%d bytes, %d lines)", path, len(content), len(splitEditLines(content))), false
+	}
+	receipt := fmt.Sprintf("Written to %s (%d bytes)", path, len(content))
+	if change := summarizeEditChange(previous, content).String(); change != "" {
+		receipt += " · " + change
+	}
+	return receipt, false
 }
 
 // handleEdit edits one file in place under two mutually exclusive modes.
@@ -110,7 +128,13 @@ func (a *Agent) handleEdit(args map[string]any) (string, bool) {
 		return fmt.Sprintf("error writing file: %v", err), true
 	}
 
-	return fmt.Sprintf("%s (%d bytes)", summary, len(newContent)), false
+	// The receipt says what changed, not just how big the file ended up. Under
+	// AUTO nothing prompts, so this is the only place the change is visible.
+	receipt := fmt.Sprintf("%s (%d bytes)", summary, len(newContent))
+	if change := summarizeEditChange(string(oldContent), newContent).String(); change != "" {
+		receipt += " · " + change
+	}
+	return receipt, false
 }
 
 // replacementEdit is the string-replacement form of an edit call: exact text
