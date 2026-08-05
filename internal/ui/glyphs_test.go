@@ -173,7 +173,11 @@ func TestASCIIProfilePropagatesAcrossPrimarySemanticSurfaces(t *testing.T) {
 	}
 }
 
-func TestASCIIActivitySpinnerRemainsFooterOnly(t *testing.T) {
+// TestASCIIActivitySpinnerKeepsTheTranscriptASCII covers the seam the running
+// receipt's animation opens: the activity frame is now transcript content, so
+// the ASCII profile's promise — no Unicode semantic glyph reaches the screen —
+// has to survive a moving glyph, not just a static one.
+func TestASCIIActivitySpinnerKeepsTheTranscriptASCII(t *testing.T) {
 	t.Setenv("SONAR_GLYPHS", "ascii")
 	t.Setenv("TERM", "xterm-256color")
 	m := New(nil, nil, nil, nil, nil, nil, nil)
@@ -221,10 +225,12 @@ func TestASCIIActivitySpinnerRemainsFooterOnly(t *testing.T) {
 	if next == nil {
 		t.Fatal("ASCII activity spinner did not continue")
 	}
-	assertNoTranscriptPaint(t, probe, "ASCII spinner tick")
-	if after := m.viewport.GetContent(); after != before {
-		t.Fatal("ASCII spinner tick changed transcript content")
+	assertViewportBoundedRestage(t, probe, m.viewport.Height(), "ASCII spinner tick")
+	after := m.viewport.GetContent()
+	if after == before {
+		t.Fatal("ASCII spinner tick left the running receipt on a frozen frame")
 	}
+	assertNoUnicodeSemanticGlyphs(t, ansi.Strip(after))
 }
 
 func assertNoUnicodeSemanticGlyphs(t *testing.T, rendered string) {

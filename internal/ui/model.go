@@ -905,12 +905,22 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 	}
 
 	// The parent owns one Bubbles spinner clock for startup, streaming, tools,
-	// and owned operations. It advances the footer only: transcript receipts
-	// are stable until a real stream, tool, or expert-progress event arrives.
+	// and owned operations. Settled transcript receipts stay stable until a real
+	// stream, tool, or expert-progress event arrives; a RUNNING receipt rides
+	// this clock too, because a card reading "Running" behind a frozen glyph
+	// looks like a stuck process rather than a working one.
+	//
+	// That is a narrower claim than "the spinner paints the transcript", and the
+	// difference is the whole design: advanceRunningToolReceiptFrame swaps the
+	// content of blocks already measured and restages the visible window. No
+	// document rebuild, no re-measure, no semantic rehash, no layout record
+	// touched — the cost is bounded by the viewport, not by the transcript, and
+	// the 10,000-entry contract test measures exactly that.
 	if _, ok := msg.(spinner.TickMsg); ok && m.needsSpinner() {
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
 		cmds = append(cmds, cmd)
+		m.advanceRunningToolReceiptFrame()
 	}
 
 	// Sticky reveal + context meter springs (harmonica). Independent of the

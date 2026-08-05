@@ -224,3 +224,69 @@ func TestContentGridOriginSharedAcrossSurfaces(t *testing.T) {
 		t.Fatalf("tool semantic content at OriginX = %q, want ✓: %q", string(runes[contentLeftColumns]), toolLine)
 	}
 }
+
+// TestCollapsedToolFooterIsClickable closes a gap the receipt advertised
+// itself: "N lines hidden · ctrl+r" is the only row of a tool card that names
+// a key, and it was the only row a click could not reach — the pointer region
+// covered the header line alone. An affordance that states how to reach hidden
+// content and then ignores the pointer aimed at it is worse than a silent one.
+func TestCollapsedToolFooterIsClickable(t *testing.T) {
+	m := newTestModel(t)
+	m.entries = []ChatEntry{
+		{BlockID: "block-hidden-user", Revision: 1, Lifecycle: BlockSettled, Kind: "user", Content: "run it"},
+		{BlockID: "block-hidden-1", Revision: 1, Lifecycle: BlockSettled, Kind: "tool_group", ToolIndex: 0},
+	}
+	m.toolEntries = []ToolEntry{{
+		ID: "one", Name: "bash", Status: ToolStatusDone, Collapsed: true,
+		Result: "first line\nsecond line\nthird line",
+	}}
+
+	plain := ansi.Strip(m.renderEntries())
+	if !strings.Contains(plain, "lines hidden · ctrl+r") {
+		t.Fatalf("collapsed receipt did not advertise its hidden body:\n%s", plain)
+	}
+	if len(m.toolHitRegions) != 2 {
+		t.Fatalf("collapsed receipt has %d hit regions, want header and footer: %#v",
+			len(m.toolHitRegions), m.toolHitRegions)
+	}
+	header, footer := m.toolHitRegions[0], m.toolHitRegions[1]
+	if footer.ToolIndex != 0 || footer.Row <= header.Row {
+		t.Fatalf("footer region does not sit below its own header: %#v %#v", header, footer)
+	}
+	if footer.StartCol < 0 || footer.StartCol >= footer.EndCol {
+		t.Fatalf("footer region has invalid horizontal bounds: %#v", footer)
+	}
+
+	m.handleMouseClick(footer.StartCol, footer.Row-m.transcriptYOffset())
+	if m.toolEntries[0].Collapsed {
+		t.Fatal("clicking the hidden-lines cue did not expand the receipt")
+	}
+
+	// Expanded, the cue is gone and so is its region: the body it pointed at is
+	// on screen, and a stale region would toggle a row that no longer says so.
+	m.renderEntries()
+	if len(m.toolHitRegions) != 1 {
+		t.Fatalf("expanded receipt kept a footer hit region: %#v", m.toolHitRegions)
+	}
+}
+
+// TestCollapsedToolFooterRegionIgnoresExpandedBodyText pins the one thing the
+// rendered chunk cannot tell the scanner on its own. An expanded receipt whose
+// output happens to contain a line reading like the cue must not gain a
+// pointer region for it — that row is tool output, not chrome.
+func TestCollapsedToolFooterRegionIgnoresExpandedBodyText(t *testing.T) {
+	m := newTestModel(t)
+	m.entries = []ChatEntry{
+		{BlockID: "block-shown-user", Revision: 1, Lifecycle: BlockSettled, Kind: "user", Content: "run it"},
+		{BlockID: "block-hidden-2", Revision: 1, Lifecycle: BlockSettled, Kind: "tool_group", ToolIndex: 0},
+	}
+	m.toolEntries = []ToolEntry{{
+		ID: "one", Name: "bash", Status: ToolStatusDone, Collapsed: false,
+		Result: "grep output\n42 lines hidden · ctrl+r\ntail",
+	}}
+
+	m.renderEntries()
+	if len(m.toolHitRegions) != 1 {
+		t.Fatalf("expanded receipt body was mistaken for the hidden-lines cue: %#v", m.toolHitRegions)
+	}
+}

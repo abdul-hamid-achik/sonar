@@ -279,6 +279,75 @@ func (m *Model) refreshTranscript() {
 	m.syncTranscriptPaintWindow()
 }
 
+// advanceRunningToolReceiptFrame repaints the running receipts already staged
+// in the paint document with the activity clock's current frame, and restages
+// the visible window so the change reaches the screen.
+//
+// It is deliberately not a refresh. A frame changes one glyph cell inside a
+// block whose height, semantics, identity, and layout record are all unchanged,
+// so none of the machinery that answers "what does this transcript mean" needs
+// to run: no document build, no block measure, no semantic digest, no layout
+// record. document.base aliases the paint cache's stable blocks, so swapping an
+// element in place keeps the two coherent without invalidating either.
+//
+// Running receipts are the transcript's trailing entries — everything after
+// them is the live tail, which lives in document.tail — so both ends are walked
+// in lockstep from the end and the loop stops at the first entry that is not
+// one. A chunk whose height changed is a layout event rather than a frame: it
+// is left alone for the next real lifecycle event to rebuild, because silently
+// swapping a taller block would desynchronize every startRow below it.
+func (m *Model) advanceRunningToolReceiptFrame() bool {
+	if m == nil || !m.hasRunningToolReceipt() {
+		return false
+	}
+	paint := &m.transcriptPaint
+	blocks := paint.document.base
+	if !paint.active || len(blocks) == 0 {
+		return false
+	}
+	contentW := m.chatContentWidth()
+	proseW := min(contentW, m.chatProseWidth())
+	advanced := false
+	entryIndex, blockIndex := len(m.entries)-1, len(blocks)-1
+	for entryIndex >= 0 && blockIndex >= 0 {
+		entry := m.entries[entryIndex]
+		if entry.Kind != "tool_group" ||
+			entry.ToolIndex < 0 || entry.ToolIndex >= len(m.toolEntries) ||
+			m.toolEntries[entry.ToolIndex].Status != ToolStatusRunning {
+			break
+		}
+		var view strings.Builder
+		m.renderToolGroup(&view, entry)
+		chunk := strings.TrimRight(view.String(), "\n")
+		block := blocks[blockIndex]
+		if chunk == "" || strings.Count(chunk, "\n") != strings.Count(block.content, "\n") {
+			break
+		}
+		blocks[blockIndex] = newTranscriptPaintBlock(block.startRow, chunk)
+		// Keep the memo in step. Without this the next full render would rebuild
+		// this entry from a key that no longer matches the block on screen.
+		if m.entryMemo != nil {
+			if key := m.entryMemoKey(entry, contentW, proseW); key != "" {
+				m.entryMemo[entry.BlockID] = entryRenderMemo{key: key, chunk: chunk}
+			}
+		}
+		advanced = true
+		entryIndex--
+		blockIndex--
+	}
+	if !advanced {
+		return false
+	}
+	// The staged window is keyed on the document generation. Bumping it is what
+	// makes syncTranscriptPaintWindow restage instead of reusing the frame the
+	// user is already looking at.
+	if paint.documentGeneration < ^uint64(0) {
+		paint.documentGeneration++
+	}
+	m.syncTranscriptPaintWindow()
+	return true
+}
+
 func (m *Model) buildTranscriptPaintDocument() transcriptPaintBuild {
 	if m.transcriptRenderProbe != nil {
 		m.transcriptRenderProbe.documentBuilds++

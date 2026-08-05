@@ -180,6 +180,26 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 	}
 }
 
+// hasRunningToolReceipt reports whether the transcript is painting a card that
+// would advance with the activity clock. It shares runningToolElapsed's window
+// — this turn's receipts — because an interrupted receipt from an earlier turn
+// is reconciled to cancelled rather than left animating forever.
+//
+// Reduced motion answers false: the static cue never advances, so a repaint
+// would produce a byte-identical frame at the spinner's cadence.
+func (m *Model) hasRunningToolReceipt() bool {
+	if m == nil || m.reducedMotion {
+		return false
+	}
+	start := min(max(0, m.turnToolStartIndex), len(m.toolEntries))
+	for index := start; index < len(m.toolEntries); index++ {
+		if m.toolEntries[index].Status == ToolStatusRunning {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *Model) runningToolElapsed() time.Duration {
 	var startedAt time.Time
 	start := min(max(0, m.turnToolStartIndex), len(m.toolEntries))

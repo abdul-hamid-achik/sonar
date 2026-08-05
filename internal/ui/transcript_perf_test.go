@@ -79,7 +79,13 @@ func TestWarmStaticRunningToolRenderDoesNotRehashOrRepublishStableHistory(t *tes
 }
 
 func TestActivityClocksDoNotPaintTenThousandEntryTranscript(t *testing.T) {
-	t.Run("spinner tick is footer-only and tool result repaints", func(t *testing.T) {
+	// A running receipt animates with the footer rather than sitting behind a
+	// frozen glyph, and it does so without paying for the transcript behind it.
+	// The fixture is ten thousand entries because that is the number the naive
+	// implementation — invalidate the entry cache, refresh — cannot survive: it
+	// rebuilds every block's memo key on each of the spinner's twelve ticks a
+	// second. The frame path swaps content into blocks already measured.
+	t.Run("spinner tick animates the running receipt within viewport cost", func(t *testing.T) {
 		m := largeRunningToolTranscript(t, "read_file", false)
 		beforeTranscript := m.viewport.GetContent()
 		beforeFooter := m.renderWorkingLine()
@@ -91,12 +97,17 @@ func TestActivityClocksDoNotPaintTenThousandEntryTranscript(t *testing.T) {
 		if next == nil {
 			t.Fatal("active tool spinner did not continue its footer clock")
 		}
-		assertNoTranscriptPaint(t, probe, "spinner tick")
-		if after := m.viewport.GetContent(); after != beforeTranscript {
-			t.Fatal("spinner tick changed transcript content")
+		assertViewportBoundedRestage(t, probe, m.viewport.Height(), "spinner tick")
+		if after := m.viewport.GetContent(); after == beforeTranscript {
+			t.Fatal("spinner tick left the running receipt on a frozen frame")
 		}
 		if afterFooter := m.renderWorkingLine(); afterFooter == beforeFooter {
 			t.Fatal("spinner tick did not advance the footer-owned activity")
+		}
+		// One glyph moved. A frame that changes the receipt's height would
+		// desynchronize every startRow below it, so the height is the invariant.
+		if before, after := strings.Count(beforeTranscript, "\n"), strings.Count(m.viewport.GetContent(), "\n"); before != after {
+			t.Fatalf("activity frame changed transcript height: %d -> %d", before, after)
 		}
 
 		probe = &transcriptRenderProbe{}
@@ -188,6 +199,36 @@ func largeRunningToolTranscript(t *testing.T, toolName string, reducedMotion boo
 	m.refreshTranscript()
 	m.transcriptGotoBottom()
 	return m
+}
+
+// assertViewportBoundedRestage is the invariant an activity frame must hold.
+//
+// It is deliberately weaker than assertNoTranscriptPaint in exactly one place:
+// a running receipt animates, so the visible window is restaged. Everything
+// whose cost grows with the transcript stays at zero — no document rebuild, no
+// re-measure, no semantic rehash, no layout record touched — which is what the
+// ten-thousand-entry fixture is here to measure. Restaging is bounded by the
+// viewport, and the row count proves it.
+func assertViewportBoundedRestage(t *testing.T, probe *transcriptRenderProbe, viewportRows int, operation string) {
+	t.Helper()
+	if probe.renderEntriesCalls != 0 ||
+		probe.transcriptBytesMaterialized != 0 ||
+		probe.documentBuilds != 0 ||
+		probe.measureBytesMaterialized != 0 ||
+		probe.lineIndexRowsBuilt != 0 ||
+		probe.semanticDigestCalls != 0 ||
+		probe.layoutRecordsMaterialized != 0 ||
+		probe.layoutRecordComparisons != 0 ||
+		probe.blocksMeasured != 0 {
+		t.Fatalf("%s performed transcript-length work: %#v", operation, probe)
+	}
+	if probe.paintRowsStaged == 0 {
+		t.Fatalf("%s did not restage the visible window: %#v", operation, probe)
+	}
+	if limit := viewportRows + 2*transcriptPaintOverscanRows; probe.paintRowsStaged > limit {
+		t.Fatalf("%s staged %d rows, want at most the viewport plus overscan (%d)",
+			operation, probe.paintRowsStaged, limit)
+	}
 }
 
 func assertNoTranscriptPaint(t *testing.T, probe *transcriptRenderProbe, operation string) {

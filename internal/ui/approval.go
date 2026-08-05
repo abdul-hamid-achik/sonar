@@ -95,7 +95,7 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 			})
 		}
 	case toolName == "bash":
-		if prefix, ok := permission.DeriveBashPrefix(preview.Command); ok {
+		if prefix, ok := permission.ApprovalBashPrefix(preview, ""); ok {
 			prefixHint := compactApprovalHint(prefix, 24)
 			sessionLabel := "command prefix this session"
 			sessionCompact := "bash/session"
@@ -400,7 +400,10 @@ func (m *Model) persistWorkspaceRuleFromApproval(scopeKind string) error {
 			command, _ = m.pendingApproval.Args["command"].(string)
 		}
 		// Prefer a trailing-glob form so "go test ./pkg" variants keep matching.
-		prefix, ok := permission.DeriveBashPrefix(command)
+		// The prefix itself comes from the same resolver the modal labelled and
+		// the session grant will use, so "w" durably saves what "a" would have
+		// granted rather than a second, differently-derived rule.
+		prefix, ok := permission.ApprovalBashPrefix(m.pendingApproval.Preview, command)
 		if !ok {
 			return fmt.Errorf("command cannot form a durable bash prefix")
 		}

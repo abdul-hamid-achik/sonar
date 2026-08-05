@@ -142,7 +142,15 @@ func TestAnimationClocksStopOutsideTheirPhase(t *testing.T) {
 	}
 }
 
-func TestRunningToolCardIsStaticAndFooterOwnsSharedSpinner(t *testing.T) {
+// TestRunningToolCardAnimatesWhileFooterOwnsTheClock pins how a running
+// receipt and the footer divide one activity clock.
+//
+// The receipt owns motion and nothing else: it advances a glyph so the card
+// reads as working rather than stuck, and it still carries no elapsed time, so
+// there remains exactly one place on screen to read how long this has taken.
+// Reduced motion keeps the static cue — an ellipsis says unfinished without
+// moving — which is also what every terminal spec renders.
+func TestRunningToolCardAnimatesWhileFooterOwnsTheClock(t *testing.T) {
 	m := newTestModel(t)
 	base := time.Date(2026, 7, 11, 12, 0, 0, 0, time.UTC)
 	m.now = func() time.Time { return base.Add(1500 * time.Millisecond) }
@@ -165,20 +173,42 @@ func TestRunningToolCardIsStaticAndFooterOwnsSharedSpinner(t *testing.T) {
 	m = updated.(*Model)
 	after := m.viewport.View()
 	footerAfter := m.renderWorkingLine()
-	if before != after {
-		t.Fatalf("footer spinner tick repainted the running ToolCard:\nbefore:\n%s\nafter:\n%s", before, after)
+	if before == after {
+		t.Fatalf("spinner tick left the running ToolCard on a frozen frame:\n%s", after)
 	}
 	if footerBefore == footerAfter || !strings.Contains(footerAfter, "Tool running") ||
 		!strings.Contains(footerAfter, "1.5s") || strings.Contains(footerAfter, "internal/ui") {
 		t.Fatalf("tool footer did not own live activity: before=%q after=%q", footerBefore, footerAfter)
 	}
-	for _, want := range []string{"Reading", "internal/ui", "…"} {
+	for _, want := range []string{"Reading", "internal/ui"} {
 		if !strings.Contains(after, want) {
 			t.Fatalf("running tool receipt missing %q:\n%s", want, after)
 		}
 	}
 	if strings.Contains(after, "1.5s") {
 		t.Fatalf("running ToolCard retained live elapsed time:\n%s", after)
+	}
+
+	reduced := newTestModel(t)
+	reduced.reducedMotion = true
+	reduced.now = m.now
+	reduced.state = StateStreaming
+	reduced.toolsPending = 1
+	reduced.toolEntries = append([]ToolEntry(nil), m.toolEntries...)
+	reduced.toolEntries[0].Status = ToolStatusRunning
+	reduced.entries = []ChatEntry{
+		{Kind: "user", Content: "inspect the UI"},
+		{Kind: "tool_group", ToolIndex: 0},
+	}
+	reduced.refreshTranscript()
+	quiet := reduced.viewport.View()
+	if !strings.Contains(quiet, "…") {
+		t.Fatalf("reduced motion dropped the static running cue:\n%s", quiet)
+	}
+	updated, _ = reduced.Update(reduced.spin.Tick())
+	reduced = updated.(*Model)
+	if got := reduced.viewport.View(); got != quiet {
+		t.Fatalf("reduced motion animated the running receipt:\nbefore:\n%s\nafter:\n%s", quiet, got)
 	}
 
 	m.toolsPending = 0

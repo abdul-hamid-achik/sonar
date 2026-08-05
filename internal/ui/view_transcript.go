@@ -364,6 +364,18 @@ func (m *Model) appendEntryChunk(b *strings.Builder, entryIndex int, entry ChatE
 				EndCol:    endCol,
 			})
 		}
+		// The "N lines hidden · ctrl+r" row is the only part of a receipt that
+		// names a key, and it was the only part that did not respond to a
+		// click: the region above covers the header line alone. Give the cue
+		// the same disclosure it advertises.
+		if rowOffset, startCol, endCol, ok := m.collapsedToolFooterRegion(entry, chunk); ok {
+			m.toolHitRegions = append(m.toolHitRegions, toolHitRegion{
+				ToolIndex: entry.ToolIndex,
+				Row:       state.renderedLines + rowOffset,
+				StartCol:  startCol,
+				EndCol:    endCol,
+			})
+		}
 	}
 	if entry.Kind == "assistant" && strings.TrimSpace(entry.ThinkingContent) != "" {
 		if rowOffset, startCol, endCol, ok := completedThinkingHeaderRegion(chunk, m.glyphProfile); ok {
@@ -752,9 +764,29 @@ func (m *Model) entryMemoKey(entry ChatEntry, contentW, proseW int) string {
 	return b.String()
 }
 
+// runningToolActivityGlyph is the frame a running receipt paints where its
+// static cue would go. It is the parent's one Bubbles spinner — the same clock
+// the footer rides — so a transcript full of running cards adds no second
+// animation clock and every card moves in step.
+//
+// Empty means "keep the static cue", which is what reduced motion gets: the
+// ellipsis still says unfinished, and nothing on screen moves.
+func (m *Model) runningToolActivityGlyph() string {
+	if m == nil || m.reducedMotion {
+		return ""
+	}
+	return m.spin.View()
+}
+
 // toolGroupMemoKey summarizes the strict render projection consumed by a tool
-// receipt. Running receipts are cacheable because clocks live only in the
-// footer; lifecycle and expert-progress events change this key explicitly.
+// receipt.
+//
+// Clocks still live only in the footer — a running card carries no elapsed
+// time, so there is exactly one place to read how long this has taken. The
+// activity frame is the one exception the key must admit: a running receipt
+// that memoizes its glyph freezes on whatever frame it first rendered, which
+// is precisely how "… Running" came to look like a stuck card rather than a
+// working one. Settled receipts contribute nothing here and stay free.
 func (m *Model) toolGroupMemoKey(chat ChatEntry) (string, bool) {
 	if chat.ToolIndex < 0 || chat.ToolIndex >= len(m.toolEntries) {
 		return "", false
@@ -773,6 +805,9 @@ func (m *Model) toolGroupMemoKey(chat ChatEntry) (string, bool) {
 		model.Lifecycle, model.Preview.Expanded, model.Duration,
 		model.Preview.DiffPending, m.chatPaneWidth(), m.inlineDiffPreviewRows())
 	fmt.Fprintf(&b, "|%+v|%t", model.Preview.OutputDigest, model.Preview.OutputAvailable)
+	if model.Lifecycle == ToolLifecycleRunning {
+		fmt.Fprintf(&b, "|f%s", m.runningToolActivityGlyph())
+	}
 	p := model.Projection
 	fmt.Fprintf(&b, "|%s|%s|%s|%s|%s|%t|%s|%+v",
 		p.Specialist, p.Operation, p.Role, model.Transport, model.Domain, p.DomainTyped, model.Evidence, p.Route)
@@ -842,6 +877,35 @@ func (m *Model) liveTailSemanticSource() string {
 		source = m.thinkBuf.String() + "\n" + source
 	}
 	return source
+}
+
+// collapsedToolFooterRegion locates a collapsed receipt's "N lines hidden ·
+// ctrl+r" row inside its own rendered chunk.
+//
+// It reads the chunk rather than the render model on purpose: fresh renders
+// and memo hits both reach appendEntryChunk with nothing but the chunk, and
+// the two must produce byte- and region-identical frames. The collapsed check
+// is the one thing the chunk cannot answer — an expanded receipt's result body
+// may contain a line that reads like the cue — and it is an O(1) field read.
+func (m *Model) collapsedToolFooterRegion(entry ChatEntry, chunk string) (rowOffset, startCol, endCol int, ok bool) {
+	if entry.ToolIndex < 0 || entry.ToolIndex >= len(m.toolEntries) ||
+		!m.toolEntries[entry.ToolIndex].Collapsed {
+		return 0, 0, 0, false
+	}
+	glyphs := glyphSet(m.glyphProfile)
+	for row, line := range strings.Split(chunk, "\n") {
+		if row == 0 {
+			continue
+		}
+		plain := strings.TrimLeft(ansi.Strip(line), " ")
+		plain = strings.TrimLeft(strings.TrimPrefix(plain, glyphs.Vertical), " ")
+		if !collapsedToolBodyFooterLine(plain) {
+			continue
+		}
+		startCol, endCol, ok := renderedLineHorizontalBounds(line)
+		return row, startCol, endCol, ok
+	}
+	return 0, 0, 0, false
 }
 
 func completedThinkingHeaderRegion(
@@ -1117,7 +1181,7 @@ func (m *Model) renderToolGroup(b *strings.Builder, chat ChatEntry) {
 	}
 	// LineWidth = accent + pad + content. ToolCard paints accent+pad internally.
 	availableWidth := max(4, grid.LineWidth())
-	cardView := card.View(availableWidth)
+	cardView := card.ViewWithActivity(availableWidth, m.runningToolActivityGlyph(), 0)
 	if model.Preview.Expanded && model.Lifecycle.Terminal() {
 		var diffView string
 		if model.Preview.DiffPending {

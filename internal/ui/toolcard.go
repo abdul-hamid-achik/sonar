@@ -530,6 +530,24 @@ func (c ToolCard) ViewWithActivity(width int, activityGlyph string, elapsed time
 	return b.String()
 }
 
+// collapsedToolBodyFooterStem is what follows the hidden-line count. The
+// pointer region scanner matches on it, so the row the user can click and the
+// row that names the expand chord are derived from one string and cannot drift
+// apart.
+const collapsedToolBodyFooterStem = " lines hidden"
+
+// collapsedToolBodyFooterLine reports whether one ANSI-stripped, rail-trimmed
+// transcript row is a collapsed receipt's hidden-body cue. It matches the head
+// rather than the whole line because a narrow pane truncates the tail — the
+// row is no less clickable for having lost its "· ctrl+r".
+func collapsedToolBodyFooterLine(plain string) bool {
+	digits := 0
+	for digits < len(plain) && plain[digits] >= '0' && plain[digits] <= '9' {
+		digits++
+	}
+	return digits > 0 && strings.HasPrefix(plain[digits:], collapsedToolBodyFooterStem)
+}
+
 // collapsedToolBodyFooter returns a "N lines hidden · ctrl+r" cue when a
 // collapsed receipt has multi-line body content. Single-line or empty bodies
 // stay header-only so success receipts remain one log line.
@@ -552,7 +570,7 @@ func collapsedToolBodyFooter(result string) string {
 	if lines < 2 {
 		return ""
 	}
-	return fmt.Sprintf("%d lines hidden · ctrl+r", lines)
+	return fmt.Sprintf("%d%s · ctrl+r", lines, collapsedToolBodyFooterStem)
 }
 
 // toolCardSummaryWithoutRepeatedAction keeps a routed tool's specialist or
