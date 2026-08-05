@@ -78,8 +78,13 @@ func TestStreamRequestsUsageAndReportsClientTiming(t *testing.T) {
 	if final.Timing == nil {
 		t.Fatal("terminal chunk carries no timing; the --json receipt's timing block would be empty")
 	}
-	if final.Timing.TimeToFirstToken < firstTokenDelay {
-		t.Errorf("time to first token = %v, want at least the server's %v pause",
+	// A floor, not the exact pause. The client starts its clock when response
+	// headers arrive, which is marginally after the server flushed them, so the
+	// measurement lands just under the server's sleep — CI caught this at
+	// 19.22ms against 20ms. Half the pause still separates a real measurement
+	// from an unset field, which is the property under test.
+	if final.Timing.TimeToFirstToken < firstTokenDelay/2 {
+		t.Errorf("time to first token = %v, want a real measurement near the server's %v pause",
 			final.Timing.TimeToFirstToken, firstTokenDelay)
 	}
 	if final.Timing.TotalDuration < final.Timing.TimeToFirstToken {
