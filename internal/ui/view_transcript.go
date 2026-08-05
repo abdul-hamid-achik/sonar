@@ -1147,7 +1147,7 @@ func (m *Model) renderToolGroup(b *strings.Builder, chat ChatEntry) {
 			cardView += "\n" + diffView
 		}
 	}
-	if model.Preview.Expanded {
+	if shouldShowToolViewerHint(m, model.Preview) {
 		if hint := m.toolViewerActionHint(chat); hint != "" {
 			// Align viewer hints under the card content column (after accent+pad).
 			cardView += "\n" + grid.Prefix(glyphs.Vertical) + m.styles.Dimmed.Render(
@@ -1185,4 +1185,25 @@ func (m *Model) projectToolRenderModel(chat ChatEntry) (ToolRenderModel, error) 
 		model.Preview.OutputAvailable = false
 	}
 	return model, nil
+}
+
+// shouldShowToolViewerHint decides whether a card advertises its viewers.
+//
+// The hint used to render only on an expanded card, so a reader had to already
+// know the card expanded in order to learn that the full diff was one
+// keystroke away. A collapsed write whose diff is longer than the inline
+// preview now says so. Every harness that collapses tool output by default
+// pairs the collapsed state with a visible way out of it, because an
+// affordance nobody can see is not an affordance.
+//
+// A diff that is still building stays quiet: promising a viewer that is not
+// ready yet is an affordance that fails when used.
+func shouldShowToolViewerHint(m *Model, preview ToolPreview) bool {
+	if preview.Expanded {
+		return true
+	}
+	if preview.DiffPending || len(preview.DiffLines) == 0 {
+		return false
+	}
+	return len(preview.DiffLines) > m.inlineDiffPreviewRows()
 }
