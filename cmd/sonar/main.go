@@ -970,6 +970,11 @@ func run() int {
 	m.SetConfigSourcePath(cfg.SourcePath)
 	m.SetModelRoutingCatalog(cfg.Model.Models)
 	m.SetModelPreferenceStore(modelPreferenceStore)
+	// The prose measure is a layout constant read from many call sites with no
+	// route to configuration, so it is installed once here before any frame
+	// renders rather than threaded through the layout code.
+	ui.SetProseCap(cfg.UI.EffectiveProseWidth())
+
 	// Theme precedence: an explicit /theme choice outranks the config key,
 	// because it is the more recent and more deliberate of the two. An
 	// unreadable preference file is not worth failing startup over — the

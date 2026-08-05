@@ -76,6 +76,24 @@ type LayoutCapabilities struct {
 // proseWidthForWork grows conversational measure with the work rectangle so
 // wide terminals do not leave a large dead margin (Grok-style density).
 // Small panes stay at the classic 96-col comfort cap.
+// proseCap is the soft ceiling for conversational prose, in columns. It starts
+// at ProseTargetWide and is replaced by ui.prose_width when the user sets one.
+//
+// This is a package-level value rather than a parameter because
+// proseWidthForWork is called from layout code that has no route to the
+// configuration, and threading it through every caller would touch far more
+// surface than the setting is worth. It is written once during startup, before
+// any frame renders.
+var proseCap = ProseTargetWide
+
+// SetProseCap installs the configured prose measure. A non-positive value
+// keeps the default. Call once at startup.
+func SetProseCap(columns int) {
+	if columns > 0 {
+		proseCap = columns
+	}
+}
+
 func proseWidthForWork(workWidth int) int {
 	if workWidth <= 0 {
 		return 0
@@ -84,9 +102,14 @@ func proseWidthForWork(workWidth int) int {
 		return workWidth
 	}
 	// Use most of the work width on large panes, soft-capped for readability.
-	wide := min(ProseTargetWide, workWidth)
-	// Prefer ~90% of work width between 96 and 140.
+	wide := min(proseCap, workWidth)
+	// Prefer ~90% of work width between the candidate measure and the cap.
 	grown := max(ProseTargetCandidate, (workWidth*9)/10)
+	if wide < ProseTargetCandidate {
+		// A cap tighter than the comfortable minimum is still the user's
+		// choice; honour it rather than silently widening back out.
+		return wide
+	}
 	return min(wide, grown)
 }
 

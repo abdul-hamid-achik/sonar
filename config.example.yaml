@@ -68,6 +68,14 @@ ollama:
 # ~/.config/sonar/runtime-preferences.json and outranks this key.
 ui:
   theme: nord # nord | catppuccin | dracula | everforest | gruvbox | kanagawa | one | rose-pine | solarized | tokyo-night
+  # How wide conversational text may wrap, in columns. Code fences, diffs,
+  # tables and inspectors always use the full pane and ignore this.
+  #
+  # The default (140) soft-caps prose below a very wide terminal, on the
+  # ordinary typographic argument that long lines are harder to scan. On an
+  # ultrawide display that reads as a dead right margin instead. Raise it to
+  # use the width you have, or lower it for a narrower measure.
+  # prose_width: 220
 
 privacy:
   local_only: true
