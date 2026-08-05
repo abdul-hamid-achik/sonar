@@ -4,7 +4,15 @@ name: sonar_tui_help
 intent: |
     a user can open the sonar TUI help overlay, see shortcut and slash-command guidance, close it, and quit.
 target:
-    cmd: ["./bin/sonar"]
+    # Driven through the fake DeepSeek fixture. Pointing at the real
+    # binary made this spec depend on an ambient DEEPSEEK_API_KEY: it
+    # passed where one was exported and exited 1 in CI, and even with a
+    # placeholder it pinged api.deepseek.com for a 401. See
+    # specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/help-protocol.txt"
     cwd: "."
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/help-home"
@@ -12,7 +20,7 @@ target:
         OLLAMA_HOST: "http://127.0.0.1:1"
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/help-home .glyphrun/tmp/help-agents && mkdir -p .glyphrun/tmp/help-home/.config/sonar .glyphrun/tmp/help-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/help-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/help-protocol.txt .glyphrun/tmp/help-home .glyphrun/tmp/help-agents && mkdir -p .glyphrun/tmp/help-home/.config/sonar .glyphrun/tmp/help-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/help-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
 steps:

@@ -4,7 +4,14 @@ name: sonar_tui_smoke
 intent: |
     a user can launch the sonar TUI, see the initial screen, and quit with ctrl+c.
 target:
-    cmd: ["./bin/sonar"]
+    # Driven through the fake DeepSeek fixture. Pointing at the real
+    # binary made this spec depend on an ambient DEEPSEEK_API_KEY: it
+    # passed where one was exported and exited 1 in CI. See
+    # specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/smoke-protocol.txt"
     cwd: "."
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/home"
@@ -12,7 +19,7 @@ target:
         OLLAMA_HOST: "http://127.0.0.1:1"
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/home .glyphrun/tmp/agents && mkdir -p .glyphrun/tmp/home/.config/sonar .glyphrun/tmp/agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/smoke-protocol.txt .glyphrun/tmp/home .glyphrun/tmp/agents && mkdir -p .glyphrun/tmp/home/.config/sonar .glyphrun/tmp/agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
 steps:

@@ -1,2 +1,2 @@
-provider: deepseek (deepseek) model deepseek-v4-flash (api key from $DEEPSEEK_API_KEY)
+provider: deepseek (deepseek) model deepseek-v4-flash (api key from $FAKE_DEEPSEEK_API_KEY)
 warning: expert consultation requires local Ollama multi-model inventory; disabled for remote provider "deepseek"

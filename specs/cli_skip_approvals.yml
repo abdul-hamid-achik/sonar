@@ -6,7 +6,16 @@ intent: |
     skipped while host and tool boundaries remain visible. It does not silently
     select AUTO authority.
 target:
-    cmd: ["./bin/sonar", "--skip-approvals"]
+    # Driven through the fake DeepSeek fixture. Pointing at the real
+    # binary made this spec depend on an ambient DEEPSEEK_API_KEY: it
+    # passed where one was exported and exited 1 in CI, and even with a
+    # placeholder it pinged api.deepseek.com for a 401. See
+    # specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/skip-approvals-protocol.txt"
+        - "--skip-approvals"
     cwd: "."
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/skip-approvals-home"
@@ -18,7 +27,7 @@ terminal:
     rows: 28
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/skip-approvals-home .glyphrun/tmp/skip-approvals-agents && mkdir -p .glyphrun/tmp/skip-approvals-home/.config/sonar .glyphrun/tmp/skip-approvals-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/skip-approvals-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/skip-approvals-protocol.txt .glyphrun/tmp/skip-approvals-home .glyphrun/tmp/skip-approvals-agents && mkdir -p .glyphrun/tmp/skip-approvals-home/.config/sonar .glyphrun/tmp/skip-approvals-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/skip-approvals-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
 steps:
