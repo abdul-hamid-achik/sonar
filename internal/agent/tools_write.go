@@ -394,10 +394,139 @@ func applyPatch(content, patch string) (string, error) {
 	}
 
 	if !applied {
-		return "", errors.New("patch contains no hunks: no line matched the required \"@@ -start,count +start,count @@\" header. Prefer the old_string/new_string arguments, which replace exact text and need no headers or line numbers")
+		// No hunk header matched anywhere. Before giving up, try the body
+		// as a header-less diff anchored to content rather than to line
+		// numbers. This cannot interfere with header-driven application:
+		// it runs only when the patch contained no usable header at all.
+		anchored, err := applyHeaderlessPatch(source, patchLines)
+		if err != nil {
+			return "", err
+		}
+		return strings.Join(anchored, "\n"), nil
 	}
 	result = append(result, source[sourcePos:]...)
 	return strings.Join(result, "\n"), nil
+}
+
+// errPatchNoHunks reports a patch argument that is not a unified diff at all.
+// It names the arguments that need neither headers nor line numbers, because
+// this error is read by the model that must produce the next attempt.
+var errPatchNoHunks = errors.New(`patch contains no hunks: no line matched the required "@@ -start,count +start,count @@" header, and the body is not a bare diff either. Prefer the old_string/new_string arguments, which replace exact text and need no headers or line numbers`)
+
+// maxHeaderlessAnchorCells bounds the cost of locating a header-less hunk.
+const maxHeaderlessAnchorCells = 4_000_000
+
+// applyHeaderlessPatch applies a diff body that carries no @@ header, which
+// is the most common shape behind a "patch contains no hunks" failure. The
+// context and removed lines are the anchor: they must occur in exactly one
+// place in the file. Zero or several occurrences are refused for the same
+// reason an ambiguous old_string is refused, so this tolerance can never move
+// an edit to a location the model did not actually name.
+func applyHeaderlessPatch(source, patchLines []string) ([]string, error) {
+	oldLines, newLines, err := parseHeaderlessHunkBody(patchLines)
+	if err != nil {
+		return nil, err
+	}
+	if len(oldLines) > len(source) {
+		return nil, errors.New("patch body does not match the file: it has more context and removed lines than the file has lines. Read the file again, or use the old_string/new_string arguments")
+	}
+	if len(source) > maxHeaderlessAnchorCells/len(oldLines) {
+		return nil, errors.New("patch has no @@ header and the file is too large to locate the hunk by content. Add the @@ -start,count +start,count @@ header, or use the old_string/new_string arguments")
+	}
+
+	matches, at := 0, 0
+	for start := 0; start+len(oldLines) <= len(source); start++ {
+		matched := true
+		for offset, want := range oldLines {
+			if source[start+offset] != want {
+				matched = false
+				break
+			}
+		}
+		if !matched {
+			continue
+		}
+		matches++
+		if matches > 1 {
+			return nil, fmt.Errorf("patch has no @@ header and its context and removed lines appear in %d places, so the intended one is ambiguous and no edit was made. Add surrounding context lines, or use the old_string/new_string arguments", matches)
+		}
+		at = start
+	}
+	if matches == 0 {
+		return nil, errors.New("patch body does not match the file: its context and removed lines do not appear anywhere. Read the file again and copy the exact lines, or use the old_string/new_string arguments")
+	}
+
+	result := make([]string, 0, len(source)-len(oldLines)+len(newLines))
+	result = append(result, source[:at]...)
+	result = append(result, newLines...)
+	result = append(result, source[at+len(oldLines):]...)
+	return result, nil
+}
+
+// parseHeaderlessHunkBody splits a header-less diff body into the lines it
+// expects to find and the lines that replace them. Anything that is not a
+// diff marker line, a diff preamble, or a code fence makes the whole argument
+// something other than a patch.
+func parseHeaderlessHunkBody(patchLines []string) (oldLines, newLines []string, err error) {
+	body, changed := false, false
+	for index, line := range patchLines {
+		if strings.HasPrefix(line, "\\ No newline at end of file") {
+			continue
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "```") {
+			continue
+		}
+		// File headers are only headers before the body begins; afterwards a
+		// "--- " line is an ordinary removal of a line that starts with two
+		// dashes.
+		if !body && isDiffPreambleLine(line) {
+			continue
+		}
+		if line == "" {
+			if index == len(patchLines)-1 {
+				break
+			}
+			if !body {
+				continue
+			}
+			// A context line for a blank source line, whose single trailing
+			// space editors and models routinely strip.
+			line = " "
+		}
+		switch line[0] {
+		case ' ':
+			oldLines = append(oldLines, line[1:])
+			newLines = append(newLines, line[1:])
+		case '-':
+			oldLines = append(oldLines, line[1:])
+			changed = true
+		case '+':
+			newLines = append(newLines, line[1:])
+			changed = true
+		default:
+			return nil, nil, errPatchNoHunks
+		}
+		body = true
+	}
+	if !body {
+		return nil, nil, errPatchNoHunks
+	}
+	if !changed {
+		return nil, nil, errors.New("patch adds and removes nothing, so it would change nothing")
+	}
+	if len(oldLines) == 0 {
+		return nil, nil, errors.New("patch has no @@ header and only added lines, so there is nothing to locate it by. Include the surrounding unchanged lines as context, or use the old_string/new_string arguments to name the exact insertion point")
+	}
+	return oldLines, newLines, nil
+}
+
+func isDiffPreambleLine(line string) bool {
+	for _, prefix := range []string{"--- ", "+++ ", "diff --git ", "index "} {
+		if strings.HasPrefix(line, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // patchMismatchSnippet bounds a patch/source line before it is quoted into a

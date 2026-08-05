@@ -637,19 +637,6 @@ func TestReplacementEditRecoversRealPatchFailures(t *testing.T) {
 		wantInFile string
 	}{
 		{
-			// "error applying patch: patch contains no hunks" (4x, the
-			// dominant failure): the model emitted a diff body with no
-			// @@ header at all, so nothing was applied.
-			name:    "patch contains no hunks",
-			patch:   "-\treturn writeSnapshot(providers, path)\n+\treturn writeSnapshot(providers, path, force)",
-			wantErr: "patch contains no hunks",
-			edit: replacementEdit{
-				oldString: "\treturn writeSnapshot(providers, path)\n",
-				newString: "\treturn writeSnapshot(providers, path, force)\n",
-			},
-			wantInFile: "\treturn writeSnapshot(providers, path, force)\n",
-		},
-		{
 			// patch context mismatch at old line 83: expected
 			// "\treturn writeSnapshot(providers, path)", found <empty line>.
 			// The model counted from a stale copy of the file, so its
@@ -730,6 +717,123 @@ func TestReplacementEditSurvivesItsOwnEarlierEdit(t *testing.T) {
 	}
 	want := "package main\n\nfunc a() {\n\t// first edit inserts lines\n\treturn\n}\n\nfunc b() { return }\n"
 	if string(data) != want {
+		t.Fatalf("file = %q, want %q", data, want)
+	}
+}
+
+// TestApplyPatchAnchorsHeaderlessBodyToContent covers the recorded dominant
+// failure, "error applying patch: patch contains no hunks" (4 of 7 failures
+// in the latest session): the model emitted diff lines with no @@ header at
+// all. A body like that still names its target unambiguously whenever its
+// context and removed lines occur exactly once, so it is anchored by content
+// rather than rejected. Ambiguity is still refused.
+func TestApplyPatchAnchorsHeaderlessBodyToContent(t *testing.T) {
+	source := strings.Join([]string{
+		"package catalog",
+		"",
+		"func refresh(providers []Provider, path string) error {",
+		"\tif len(providers) == 0 {",
+		"\t\treturn nil",
+		"\t}",
+		"\treturn writeSnapshot(providers, path)",
+		"}",
+		"",
+	}, "\n")
+
+	tests := []struct {
+		name         string
+		content      string
+		patch        string
+		want         string
+		wantErrParts []string
+	}{
+		{
+			name:    "bare removal and addition anchor to the only match",
+			content: source,
+			patch:   "-\treturn writeSnapshot(providers, path)\n+\treturn writeSnapshot(providers, path, force)",
+			want:    strings.Replace(source, "\treturn writeSnapshot(providers, path)", "\treturn writeSnapshot(providers, path, force)", 1),
+		},
+		{
+			name:    "file headers and a code fence are tolerated around the body",
+			content: source,
+			patch:   "```diff\n--- a/refresh.go\n+++ b/refresh.go\n \tif len(providers) == 0 {\n-\t\treturn nil\n+\t\treturn errNoProviders\n \t}\n```",
+			want:    strings.Replace(source, "\t\treturn nil", "\t\treturn errNoProviders", 1),
+		},
+		{
+			name:    "context lines disambiguate a repeated removal",
+			content: "a\nx\nb\na\nx\nc\n",
+			patch:   "-x\n+X\n c",
+			want:    "a\nx\nb\na\nX\nc\n",
+		},
+		{
+			name:         "a repeated body without context is refused",
+			content:      "a\nx\nb\na\nx\nc\n",
+			patch:        "-x\n+X",
+			wantErrParts: []string{"appear in 2 places", "ambiguous", "old_string/new_string"},
+		},
+		{
+			name:         "a body that matches nothing is refused",
+			content:      source,
+			patch:        "-\treturn writeSnapshot(providers)\n+\treturn writeSnapshot(providers, path)",
+			wantErrParts: []string{"do not appear anywhere", "old_string/new_string"},
+		},
+		{
+			name:         "additions with no context cannot be located",
+			content:      source,
+			patch:        "+// added\n+// lines",
+			wantErrParts: []string{"only added lines", "old_string/new_string"},
+		},
+		{
+			name:         "prose is not a patch",
+			content:      source,
+			patch:        "replace the writeSnapshot call so it takes force",
+			wantErrParts: []string{"patch contains no hunks", "old_string", "new_string"},
+		},
+		{
+			name:         "a context-only body changes nothing",
+			content:      source,
+			patch:        " package catalog\n",
+			wantErrParts: []string{"would change nothing"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := applyPatch(tt.content, tt.patch)
+			if len(tt.wantErrParts) > 0 {
+				if err == nil {
+					t.Fatalf("expected refusal, got content:\n%s", got)
+				}
+				for _, part := range tt.wantErrParts {
+					if !strings.Contains(err.Error(), part) {
+						t.Fatalf("error %q does not contain %q", err.Error(), part)
+					}
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("applyPatch: unexpected error: %v", err)
+			}
+			if got != tt.want {
+				t.Fatalf("content = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// TestHandleEditAppliesHeaderlessPatchEndToEnd proves the anchored body
+// reaches disk through the ordinary edit path, receipt included.
+func TestHandleEditAppliesHeaderlessPatchEndToEnd(t *testing.T) {
+	ag, path := newEditWorkspace(t, "c.txt", "one\ntwo\nthree\n")
+	result, isErr := ag.handleEdit(map[string]any{"path": "c.txt", "patch": "-two\n+TWO"})
+	if isErr {
+		t.Fatalf("header-less patch failed: %s", result)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "one\nTWO\nthree\n"; string(data) != want {
 		t.Fatalf("file = %q, want %q", data, want)
 	}
 }
