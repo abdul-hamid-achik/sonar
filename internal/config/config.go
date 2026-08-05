@@ -128,6 +128,47 @@ type ToolsConfig struct {
 	MaxGrepResults    int    `yaml:"max_grep_results,omitempty"`
 	MaxIterations     int    `yaml:"max_iterations,omitempty"`
 	AutoMaxIterations int    `yaml:"auto_max_iterations,omitempty"`
+	// AutoMaxSegments and AutoMaxWallTime bound a complete AUTO turn, not one
+	// provider segment. auto_max_iterations is the per-segment watchdog; AUTO
+	// chains segments after it fires, so the reachable amount of work is
+	// iterations x segments, capped by wall time.
+	//
+	// These were host constants (8 segments, 90 minutes), which made an
+	// unattended job of a few hours impossible to configure at any value of
+	// auto_max_iterations. They are settings because the right ceiling depends
+	// on what the run costs: a local Ollama model bounded only by patience is
+	// a different decision from a metered hosted provider.
+	//
+	// Zero keeps the built-in default. The stall guard and the goal budgets
+	// still apply; raising these does not make a stuck run run longer.
+	AutoMaxSegments int    `yaml:"auto_max_segments,omitempty"`
+	AutoMaxWallTime string `yaml:"auto_max_wall_time,omitempty"` // e.g. "90m", "6h"
+}
+
+// AUTO turn ceilings. The defaults are unchanged from the constants they
+// replaced, so an existing configuration behaves exactly as before.
+const (
+	DefaultAutoMaxSegments = 8
+	DefaultAutoMaxWallTime = 90 * time.Minute
+	// MaxAutoWallTime is a backstop, not a recommendation. An unattended run
+	// that has gone wrong should still end on its own, and a value beyond a
+	// day is far more likely to be a typo than an intention.
+	MaxAutoWallTime    = 24 * time.Hour
+	MaxAutoMaxSegments = 512
+)
+
+// AutoTurnCeilings returns the effective whole-turn AUTO budget. Validation has
+// already accepted the configured values.
+func (t ToolsConfig) AutoTurnCeilings() (segments int, wallTime time.Duration) {
+	segments = DefaultAutoMaxSegments
+	if t.AutoMaxSegments > 0 {
+		segments = t.AutoMaxSegments
+	}
+	wallTime = DefaultAutoMaxWallTime
+	if parsed, err := time.ParseDuration(strings.TrimSpace(t.AutoMaxWallTime)); err == nil && parsed > 0 {
+		wallTime = parsed
+	}
+	return segments, wallTime
 }
 
 // MaxMCPCallTimeout bounds tools.mcp_timeout. A hung server must still fail
@@ -616,6 +657,24 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("config: tools.mcp_timeout must be positive, got %s", c.Tools.MCPTimeout)
 		} else if d > MaxMCPCallTimeout {
 			return fmt.Errorf("config: tools.mcp_timeout %s exceeds the %s ceiling", c.Tools.MCPTimeout, MaxMCPCallTimeout)
+		}
+	}
+	if c.Tools.AutoMaxSegments < 0 {
+		return fmt.Errorf("config: tools.auto_max_segments must not be negative, got %d", c.Tools.AutoMaxSegments)
+	}
+	if c.Tools.AutoMaxSegments > MaxAutoMaxSegments {
+		return fmt.Errorf("config: tools.auto_max_segments %d exceeds the %d ceiling", c.Tools.AutoMaxSegments, MaxAutoMaxSegments)
+	}
+	if raw := strings.TrimSpace(c.Tools.AutoMaxWallTime); raw != "" {
+		d, err := time.ParseDuration(raw)
+		switch {
+		case err != nil:
+			return fmt.Errorf("config: invalid tools.auto_max_wall_time %q: %w", raw, err)
+		case d <= 0:
+			return fmt.Errorf("config: tools.auto_max_wall_time must be positive, got %s", raw)
+		case d > MaxAutoWallTime:
+			// An unattended run that has gone wrong must still end by itself.
+			return fmt.Errorf("config: tools.auto_max_wall_time %s exceeds the %s ceiling", raw, MaxAutoWallTime)
 		}
 	}
 	if !c.Continuations.Mode.Valid() {

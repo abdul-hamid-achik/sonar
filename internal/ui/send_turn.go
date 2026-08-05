@@ -195,14 +195,15 @@ func (m *Model) sendToAgentTurnPresentedWithAttachments(
 	options := agent.TurnOptions{
 		Limits: limits, Capability: capability, Continuation: continuation,
 	}
-	options.Limits = defaultPlainAutoTurnLimits(options.Limits, authority)
+	autoSegments, autoWallTime := m.autoTurnCeilings()
+	options.Limits = defaultPlainAutoTurnLimits(options.Limits, authority, autoWallTime)
 	options.Limits = normalizeLogicalTurnLimits(options.Limits, m.nowTime())
 	m.turnRunContext = ctx
 	m.turnRunOptions = options
 	m.turnLogicalID = turnID
 	m.turnSegmentID = turnID
 	m.turnAuthority = authority
-	m.autoCheckpoints.reset(turnID, m.turnStartedAt)
+	m.autoCheckpoints.reset(turnID, m.turnStartedAt, autoSegments, autoWallTime)
 
 	p := m.program
 

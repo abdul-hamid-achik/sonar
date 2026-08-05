@@ -10,29 +10,59 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
+	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/execution"
 )
 
-const (
-	// Each agent segment already has the AUTO iteration watchdog. This second,
-	// host-owned ceiling bounds a complete conversational turn while allowing
-	// long productive jobs to cross several invisible implementation segments.
-	maxAutoCheckpointSegments = 8
-	maxAutoCheckpointElapsed  = 90 * time.Minute
-)
+// Each agent segment already has the AUTO iteration watchdog. This second,
+// host-owned ceiling bounds a complete conversational turn while allowing long
+// productive jobs to cross several invisible implementation segments.
+//
+// Both dimensions come from tools.auto_max_segments and tools.auto_max_wall_time
+// so an unattended job can be given hours. They were constants, which made that
+// impossible to express at any value of auto_max_iterations — that setting
+// bounds one segment, and the whole-turn ceiling silently overrode it.
+// config.DefaultAutoMaxSegments / DefaultAutoMaxWallTime hold the former
+// constants, so an unconfigured harness behaves exactly as before.
 
 type autoCheckpointSupervisor struct {
 	logicalTurnID     string
 	startedAt         time.Time
 	segmentsContinued int
 	lastDigest        string
+	maxSegments       int
+	maxElapsed        time.Duration
 }
 
-func (s *autoCheckpointSupervisor) reset(logicalTurnID string, startedAt time.Time) {
+func (s *autoCheckpointSupervisor) reset(logicalTurnID string, startedAt time.Time, maxSegments int, maxElapsed time.Duration) {
+	if maxSegments <= 0 {
+		maxSegments = config.DefaultAutoMaxSegments
+	}
+	if maxElapsed <= 0 {
+		maxElapsed = config.DefaultAutoMaxWallTime
+	}
 	*s = autoCheckpointSupervisor{
 		logicalTurnID: strings.TrimSpace(logicalTurnID),
 		startedAt:     startedAt,
+		maxSegments:   maxSegments,
+		maxElapsed:    maxElapsed,
 	}
+}
+
+// segmentCeiling and elapsedCeiling answer for a zero-valued supervisor, which
+// is what a test fixture or a pre-reset frame holds.
+func (s *autoCheckpointSupervisor) segmentCeiling() int {
+	if s == nil || s.maxSegments <= 0 {
+		return config.DefaultAutoMaxSegments
+	}
+	return s.maxSegments
+}
+
+func (s *autoCheckpointSupervisor) elapsedCeiling() time.Duration {
+	if s == nil || s.maxElapsed <= 0 {
+		return config.DefaultAutoMaxWallTime
+	}
+	return s.maxElapsed
 }
 
 func (s *autoCheckpointSupervisor) clear() {
@@ -62,11 +92,11 @@ func (s *autoCheckpointSupervisor) admit(
 		// still bound it.
 		return errors.New("the last AUTO segment repeated without new progress")
 	}
-	if s.segmentsContinued >= maxAutoCheckpointSegments {
-		return fmt.Errorf("the %d-segment AUTO continuation budget was exhausted", maxAutoCheckpointSegments)
+	if s.segmentsContinued >= s.segmentCeiling() {
+		return fmt.Errorf("the %d-segment AUTO continuation budget was exhausted", s.segmentCeiling())
 	}
-	if !s.startedAt.IsZero() && now.Sub(s.startedAt) >= maxAutoCheckpointElapsed {
-		return fmt.Errorf("the %s AUTO continuation time budget was exhausted", maxAutoCheckpointElapsed)
+	if !s.startedAt.IsZero() && now.Sub(s.startedAt) >= s.elapsedCeiling() {
+		return fmt.Errorf("the %s AUTO continuation time budget was exhausted", s.elapsedCeiling())
 	}
 	s.segmentsContinued++
 	s.lastDigest = digest
@@ -79,14 +109,17 @@ func (s *autoCheckpointSupervisor) admit(
 // receives an answer — could hold the logical turn open forever. Goals and
 // other bounded callers keep their own budgets; interactive NORMAL and PLAN
 // turns stay unbounded because the user is watching them.
-func defaultPlainAutoTurnLimits(limits agent.TurnLimits, authority Mode) agent.TurnLimits {
+func defaultPlainAutoTurnLimits(limits agent.TurnLimits, authority Mode, wallTime time.Duration) agent.TurnLimits {
 	if authority != ModeAuto {
 		return limits
 	}
 	if limits.MaxEvalTokens > 0 || !limits.Deadline.IsZero() || limits.MaxWallTime > 0 {
 		return limits
 	}
-	limits.MaxWallTime = maxAutoCheckpointElapsed
+	if wallTime <= 0 {
+		wallTime = config.DefaultAutoMaxWallTime
+	}
+	limits.MaxWallTime = wallTime
 	return limits
 }
 
@@ -235,4 +268,13 @@ func (m *Model) handleAutoIterationCheckpoint(message AgentDoneMsg) (tea.Cmd, bo
 		m.agent, m.program, m.outputDetails, m.turnRunContext, logicalTurnID, newSegmentID, m.turnRunOptions,
 	)
 	return tea.Batch(m.startActivityCmd(), command), true, nil
+}
+
+// autoTurnCeilings resolves the configured whole-turn AUTO budget, falling back
+// to the built-in defaults when no agent is attached (tests, early frames).
+func (m *Model) autoTurnCeilings() (segments int, wallTime time.Duration) {
+	if m != nil && m.agent != nil {
+		return m.agent.AutoTurnCeilings()
+	}
+	return config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime
 }

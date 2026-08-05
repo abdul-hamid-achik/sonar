@@ -1060,6 +1060,18 @@ func (a *Agent) MaxIterationsForAuthority(mode AuthorityMode) int {
 	return a.MaxIterations()
 }
 
+// AutoTurnCeilings returns the whole-turn AUTO budget: how many segments may
+// chain after the per-segment iteration watchdog fires, and the wall-clock
+// ceiling on the logical turn. The host supervisor owns enforcement; this is
+// only the configured value, resolved in one place so the UI does not reach
+// into ToolsConfig itself.
+//
+// Read without a lock, matching MaxIterations and ToolTimeout beside it:
+// toolsConfig is written once during startup, before the TUI runs a turn.
+func (a *Agent) AutoTurnCeilings() (segments int, wallTime time.Duration) {
+	return a.toolsConfig.AutoTurnCeilings()
+}
+
 // ToolTimeout returns the configured tool timeout, or default if not set.
 func (a *Agent) ToolTimeout() time.Duration {
 	if a.toolsConfig.Timeout != "" {

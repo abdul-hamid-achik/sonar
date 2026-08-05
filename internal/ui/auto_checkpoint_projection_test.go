@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
+	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/db"
 	"github.com/abdul-hamid-achik/sonar/internal/execution"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
@@ -105,7 +106,7 @@ func (f *autoCheckpointProjectionFixture) armAutoSegment(started time.Time) {
 	m.turnAuthority = ModeAuto
 	m.turnRunContext = context.Background()
 	m.turnRunOptions = agent.TurnOptions{}
-	m.autoCheckpoints.reset("turn-root", started)
+	m.autoCheckpoints.reset("turn-root", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
 }
 
 func appendCompletedEffectfulExecution(

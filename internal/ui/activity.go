@@ -147,7 +147,7 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 		return workingActivity{
 			label:        "Continuing automatically",
 			compactLabel: "AUTO continuing",
-			detail:       fmt.Sprintf("checkpoint %d/%d", m.autoCheckpoints.segmentsContinued, maxAutoCheckpointSegments),
+			detail:       fmt.Sprintf("checkpoint %d/%d", m.autoCheckpoints.segmentsContinued, m.autoCheckpoints.segmentCeiling()),
 			cancellable:  true,
 		}, true
 	case m.capabilityRoute != nil && (m.state == StateWaiting || m.state == StateStreaming):

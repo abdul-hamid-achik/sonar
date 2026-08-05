@@ -97,7 +97,22 @@ tools:
   # mcp_timeout: 5m
   max_grep_results: 500
   max_iterations: 10
+  # auto_max_iterations bounds ONE provider segment. When it fires, AUTO
+  # checkpoints and starts another segment, so the work an AUTO turn can reach
+  # is iterations x segments — bounded by the two ceilings below.
   auto_max_iterations: 40
+  # Whole-turn AUTO ceilings. These are what make an unattended job of several
+  # hours possible; raising auto_max_iterations alone cannot, because the
+  # whole-turn ceiling applies on top of it.
+  #
+  # Defaults are 8 segments and 90m, so leaving these unset behaves exactly as
+  # before. Raise them for long unattended work, and remember that a metered
+  # hosted provider bills for every one of those segments.
+  #
+  # Neither weakens the stall guard: a segment that repeats the previous work
+  # set with no verified effects still ends the run, whatever the ceiling.
+  # auto_max_segments: 40
+  # auto_max_wall_time: 6h
 
 # Typed continuation actions are suggestions by default. auto_read_only may
 # follow only exact, fully specified, unblocked, registry-validated read-only

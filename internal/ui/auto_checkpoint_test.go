@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
+	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/goal"
 )
 
@@ -31,7 +32,7 @@ func TestGoalTurnAutoCheckpointSettlesThroughGoalRuntimeNotSupervisor(t *testing
 	m.turnSegmentID = "turn_goal_checkpoint"
 	m.turnAuthority = ModeAuto
 	m.turnRunContext = context.Background()
-	m.autoCheckpoints.reset("turn_goal_checkpoint", started)
+	m.autoCheckpoints.reset("turn_goal_checkpoint", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
 
 	updated, _ := m.Update(AgentDoneMsg{
 		TurnID: "turn_goal_checkpoint", SegmentTurnID: "turn_goal_checkpoint",
@@ -71,7 +72,7 @@ func TestGoalTurnAutoCheckpointSettlesThroughGoalRuntimeNotSupervisor(t *testing
 func TestAutoCheckpointSupervisorRequiresNewBoundedProgress(t *testing.T) {
 	started := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	var supervisor autoCheckpointSupervisor
-	supervisor.reset("turn-root", started)
+	supervisor.reset("turn-root", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
 
 	first := &agent.AutoIterationCheckpointError{ProgressDigest: "digest-a"}
 	if err := supervisor.admit("turn-root", first, started.Add(time.Minute)); err != nil {
@@ -86,8 +87,8 @@ func TestAutoCheckpointSupervisorRequiresNewBoundedProgress(t *testing.T) {
 func TestAutoCheckpointSupervisorBoundsSegmentsAndElapsedTime(t *testing.T) {
 	started := time.Date(2026, 7, 16, 12, 0, 0, 0, time.UTC)
 	var supervisor autoCheckpointSupervisor
-	supervisor.reset("turn-root", started)
-	for index := 0; index < maxAutoCheckpointSegments; index++ {
+	supervisor.reset("turn-root", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
+	for index := 0; index < config.DefaultAutoMaxSegments; index++ {
 		checkpoint := &agent.AutoIterationCheckpointError{ProgressDigest: string(rune('a' + index))}
 		if err := supervisor.admit("turn-root", checkpoint, started.Add(time.Duration(index+1)*time.Minute)); err != nil {
 			t.Fatalf("checkpoint %d: %v", index, err)
@@ -98,8 +99,8 @@ func TestAutoCheckpointSupervisorBoundsSegmentsAndElapsedTime(t *testing.T) {
 		t.Fatalf("segment ceiling error = %v", err)
 	}
 
-	supervisor.reset("turn-root", started)
-	if err := supervisor.admit("turn-root", &agent.AutoIterationCheckpointError{ProgressDigest: "late"}, started.Add(maxAutoCheckpointElapsed)); err == nil ||
+	supervisor.reset("turn-root", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
+	if err := supervisor.admit("turn-root", &agent.AutoIterationCheckpointError{ProgressDigest: "late"}, started.Add(config.DefaultAutoMaxWallTime)); err == nil ||
 		!strings.Contains(err.Error(), "time budget") {
 		t.Fatalf("elapsed ceiling error = %v", err)
 	}
@@ -107,21 +108,21 @@ func TestAutoCheckpointSupervisorBoundsSegmentsAndElapsedTime(t *testing.T) {
 
 func TestDefaultPlainAutoTurnLimitsBoundsOnlyUnboundedAuto(t *testing.T) {
 	unbounded := agent.TurnLimits{}
-	if got := defaultPlainAutoTurnLimits(unbounded, ModeAuto); got.MaxWallTime != maxAutoCheckpointElapsed {
-		t.Fatalf("plain AUTO wall ceiling = %v, want %v", got.MaxWallTime, maxAutoCheckpointElapsed)
+	if got := defaultPlainAutoTurnLimits(unbounded, ModeAuto, config.DefaultAutoMaxWallTime); got.MaxWallTime != config.DefaultAutoMaxWallTime {
+		t.Fatalf("plain AUTO wall ceiling = %v, want %v", got.MaxWallTime, config.DefaultAutoMaxWallTime)
 	}
-	if got := defaultPlainAutoTurnLimits(unbounded, ModeNormal); got != (agent.TurnLimits{}) {
+	if got := defaultPlainAutoTurnLimits(unbounded, ModeNormal, config.DefaultAutoMaxWallTime); got != (agent.TurnLimits{}) {
 		t.Fatalf("interactive NORMAL turn was bounded: %#v", got)
 	}
-	if got := defaultPlainAutoTurnLimits(unbounded, ModePlan); got != (agent.TurnLimits{}) {
+	if got := defaultPlainAutoTurnLimits(unbounded, ModePlan, config.DefaultAutoMaxWallTime); got != (agent.TurnLimits{}) {
 		t.Fatalf("interactive PLAN turn was bounded: %#v", got)
 	}
 	goalBounded := agent.TurnLimits{MaxEvalTokens: 500}
-	if got := defaultPlainAutoTurnLimits(goalBounded, ModeAuto); got != goalBounded {
+	if got := defaultPlainAutoTurnLimits(goalBounded, ModeAuto, config.DefaultAutoMaxWallTime); got != goalBounded {
 		t.Fatalf("already-bounded AUTO turn was rewritten: %#v", got)
 	}
 	deadlineBounded := agent.TurnLimits{Deadline: time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)}
-	if got := defaultPlainAutoTurnLimits(deadlineBounded, ModeAuto); got != deadlineBounded {
+	if got := defaultPlainAutoTurnLimits(deadlineBounded, ModeAuto, config.DefaultAutoMaxWallTime); got != deadlineBounded {
 		t.Fatalf("deadline-bounded AUTO turn was rewritten: %#v", got)
 	}
 }
@@ -129,7 +130,7 @@ func TestDefaultPlainAutoTurnLimitsBoundsOnlyUnboundedAuto(t *testing.T) {
 func TestAutoCheckpointSupervisorAllowsRepeatedEffectfulWork(t *testing.T) {
 	started := time.Date(2026, 7, 17, 12, 0, 0, 0, time.UTC)
 	var supervisor autoCheckpointSupervisor
-	supervisor.reset("turn-root", started)
+	supervisor.reset("turn-root", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
 
 	first := &agent.AutoIterationCheckpointError{ProgressDigest: "build-test-set", EffectfulSuccessfulCalls: 2}
 	if err := supervisor.admit("turn-root", first, started.Add(time.Minute)); err != nil {
@@ -169,7 +170,7 @@ func TestAgentDoneProductiveAutoCheckpointContinuesWithoutSettlement(t *testing.
 	m.turnAuthority = ModeAuto
 	m.turnRunContext = context.Background()
 	m.turnRunOptions = agent.TurnOptions{Limits: agent.TurnLimits{MaxEvalTokens: 100}}
-	m.autoCheckpoints.reset("turn-root", started)
+	m.autoCheckpoints.reset("turn-root", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
 	m.sessionTurnCount = 4
 	cancelled := false
 	m.cancel = func() { cancelled = true }
@@ -223,7 +224,7 @@ func TestAgentDoneRepeatedAutoCheckpointStopsAndSettles(t *testing.T) {
 	m.turnSegmentID = "turn-segment"
 	m.turnAuthority = ModeAuto
 	m.turnRunContext = context.Background()
-	m.autoCheckpoints.reset("turn-root", started)
+	m.autoCheckpoints.reset("turn-root", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
 	m.autoCheckpoints.lastDigest = "same-progress"
 	m.autoCheckpoints.segmentsContinued = 1
 
