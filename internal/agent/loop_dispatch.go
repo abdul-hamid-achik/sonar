@@ -426,12 +426,16 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 		default:
 			var toolResult *mcpPkg.ToolResult
 			var callErr error
+			// Tag the dispatch with this execution so the registry's trace line
+			// joins to the lifecycle trace instead of having to be matched by
+			// tool name and timing.
+			mcpCtx := mcpPkg.WithCallCorrelation(ctx, tracked.identity.ExecutionID)
 			if t.hostContinuationBatch {
 				toolResult, callErr = t.a.registry.CallToolAtEpoch(
-					ctx, t.activeAutoContinuation.registryEpoch, tc.Name, cloneApprovalArguments(tc.Arguments),
+					mcpCtx, t.activeAutoContinuation.registryEpoch, tc.Name, cloneApprovalArguments(tc.Arguments),
 				)
 			} else {
-				toolResult, callErr = t.a.registry.CallTool(ctx, tc.Name, tc.Arguments)
+				toolResult, callErr = t.a.registry.CallTool(mcpCtx, tc.Name, tc.Arguments)
 			}
 			if callErr != nil {
 				result = mcpDispatchErrorReceipt(tc.Name, callErr)

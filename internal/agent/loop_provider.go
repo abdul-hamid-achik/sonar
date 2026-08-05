@@ -189,7 +189,22 @@ func (t *turnRuntime) providerStage(ctx context.Context, i int) (string, []llm.T
 				return "", nil, stageNextIteration, nil
 			}
 			if t.lg != nil {
-				t.lg.Error("llm error", "iter", i, "err", boundaryErr)
+				// A provider failure used to log only the error text. Reading a
+				// session then meant guessing at four different investigations:
+				// a rejected key, throttling, a malformed request, or their
+				// server breaking. The status separates them, and the remote
+				// flag says whether the prompt left the machine at all.
+				fields := []any{
+					"iter", i,
+					"model", t.turnModel,
+					"ms", time.Since(llmStart).Milliseconds(),
+					"remote", errors.Is(boundaryErr, ErrRemoteInferenceFailed),
+					"err", boundaryErr,
+				}
+				if status, ok := llm.ProviderHTTPStatus(err); ok {
+					fields = append(fields, "status", status)
+				}
+				t.lg.Error("llm error", fields...)
 			}
 			// Show error and provide a fallback response
 			t.out.Error(fmt.Sprintf("LLM error: %v", boundaryErr))
@@ -229,7 +244,11 @@ func (t *turnRuntime) providerStage(ctx context.Context, i int) (string, []llm.T
 			t.rebuildSystem(ctx)
 		}
 		if t.lg != nil {
-			t.lg.Info("llm response", "iter", i, "ms", time.Since(llmStart).Milliseconds(),
+			// model belongs on the success line too: a session can switch models
+			// mid-run, and "which model produced this" is the first question
+			// asked of any surprising response.
+			t.lg.Info("llm response", "iter", i, "model", t.turnModel,
+				"ms", time.Since(llmStart).Milliseconds(),
 				"prompt_tokens", t.lastPromptTokens, "eval_tokens", t.lastEvalTokens, "tool_calls", len(toolCalls))
 		}
 	}

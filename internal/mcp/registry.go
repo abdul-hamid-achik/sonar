@@ -12,6 +12,7 @@ import (
 
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
+	"github.com/charmbracelet/log"
 )
 
 // FailedServer records an MCP server that failed to connect.
@@ -29,7 +30,12 @@ type ServerStatus struct {
 }
 
 type toolRoute struct {
-	client     toolCaller
+	client toolCaller
+	// server is the connection this tool dispatches to. The exposed name is
+	// usually namespaced with it, but not always — mcphub strips a redundant
+	// self-prefix when publishing — so deriving it from the name would be
+	// wrong for exactly the gateway that makes a trace most worth reading.
+	server     string
 	remoteName string
 }
 
@@ -52,6 +58,7 @@ var (
 // Registry manages multiple MCP server connections and routes tool calls.
 type Registry struct {
 	mu               sync.RWMutex
+	logger           *log.Logger
 	clients          map[string]*MCPClient
 	toolMap          map[string]toolRoute // exposed tool name -> server and remote name
 	serverTools      map[string][]llm.ToolDef
@@ -626,7 +633,12 @@ func (r *Registry) callTool(ctx context.Context, expectedEpoch uint64, requireEp
 	callCtx, cancel := context.WithTimeout(opCtx, timeout)
 	defer cancel()
 
+	started := time.Now()
 	result, err := route.client.CallTool(callCtx, route.remoteName, args)
+	traceCallOutcome(
+		r.traceLogger(), callCorrelation(ctx),
+		name, route.server, route.remoteName, time.Since(started), result, err,
+	)
 	if err != nil && callCtx.Err() != nil {
 		// Preserve the local deadline/cancellation in the error chain. Callers
 		// must treat a dispatched MCP mutation as outcome-unknown, not retry it
@@ -830,7 +842,7 @@ func (r *Registry) rebuildToolMapLocked() {
 		client := r.clients[name]
 		for _, def := range r.serverTools[name] {
 			remoteName := strings.TrimPrefix(def.Name, name+"__")
-			toolMap[def.Name] = toolRoute{client: client, remoteName: remoteName}
+			toolMap[def.Name] = toolRoute{client: client, server: name, remoteName: remoteName}
 		}
 	}
 	r.toolMap = toolMap

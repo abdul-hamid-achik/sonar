@@ -943,6 +943,9 @@ func run() int {
 
 	if logger != nil {
 		ag.SetLogger(logger)
+		// The registry is built before the logger exists, so it is handed the
+		// logger here rather than at construction.
+		registry.SetLogger(logger)
 	}
 
 	m := ui.New(ag, cmdReg, skillMgr, completer, modelManager, router, logger)
