@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/abdul-hamid-achik/sonar/internal/catalog"
+	"github.com/abdul-hamid-achik/sonar/internal/config"
 )
 
 // AnthropicClient is a streaming chat adapter for the Anthropic Messages API
@@ -78,9 +79,13 @@ const (
 	// AnthropicBaseURL is the real Anthropic API endpoint. The catalog's
 	// "anthropic" entry names its api_endpoint as the template
 	// "$ANTHROPIC_API_ENDPOINT" (an optional self-hosted-proxy override), not
-	// a literal URL, so this is the fallback used whenever no override is
-	// configured.
-	AnthropicBaseURL = "https://api.anthropic.com"
+	// a literal URL, so a fallback is needed whenever no override is exported.
+	//
+	// It aliases config.AnthropicDefaultAPIEndpoint rather than repeating the
+	// URL: the config layer now substitutes that template for every provider,
+	// and two independently maintained copies of the same endpoint are exactly
+	// how a dialect fallback and a config default drift apart.
+	AnthropicBaseURL = config.AnthropicDefaultAPIEndpoint
 
 	// AnthropicAPIKeyEnv names the environment variable holding the official
 	// Anthropic API key. Only the name is ever configured; the value is read
@@ -129,10 +134,8 @@ func IsAnthropicFamilyProvider(providerType string) bool {
 //
 // baseURL is whatever the caller's configuration resolved. When it is empty,
 // or is an unresolved catalog template (Catwalk's "anthropic" entry names its
-// endpoint as the literal string "$ANTHROPIC_API_ENDPOINT" for callers that
-// substitute environment overrides — sonar's config layer does not, so an
-// unset override would otherwise reach here verbatim), this falls back to the
-// provider's real, doc-verified endpoint instead of guessing.
+// endpoint as the literal string "$ANTHROPIC_API_ENDPOINT"), this falls back to
+// the provider's real, doc-verified endpoint instead of guessing.
 func NewAnthropicProviderClient(providerID, baseURL, model, apiKey string) (*AnthropicClient, error) {
 	if strings.TrimSpace(apiKey) == "" {
 		envName := catalog.APIKeyEnv(catalog.ProviderID(providerID))
@@ -163,6 +166,19 @@ func NewAnthropicProviderClient(providerID, baseURL, model, apiKey string) (*Ant
 // defensive bound for the same class of catalog-derived integer.
 const anthropicMaxTokensCeiling = 1 << 24
 
+// anthropicFamilyBaseURL maps an absent or still-templated base URL onto the
+// provider's real endpoint.
+//
+// config.ProviderProfile.Resolve substitutes "$VAR" endpoint templates for
+// every catalog provider before a profile is validated, so the "$" branch here
+// is no longer the only thing between the catalog and a DNS failure. It is
+// deliberately kept as defence in depth: this dialect's constructors are
+// exported and reachable from callers that never consult the config layer
+// (direct construction, tests, any future embedding), and the function already
+// has to map an empty base URL onto a per-provider endpoint — the template
+// check is one condition inside code that exists regardless. Both layers are
+// now pinned by tests, so dropping either one fails the other's test rather
+// than surfacing as a name-resolution error in production.
 func anthropicFamilyBaseURL(providerID, baseURL string) string {
 	trimmed := strings.TrimSpace(baseURL)
 	if trimmed != "" && !strings.HasPrefix(trimmed, "$") {

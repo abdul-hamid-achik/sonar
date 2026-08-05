@@ -181,10 +181,120 @@ type providerDefaults struct {
 	ContextSize int
 }
 
+// Documented public endpoints for the catalog providers whose api_endpoint is
+// an environment-variable template rather than a URL.
+const (
+	// AnthropicDefaultAPIEndpoint is the public Anthropic Messages API host.
+	// internal/llm/anthropic.go's AnthropicBaseURL aliases this constant so the
+	// dialect's own fallback and the config layer's cannot drift apart.
+	AnthropicDefaultAPIEndpoint = "https://api.anthropic.com"
+
+	// OpenAIDefaultAPIEndpoint is the public OpenAI chat-completions host, which
+	// the generic OpenAI-compatible dialect already speaks.
+	OpenAIDefaultAPIEndpoint = "https://api.openai.com/v1"
+)
+
+// providerEndpointFallbacks answers one question: what URL does a provider use
+// when its catalog endpoint template resolves to nothing. It is a defaults
+// table, not an allowlist — a provider missing from it stays fully selectable
+// and simply has to be given a base_url. IsKnownProviderType remains the only
+// answer to whether a provider can be selected at all.
+//
+// Only providers with a single documented public endpoint appear here.
+//
+// Azure OpenAI is deliberately absent: its host is per-resource
+// (https://<resource>.openai.azure.com) and no default could be right for
+// anyone. Gemini is deliberately absent too — its native API is not
+// OpenAI-shaped and sonar has no Google dialect yet, so inventing an endpoint
+// would only move the failure from config load to the first request, which is
+// the exact failure mode this resolution step exists to remove.
+var providerEndpointFallbacks = map[string]string{
+	"anthropic": AnthropicDefaultAPIEndpoint,
+	"openai":    OpenAIDefaultAPIEndpoint,
+}
+
+// catalogEndpointEnvName reports the environment variable a catalog
+// api_endpoint template names ("$OPENAI_API_ENDPOINT" -> "OPENAI_API_ENDPOINT").
+//
+// isTemplate is true whenever the value is a template at all, including a
+// template this code cannot safely resolve (shell syntax, an empty name). In
+// that case name is empty and the caller must still treat the value as a
+// template rather than pass it through as a URL.
+func catalogEndpointEnvName(endpoint string) (name string, isTemplate bool) {
+	if !strings.HasPrefix(endpoint, "$") {
+		return "", false
+	}
+	name = strings.TrimPrefix(endpoint, "$")
+	if validateEnvVarName(name) != nil {
+		return "", true
+	}
+	return name, true
+}
+
+// resolveCatalogEndpoint turns a catalog api_endpoint into a usable base URL.
+//
+// Catwalk records four providers' endpoints as an environment-variable
+// template rather than a URL — "$ANTHROPIC_API_ENDPOINT",
+// "$OPENAI_API_ENDPOINT", "$GEMINI_API_ENDPOINT", "$AZURE_OPENAI_API_ENDPOINT"
+// — because the endpoint is either an operator override or, for Azure,
+// per-resource and known only to the operator. Copying that template verbatim
+// into a profile is not a harmless placeholder: "$" is a valid sub-delims host
+// character, so url.Parse("https://$OPENAI_API_ENDPOINT") succeeds and the
+// template clears both validateProviderProfile and parseProviderBaseURL, then
+// fails as a DNS lookup on the first real request. That reads as a network
+// outage, not as the configuration bug it is.
+//
+// Resolution happens here, once, so every provider benefits — a per-dialect
+// guard only ever rescues the dialects someone remembered to write one for.
+// A template resolves to its environment variable's value when that is set,
+// then to the provider's documented public endpoint, and otherwise to "".
+// Empty means absent: validateProviderProfile reports a missing base_url and
+// names the variable, at load time and out loud.
+//
+// The resolved value is never privileged. It lands in ProviderProfile.BaseURL
+// and passes through exactly the same validateProviderProfile URL checks as a
+// base_url typed into YAML, so an environment variable cannot become a way to
+// inject an unvalidated endpoint.
+func resolveCatalogEndpoint(providerType, endpoint string) string {
+	trimmed := strings.TrimSpace(endpoint)
+	envName, isTemplate := catalogEndpointEnvName(trimmed)
+	if !isTemplate {
+		return trimmed
+	}
+	if envName != "" {
+		if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
+			return value
+		}
+	}
+	return providerEndpointFallbacks[providerType]
+}
+
+// unresolvedEndpointHint names the environment variable behind a catalog
+// provider's endpoint template so a missing base_url reads as the unset
+// override it usually is, rather than as an unexplained requirement.
+func unresolvedEndpointHint(providerType string) string {
+	provider, ok := catalog.LookupProvider(catalog.ProviderID(providerType))
+	if !ok {
+		return ""
+	}
+	name, isTemplate := catalogEndpointEnvName(strings.TrimSpace(provider.APIEndpoint))
+	if !isTemplate || name == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		" (the catalog names its endpoint as the environment template $%s, which is unset; export it or set base_url)",
+		name,
+	)
+}
+
 // catalogProviderDefaults reads a provider's defaults from the embedded
 // catalog. It prefers the provider's small/fast default model: an interactive
 // coding agent pays per token, so the cheap tier is the better default and the
 // user can always pick the large one explicitly.
+//
+// The endpoint goes through resolveCatalogEndpoint rather than being copied
+// verbatim: some catalog entries record an environment-variable template where
+// a URL belongs, and a template must never reach a network client.
 func catalogProviderDefaults(providerType string) (providerDefaults, bool) {
 	id := catalog.ProviderID(providerType)
 	provider, ok := catalog.LookupProvider(id)
@@ -192,7 +302,7 @@ func catalogProviderDefaults(providerType string) (providerDefaults, bool) {
 		return providerDefaults{}, false
 	}
 	defaults := providerDefaults{
-		BaseURL:   strings.TrimSpace(provider.APIEndpoint),
+		BaseURL:   resolveCatalogEndpoint(providerType, provider.APIEndpoint),
 		APIKeyEnv: catalog.APIKeyEnv(id),
 		Model:     strings.TrimSpace(provider.DefaultSmallModelID),
 	}
@@ -480,7 +590,12 @@ func validateProviderProfile(name string, profile ProviderProfile) error {
 		}
 	}
 	if strings.TrimSpace(profile.BaseURL) == "" {
-		return fmt.Errorf("config: provider profile %q requires base_url for type %q", label, profile.Type)
+		return fmt.Errorf(
+			"config: provider profile %q requires base_url for type %q%s",
+			label,
+			profile.Type,
+			unresolvedEndpointHint(providerType),
+		)
 	}
 	raw := profile.BaseURL
 	if !strings.Contains(raw, "://") {
@@ -494,6 +609,19 @@ func validateProviderProfile(name string, profile ProviderProfile) error {
 		return fmt.Errorf(
 			"config: provider profile %q base_url must not contain user information, a query, or a fragment",
 			label,
+		)
+	}
+	// "$" is a legal sub-delims character in a URL host, so an unresolved
+	// "$OPENAI_API_ENDPOINT" parses cleanly and would only fail later, as a DNS
+	// error that reads like a network outage. No real host contains "$", so
+	// rejecting it here costs nothing and turns any template that escapes
+	// resolveCatalogEndpoint — or that a user wrote into YAML by hand — into a
+	// config error at load.
+	if strings.Contains(u.Host, "$") {
+		return fmt.Errorf(
+			"config: provider profile %q base_url looks like an unresolved environment template%s",
+			label,
+			unresolvedEndpointHint(providerType),
 		)
 	}
 	scheme := strings.ToLower(u.Scheme)
