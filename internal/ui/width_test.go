@@ -59,9 +59,12 @@ func TestWideTranscriptSeparatesReadableProseFromWorkWidth(t *testing.T) {
 			usedWidth = max(usedWidth, lipgloss.Width(line))
 		}
 	}
-	if usedWidth < 60 || usedWidth > ProseTargetCandidate {
-		t.Fatalf("wide assistant prose used %d columns; want a readable measure in [60,%d]:\n%s",
-			usedWidth, ProseTargetCandidate, rendered)
+	// Prose follows the pane unless ui.prose_width says otherwise, so the
+	// contract here is that it fills the pane without overflowing it — not
+	// that it stops at a fixed measure. The overflow check below is the half
+	// that always mattered.
+	if usedWidth < 60 {
+		t.Fatalf("wide assistant prose used only %d columns:\n%s", usedWidth, rendered)
 	}
 	if usedWidth > m.chatPaneWidth() {
 		t.Fatalf("wide assistant prose overflowed pane: used=%d pane=%d", usedWidth, m.chatPaneWidth())

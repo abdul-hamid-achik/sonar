@@ -143,8 +143,11 @@ func TestLayoutCapabilitiesAreMonotonicAndBoundedExhaustive(t *testing.T) {
 			if capabilities.WorkWidth != width || capabilities.WorkHeight != height {
 				t.Fatalf("%dx%d work size = %dx%d", width, height, capabilities.WorkWidth, capabilities.WorkHeight)
 			}
-			if capabilities.ProseWidth < 0 || capabilities.ProseWidth > capabilities.WorkWidth ||
-				capabilities.ProseWidth > ProseTargetWide {
+			// The invariant is that prose never exceeds its pane. It used to
+			// also assert prose <= ProseTargetWide, which encoded a default
+			// (a fixed 140-column measure) as a structural property; prose
+			// now tracks the pane unless ui.prose_width says otherwise.
+			if capabilities.ProseWidth < 0 || capabilities.ProseWidth > capabilities.WorkWidth {
 				t.Fatalf("%dx%d invalid prose/work width: %+v", width, height, capabilities)
 			}
 			if width > 0 {

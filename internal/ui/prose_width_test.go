@@ -16,15 +16,17 @@ func TestProseCapIsConfigurableInBothDirections(t *testing.T) {
 
 	const wideTerminal = 240
 
-	SetProseCap(0) // unchanged: zero means "keep the default"
-	if got := proseWidthForWork(wideTerminal); got != ProseTargetWide {
-		t.Errorf("default prose width = %d, want the documented %d", got, ProseTargetWide)
+	// Zero is the default and means "follow the pane", which is the whole
+	// point: a measure pinned to a number nobody chose looked like a bug on
+	// every terminal wider than it.
+	SetProseCap(0)
+	if got := proseWidthForWork(wideTerminal); got != wideTerminal {
+		t.Errorf("default prose width = %d, want the pane's own %d", got, wideTerminal)
 	}
 
 	SetProseCap(220)
-	if got := proseWidthForWork(wideTerminal); got != 216 {
-		// 90% of 240 is 216, still under the raised 220 cap.
-		t.Errorf("raised prose width = %d, want 216", got)
+	if got := proseWidthForWork(wideTerminal); got != 220 {
+		t.Errorf("configured prose width = %d, want the requested 220", got)
 	}
 
 	SetProseCap(80)

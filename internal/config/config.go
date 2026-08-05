@@ -67,21 +67,22 @@ type UIConfig struct {
 	// columns. Structural surfaces — code fences, diffs, tables, inspectors —
 	// always use the full pane and are unaffected.
 	//
-	// The default soft-caps prose well below a very wide terminal, on the
-	// ordinary typographic argument that long lines are harder to scan. That is
-	// a judgement, not a fact about your terminal, and on an ultrawide display
-	// it reads as a dead right margin. Raise it to use the full width, or lower
-	// it for a narrower measure.
+	// Zero — the default — means prose follows the terminal, sharing a right
+	// edge with every other surface. Set a number to pin a fixed measure
+	// instead; long lines really are harder to scan, and some readers prefer a
+	// shorter one.
 	//
-	// Zero keeps the built-in default. Values below MinProseWidth are refused:
-	// a measure narrower than that wraps ordinary sentences into ribbons.
+	// This used to default to a fixed 140 columns, which pinned the layout to a
+	// number nobody chose and left a dead right margin on any wider terminal.
+	// Values below MinProseWidth are refused: a narrower measure wraps ordinary
+	// sentences into ribbons.
 	ProseWidth int `yaml:"prose_width,omitempty"`
 }
 
-// Prose measure bounds. The default matches the former ProseTargetWide
-// constant, so an unconfigured harness wraps exactly as before.
+// Prose measure bounds. Zero means "follow the terminal"; the named default
+// exists only for callers that want the historical fixed measure.
 const (
-	DefaultProseWidth = 140
+	DefaultProseWidth = 0
 	MinProseWidth     = 40
 	MaxProseWidth     = 500
 )
@@ -94,6 +95,9 @@ func (u UIConfig) EffectiveProseWidth() int {
 	}
 	return u.ProseWidth
 }
+
+// (DefaultProseWidth is zero, so an unset value reaches SetProseCap as zero
+// and selects the dynamic measure.)
 
 // UnmarshalYAML rejects an explicit null continuation policy before it can be
 // mistaken for omission. Other top-level decoding remains backward-compatible;

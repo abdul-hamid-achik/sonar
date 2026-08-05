@@ -71,11 +71,11 @@ ui:
   # How wide conversational text may wrap, in columns. Code fences, diffs,
   # tables and inspectors always use the full pane and ignore this.
   #
-  # The default (140) soft-caps prose below a very wide terminal, on the
-  # ordinary typographic argument that long lines are harder to scan. On an
-  # ultrawide display that reads as a dead right margin instead. Raise it to
-  # use the width you have, or lower it for a narrower measure.
-  # prose_width: 220
+  # Omitted, prose follows the terminal: it uses the width you actually have,
+  # and shares a right edge with everything else on screen. Set a number to
+  # pin a fixed measure instead — some readers prefer a shorter line, and long
+  # lines are genuinely harder to scan.
+  # prose_width: 96
 
 privacy:
   local_only: true

@@ -58,22 +58,58 @@ func TestMarkdownInlineCodeMeetsNormalTextContrast(t *testing.T) {
 	}
 }
 
-func TestMarkdownReadableMeasurePreservesWideWorkBlocks(t *testing.T) {
+// A configured prose measure must reach the renderer, and structural blocks
+// must keep the full work surface regardless.
+//
+// This used to assert a hard 96 columns. That was the renderer's own private
+// cap, independent of the layout's — two caps for one fact, with the tighter
+// one silently winning, so changing the visible measure changed nothing on
+// screen. They now share proseWidthForWork.
+func TestConfiguredProseMeasurePreservesWideWorkBlocks(t *testing.T) {
+	original := proseCap
+	t.Cleanup(func() { proseCap = original })
+	SetProseCap(96)
+
 	renderer := NewMarkdownRenderer(160, true, defaultThemeID)
-	if renderer.proseWidth != ProseTargetCandidate {
-		t.Fatalf("prose width = %d, want %d", renderer.proseWidth, ProseTargetCandidate)
+	if renderer.proseWidth != 96 {
+		t.Fatalf("prose width = %d, want the configured 96", renderer.proseWidth)
 	}
 
 	prose := strings.Repeat("A readable paragraph should not span the entire terminal. ", 20)
 	renderedProse := ansi.Strip(renderer.RenderFull(prose))
-	if width := widestDisplayLine(renderedProse); width > ProseTargetCandidate {
-		t.Fatalf("prose line width = %d, want <= %d:\n%s", width, ProseTargetCandidate, renderedProse)
+	if width := widestDisplayLine(renderedProse); width > 96 {
+		t.Fatalf("prose line width = %d, want <= 96:\n%s", width, renderedProse)
 	}
 
 	code := "```text\n" + strings.Repeat("x", 120) + "\n```"
 	renderedCode := ansi.Strip(renderer.RenderFull(code))
-	if width := widestDisplayLine(renderedCode); width <= ProseTargetCandidate {
-		t.Fatalf("code line width = %d, want work surface wider than prose measure:\n%s", width, renderedCode)
+	if width := widestDisplayLine(renderedCode); width <= 96 {
+		t.Fatalf("code line width = %d, want the full work surface:\n%s", width, renderedCode)
+	}
+}
+
+// With no configured measure prose follows the pane, which is what a reader
+// expects from every other surface. Structural blocks are unaffected either
+// way — they never used the prose measure.
+func TestUnconfiguredProseFollowsThePane(t *testing.T) {
+	original := proseCap
+	t.Cleanup(func() { proseCap = original })
+	SetProseCap(0)
+
+	renderer := NewMarkdownRenderer(160, true, defaultThemeID)
+	if renderer.proseWidth != 160 {
+		t.Fatalf("prose width = %d, want the pane's own 160", renderer.proseWidth)
+	}
+
+	prose := strings.Repeat("A paragraph now uses the width the terminal actually has. ", 20)
+	rendered := ansi.Strip(renderer.RenderFull(prose))
+	width := widestDisplayLine(rendered)
+	if width > 160 {
+		t.Fatalf("prose overflowed its pane at %d columns:\n%s", width, rendered)
+	}
+	// The point of the change: a wide pane is used, not left half empty.
+	if width <= 96 {
+		t.Fatalf("prose still stopped at %d columns on a 160-column pane:\n%s", width, rendered)
 	}
 }
 

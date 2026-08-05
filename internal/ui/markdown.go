@@ -94,7 +94,12 @@ func newMarkdownTermRenderer(width int, isDark bool, themeID string) (*glamour.T
 // NewMarkdownRenderer creates a renderer for the given terminal width and theme.
 func NewMarkdownRenderer(width int, isDark bool, themeID string) *MarkdownRenderer {
 	workWidth := max(1, width)
-	proseWidth := min(ProseTargetCandidate, workWidth)
+	// The prose renderer must agree with the layout's prose measure. This was
+	// an independent min(ProseTargetCandidate, workWidth) — a hard 96-column
+	// cap — which made it the binding constraint on every wide terminal while
+	// the layout believed the measure was 140. Two caps for one fact meant
+	// changing the visible one changed nothing.
+	proseWidth := proseWidthForWork(workWidth)
 	workRenderer, _ := newMarkdownTermRenderer(workWidth, isDark, themeID)
 	proseRenderer := workRenderer
 	if proseWidth != workWidth {
