@@ -180,6 +180,25 @@ func TestSonarWaitTraceStaysHonestWithoutABaseline(t *testing.T) {
 	}
 }
 
+func TestRuntimeStatusShowsEchoReceiptOnlyAfterAFirstResponse(t *testing.T) {
+	base := time.Date(2026, 8, 4, 12, 0, 0, 0, time.UTC)
+	m := sonarTestModel(t, base)
+
+	before := ansi.Strip(m.buildRuntimeStatusContent(60))
+	if strings.Contains(before, "Echo") {
+		t.Fatalf("runtime shows an echo receipt before any first response:\n%s", before)
+	}
+
+	m.chromeSpring.ping.last = 1200 * time.Millisecond
+	m.chromeSpring.ping.baseline = 1500 * time.Millisecond
+	m.chromeSpring.ping.samples = 2
+	after := ansi.Strip(m.buildRuntimeStatusContent(60))
+	if !strings.Contains(after, "Echo") ||
+		!strings.Contains(after, "last 1.2s") || !strings.Contains(after, "typical 1.5s") {
+		t.Fatalf("runtime echo receipt missing latency facts:\n%s", after)
+	}
+}
+
 // TestSonarWaitTraceReducedMotionSchedulesNoTicksAndRendersStaticFrame is the
 // reduced-motion contract: no ticks from the observation hook, no animation
 // clock ownership, and the frame is today's correct static form — ellipsis

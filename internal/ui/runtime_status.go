@@ -109,6 +109,17 @@ func (m *Model) buildRuntimeStatusContent(width int) string {
 		}
 	}
 	lines = append(lines, m.runtimeStatusRow("Model", modelRuntime, width))
+	if ping := m.chromeSpring.ping; ping.samples > 0 {
+		// The static receipt behind the waiting-phase sonar trace
+		// (sonar_ping.go): the model's first-response latency, readable with
+		// no motion at all. This is the reduced-motion parity surface for the
+		// fact the trace animates.
+		lines = append(lines, m.runtimeStatusRow("Echo",
+			fmt.Sprintf("first response · last %s · typical %s",
+				formatWorkingElapsed(ping.last), formatWorkingElapsed(ping.baseline)),
+			width,
+		))
+	}
 	// The daemon version used to be spliced into the model picker's title
 	// ("Ollama 0.31.2-test · models"), which is a heading, not a place to read
 	// diagnostics. It belongs with the rest of the runtime facts.
