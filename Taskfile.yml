@@ -17,6 +17,32 @@ tasks:
     cmds:
       - go run ./cmd/sonar
 
+  install:
+    desc: Install sonar onto this machine's PATH (go env GOBIN, or GOPATH/bin)
+    cmds:
+      # A real binary rather than a symlink into bin/: `task clean` removes
+      # bin/, and a global command that breaks when you tidy the repository is
+      # worse than one you re-install deliberately. Rerun this after pulling.
+      - go install ./cmd/sonar
+      - cmd: |
+          target="$(go env GOBIN)"
+          [ -n "$target" ] || target="$(go env GOPATH)/bin"
+          echo "installed: $target/sonar"
+          case ":$PATH:" in
+            *":$target:"*) ;;
+            *) echo "warning: $target is not on PATH; add it to your shell profile" >&2 ;;
+          esac
+        silent: true
+
+  uninstall:
+    desc: Remove the installed sonar binary from this machine
+    cmds:
+      - cmd: |
+          target="$(go env GOBIN)"
+          [ -n "$target" ] || target="$(go env GOPATH)/bin"
+          rm -f "$target/sonar" && echo "removed: $target/sonar"
+        silent: true
+
   lint:
     desc: Run linter
     cmds:
