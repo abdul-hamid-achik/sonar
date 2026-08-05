@@ -102,8 +102,8 @@ func (m *Model) windowTitleBase() string {
 	const product = "SONAR"
 	lead := product
 	if m != nil {
-		if title := sanitizeTerminalSingleLine(strings.TrimSpace(m.activeSessionTitle)); title != "" {
-			lead = truncateDisplay(title, 48)
+		if title := windowTitleFromSessionTitle(m.activeSessionTitle); title != "" {
+			lead = title
 		}
 	}
 	workspace := ""
@@ -122,6 +122,34 @@ func (m *Model) windowTitleBase() string {
 		return lead
 	}
 	return truncateDisplay(lead+" · "+name, 72)
+}
+
+// windowTitleFromSessionTitle renders a session title as tab text, or "" when
+// nothing usable survives.
+//
+// Session titles are model-generated and arrive as prose, so they carry
+// markdown: a title that was literally "```" reached a real tab. Fences,
+// backticks, and leading list/heading punctuation are stripped before the
+// existing single-line sanitization, and a title that is nothing but that
+// punctuation yields "" so the caller falls back to the product name.
+func windowTitleFromSessionTitle(raw string) string {
+	title := strings.TrimSpace(raw)
+	// Drop fenced-code framing first: a fence line contributes no words.
+	for _, fence := range []string{"```", "~~~"} {
+		title = strings.ReplaceAll(title, fence, " ")
+	}
+	title = strings.Map(func(r rune) rune {
+		if r == '`' || r == '*' || r == '_' || r == '#' || r == '>' {
+			return ' '
+		}
+		return r
+	}, title)
+	title = strings.Join(strings.Fields(title), " ")
+	title = sanitizeTerminalSingleLine(strings.TrimSpace(title))
+	if title == "" {
+		return ""
+	}
+	return truncateDisplay(title, 48)
 }
 
 func (m *Model) renderCompletionModal() string {
