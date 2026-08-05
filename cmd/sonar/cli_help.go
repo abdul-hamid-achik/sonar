@@ -17,6 +17,7 @@ func writeRootUsage(writer io.Writer, program string) {
 	_, _ = fmt.Fprintln(writer, "  goal       Create, run, inspect, and reconcile durable goals")
 	_, _ = fmt.Fprintln(writer, "  execution  Inspect and reconcile standalone execution effects")
 	_, _ = fmt.Fprintln(writer, "  session    List, export, or repair saved sessions")
+	_, _ = fmt.Fprintln(writer, "  providers  Refresh the embedded provider catalog snapshot")
 	_, _ = fmt.Fprintln(writer, "  help       Show this help")
 	_, _ = fmt.Fprintln(writer)
 	_, _ = fmt.Fprintln(writer, "Options:")

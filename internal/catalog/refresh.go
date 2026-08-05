@@ -81,9 +81,27 @@ func Refresh(ctx context.Context, url, path string) (RefreshSummary, error) {
 	return writeSnapshot(providers, path)
 }
 
-func writeSnapshot(providers []Provider, path string) (RefreshSummary, error) {
+// DryRun fetches the live catalog and reports what a refresh would change
+// against the snapshot at path, without writing anything.
+func DryRun(ctx context.Context, url, path string) (RefreshSummary, error) {
+	providers, err := FetchProviders(ctx, url)
+	if err != nil {
+		return RefreshSummary{}, err
+	}
+	summary, _, err := summarize(providers, path)
+	if err != nil {
+		return RefreshSummary{}, err
+	}
+	return summary, nil
+}
+
+// summarize validates the fetched catalog and computes what a refresh would
+// change against the snapshot at path, returning the canonical encoded bytes
+// alongside. It never writes; the only disk access is reading the current
+// snapshot to diff against.
+func summarize(providers []Provider, path string) (RefreshSummary, []byte, error) {
 	if len(providers) < minRefreshProviders {
-		return RefreshSummary{}, fmt.Errorf(
+		return RefreshSummary{}, nil, fmt.Errorf(
 			"catalog: refusing to write %d providers; fewer than the %d-provider sanity floor suggests a truncated fetch",
 			len(providers), minRefreshProviders,
 		)
@@ -97,13 +115,13 @@ func writeSnapshot(providers []Provider, path string) (RefreshSummary, error) {
 
 	encoded, err := json.MarshalIndent(providers, "", "  ")
 	if err != nil {
-		return RefreshSummary{}, fmt.Errorf("catalog: encode snapshot: %w", err)
+		return RefreshSummary{}, nil, fmt.Errorf("catalog: encode snapshot: %w", err)
 	}
 	// Re-decode what we are about to persist. Marshalling then embedding a
 	// document the loader cannot read would ship a broken binary.
 	var roundTrip []Provider
 	if err := json.Unmarshal(encoded, &roundTrip); err != nil {
-		return RefreshSummary{}, fmt.Errorf("catalog: snapshot does not round-trip: %w", err)
+		return RefreshSummary{}, nil, fmt.Errorf("catalog: snapshot does not round-trip: %w", err)
 	}
 
 	summary := RefreshSummary{Providers: len(providers), Models: models}
@@ -132,7 +150,14 @@ func writeSnapshot(providers []Provider, path string) (RefreshSummary, error) {
 	} else {
 		summary.Changed = true
 	}
+	return summary, encoded, nil
+}
 
+func writeSnapshot(providers []Provider, path string) (RefreshSummary, error) {
+	summary, encoded, err := summarize(providers, path)
+	if err != nil {
+		return RefreshSummary{}, err
+	}
 	if !summary.Changed {
 		return summary, nil
 	}
@@ -140,6 +165,9 @@ func writeSnapshot(providers []Provider, path string) (RefreshSummary, error) {
 	// Write through a sibling temp file so an interrupted write cannot leave a
 	// half-written snapshot in place of a working one.
 	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return summary, fmt.Errorf("catalog: create snapshot directory: %w", err)
+	}
 	tmp, err := os.CreateTemp(dir, ".providers-*.json")
 	if err != nil {
 		return summary, fmt.Errorf("catalog: create temp snapshot: %w", err)

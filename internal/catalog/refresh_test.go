@@ -1,7 +1,10 @@
 package catalog
 
 import (
+	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,5 +152,69 @@ func TestDefaultCatwalkURLIsThePublicService(t *testing.T) {
 	}
 	if strings.Contains(DefaultCatwalkURL, "localhost") {
 		t.Errorf("default URL %q points at localhost", DefaultCatwalkURL)
+	}
+}
+
+// A dry run must report the same change a refresh would, and must leave the
+// snapshot untouched — --dry-run exists so an operator can preview the diff
+// without a version-control surprise.
+func TestDryRunReportsChangesWithoutWriting(t *testing.T) {
+	path := snapshotOf(t, syntheticProviders(20))
+	payload, err := json.Marshal(syntheticProviders(25))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// GetProviders requests base + "/v2/providers", so the endpoint passed to
+	// DryRun carries the same trailing "/v2" as DefaultCatwalkURL.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v2/v2/providers" {
+			http.NotFound(w, r)
+			return
+		}
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	summary, err := DryRun(context.Background(), server.URL+"/v2", path)
+	if err != nil {
+		t.Fatalf("dry run: %v", err)
+	}
+	if !summary.Changed {
+		t.Error("a differing catalog reported no change")
+	}
+	if summary.Providers != 25 {
+		t.Errorf("providers = %d, want 25", summary.Providers)
+	}
+
+	written, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var roundTrip []Provider
+	if err := json.Unmarshal(written, &roundTrip); err != nil {
+		t.Fatalf("existing snapshot no longer parses: %v", err)
+	}
+	if len(roundTrip) != 20 {
+		t.Errorf("existing snapshot changed to %d providers, want 20", len(roundTrip))
+	}
+}
+
+// The sanity floor applies to dry runs too: a truncated fetch must not be
+// reported as a plausible preview.
+func TestDryRunRefusesAnImplausiblySmallCatalog(t *testing.T) {
+	path := snapshotOf(t, syntheticProviders(20))
+	payload, err := json.Marshal(syntheticProviders(3))
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(payload)
+	}))
+	defer server.Close()
+
+	if _, err := DryRun(context.Background(), server.URL+"/v2", path); err == nil {
+		t.Fatal("a 3-provider dry run was accepted")
+	} else if !strings.Contains(err.Error(), "truncated") {
+		t.Errorf("error does not explain the refusal: %v", err)
 	}
 }
