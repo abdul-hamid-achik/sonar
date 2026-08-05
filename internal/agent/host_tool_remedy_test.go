@@ -38,6 +38,36 @@ func TestSearchRefusalNamesTheToolThatWouldWork(t *testing.T) {
 	}
 }
 
+// The remedy must not depend on what the host happens to have installed. This
+// test passed on a developer machine and failed in CI, where ripgrep and tree
+// are absent: the executable catalog resolves through exec.LookPath, so an
+// uninstalled search name was refused as "executable outside the host catalog"
+// with no way forward — the one case where the built-in tool is not merely
+// better but the only option.
+func TestSearchRemedySurvivesAnUninstalledBinary(t *testing.T) {
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+
+	for _, executable := range []string{"find", "rg", "grep", "tree", "du", "ls"} {
+		if !autoCommandHasBuiltinSearchRemedy(executable) {
+			t.Errorf("%q lost its remedy classification", executable)
+		}
+		// Whether this resolves on PATH differs by machine; the reason must
+		// not.
+		reason := ag.autoCommandApprovalReason(AuthorityAutoScoped, executable+" -r pattern .")
+		if !strings.Contains(reason, "ignore policy") {
+			t.Errorf("%q refused without the remedy: %q", executable, reason)
+		}
+	}
+
+	// The classification is a closed list, not a guess about any unknown name.
+	for _, executable := range []string{"curl", "definitely-not-a-command", "", "go", "git"} {
+		if autoCommandHasBuiltinSearchRemedy(executable) {
+			t.Errorf("%q was classified as a recursive search", executable)
+		}
+	}
+}
+
 // The remedy must not leak onto refusals it does not apply to. A command
 // refused for its arguments has no built-in equivalent to redirect to.
 func TestOtherRefusalsKeepTheirOwnReason(t *testing.T) {

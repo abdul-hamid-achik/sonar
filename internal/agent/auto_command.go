@@ -686,6 +686,18 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 	// catalog. A generic path-qualified workspace binary can hide mutation or
 	// networking behind an innocent-looking argument and remains approval-gated.
 	if !a.autoCommandExecutableAllowed(executable) {
+		// The refusal stands either way — this gate is what keeps a
+		// workspace-planted binary out of AUTO — but the explanation must not
+		// depend on the host's PATH. autoCommandExecutableAllowed resolves
+		// through exec.LookPath, so `rg --no-ignore .` explained itself on a
+		// machine with ripgrep installed and reported the bare "executable
+		// outside the host catalog" on one without. The remedy describes what
+		// the model reached for, and it applies at least as strongly when the
+		// binary is absent: the built-in grep tool is then the only way to run
+		// that search at all.
+		if autoCommandHasBuiltinSearchRemedy(executable) {
+			assessment.reason = autoCommandReasonHostToolAvailable
+		}
 		return assessment
 	}
 	assessment.effect = autoCommandEffectForExecutable(executable, words[1:])
@@ -956,6 +968,19 @@ func searchLongOptionTakesValue(name string, ripgrep bool) bool {
 	return stringIn(name,
 		"--devices", "--directories", "--exclude", "--exclude-from", "--include", "--label", "--binary-files",
 	)
+}
+
+// autoCommandHasBuiltinSearchRemedy reports whether a refused executable names
+// a recursive search or directory enumeration that the built-in grep, glob, ls
+// and read tools serve directly. It is deliberately name-based and PATH-free:
+// this decides an explanation, never an admission.
+//
+// The same names appear in the executable switch in
+// assessAutoScopedSimpleCommand, which is where an installed one lands.
+// TestSearchRefusalNamesTheToolThatWouldWork walks every name through the
+// public entry point, so the two lists cannot silently drift apart.
+func autoCommandHasBuiltinSearchRemedy(executable string) bool {
+	return stringIn(executable, "find", "rg", "grep", "tree", "du", "ls")
 }
 
 func (a *Agent) autoCommandExecutableAllowed(executable string) bool {
