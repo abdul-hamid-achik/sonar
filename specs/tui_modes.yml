@@ -15,12 +15,17 @@ target:
         SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/modes-agents"
         SONAR_REDUCED_MOTION: "1"
         OLLAMA_HOST: "http://127.0.0.1:1"
+        # sonar exits 1 without a provider credential, so an interactive spec
+        # cannot start at all without one. This key is never sent anywhere: the
+        # base_url below is a dead port, and none of these steps reach
+        # inference — they exercise mode cycling and chrome.
+        DEEPSEEK_API_KEY: "glyphrun-not-a-real-key"
 terminal:
     cols: 72
     rows: 28
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/modes-home .glyphrun/tmp/modes-agents && mkdir -p .glyphrun/tmp/modes-home/.config/sonar .glyphrun/tmp/modes-agents && printf '%s\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/modes-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/modes-home .glyphrun/tmp/modes-agents && mkdir -p .glyphrun/tmp/modes-home/.config/sonar .glyphrun/tmp/modes-agents && printf '%s\n' 'provider:' '  type: deepseek' '  base_url: https://127.0.0.1:1/v1' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/modes-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
           cwd: "."
           timeoutMs: 30000
 steps:
@@ -28,9 +33,13 @@ steps:
         screen:
             contains: "remote prompts"
         timeoutMs: 5000
+    # At 72 columns the top bar drops the model name by design — it does not
+    # fit beside the provider boundary. The context meter is the settled-model
+    # marker that IS visible at this width: it only renders once the active
+    # model's context window is known.
     - wait:
         screen:
-            contains: "qwen3.5:2b"
+            contains: "1.0M"
         timeoutMs: 3000
     - wait:
         screen:
@@ -54,7 +63,10 @@ steps:
     - press: "enter"
     - wait:
         screen:
-            contains: "Inference not started: no model selected"
+            # local-agent's "no model selected"; sonar has a model and fails
+            # at the dead endpoint instead. The host-authored copy — with no
+            # provider response body in it — is the redaction contract holding.
+            contains: "Remote model response failed"
         timeoutMs: 2000
     - wait:
         screen:
