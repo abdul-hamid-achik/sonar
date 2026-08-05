@@ -143,6 +143,31 @@ type ToolsConfig struct {
 	// still apply; raising these does not make a stuck run run longer.
 	AutoMaxSegments int    `yaml:"auto_max_segments,omitempty"`
 	AutoMaxWallTime string `yaml:"auto_max_wall_time,omitempty"` // e.g. "90m", "6h"
+	// ApprovalTimeout bounds how long a tool call waits for a human approval
+	// before the host refuses it and the run continues with the next call.
+	//
+	// Empty or zero waits indefinitely, which is right when someone is
+	// watching. Set it for unattended runs: otherwise the first approval
+	// consumes the turn's entire remaining wall budget standing in front of a
+	// modal nobody will answer, and the run ends having done nothing.
+	//
+	// A timeout can only ever withhold permission, never grant it.
+	ApprovalTimeout string `yaml:"approval_timeout,omitempty"` // e.g. "2m"
+}
+
+// MaxApprovalTimeout bounds tools.approval_timeout. A value longer than this
+// is indistinguishable from waiting forever, which the empty value already
+// expresses more clearly.
+const MaxApprovalTimeout = 24 * time.Hour
+
+// ApprovalWaitTimeout returns the configured unattended approval timeout, or
+// zero to wait indefinitely. Validation has already accepted the value.
+func (t ToolsConfig) ApprovalWaitTimeout() time.Duration {
+	parsed, err := time.ParseDuration(strings.TrimSpace(t.ApprovalTimeout))
+	if err != nil || parsed <= 0 {
+		return 0
+	}
+	return parsed
 }
 
 // AUTO turn ceilings. The defaults are unchanged from the constants they
@@ -664,6 +689,17 @@ func (c *Config) Validate() error {
 	}
 	if c.Tools.AutoMaxSegments > MaxAutoMaxSegments {
 		return fmt.Errorf("config: tools.auto_max_segments %d exceeds the %d ceiling", c.Tools.AutoMaxSegments, MaxAutoMaxSegments)
+	}
+	if raw := strings.TrimSpace(c.Tools.ApprovalTimeout); raw != "" {
+		d, err := time.ParseDuration(raw)
+		switch {
+		case err != nil:
+			return fmt.Errorf("config: invalid tools.approval_timeout %q: %w", raw, err)
+		case d <= 0:
+			return fmt.Errorf("config: tools.approval_timeout must be positive, got %s (omit it to wait indefinitely)", raw)
+		case d > MaxApprovalTimeout:
+			return fmt.Errorf("config: tools.approval_timeout %s exceeds the %s ceiling", raw, MaxApprovalTimeout)
+		}
 	}
 	if raw := strings.TrimSpace(c.Tools.AutoMaxWallTime); raw != "" {
 		d, err := time.ParseDuration(raw)

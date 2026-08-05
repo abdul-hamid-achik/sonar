@@ -960,7 +960,12 @@ func (a *Agent) decideToolAuthorization(ctx context.Context, mode AuthorityMode,
 				return toolAuthorization{}, err
 			}
 		}
-		response := permissionPkg.ResolveApprovalContext(ctx, request, state.callback)
+		// An unattended run must not spend its whole wall budget in front of a
+		// modal nobody will answer. Zero waits indefinitely, which is right
+		// when someone is watching; see tools.approval_timeout.
+		response := permissionPkg.ResolveApprovalContextWithTimeout(
+			ctx, request, state.callback, a.toolsConfig.ApprovalWaitTimeout(),
+		)
 		if err := ctx.Err(); err != nil {
 			return toolAuthorization{cancelled: true, approval: executionpkg.ApprovalCancelled, decision: permissionPkg.DecisionCancelled, reason: err.Error()}, nil
 		}

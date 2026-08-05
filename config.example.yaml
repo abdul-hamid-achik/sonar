@@ -113,6 +113,17 @@ tools:
   # set with no verified effects still ends the run, whatever the ceiling.
   # auto_max_segments: 40
   # auto_max_wall_time: 6h
+  #
+  # How long a tool call waits for a human approval before the host refuses it
+  # and the run continues with the next call. Omitted means wait indefinitely,
+  # which is right when someone is watching.
+  #
+  # Set it for unattended runs. Otherwise the first approval consumes the whole
+  # remaining wall budget in front of a modal nobody will answer, and the run
+  # ends having done nothing. A timeout can only withhold permission, never
+  # grant it: the call does not run, the refusal is recorded, and the model is
+  # told to find another route.
+  # approval_timeout: 2m
 
 # Typed continuation actions are suggestions by default. auto_read_only may
 # follow only exact, fully specified, unblocked, registry-validated read-only

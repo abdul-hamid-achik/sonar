@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/abdul-hamid-achik/sonar/internal/db"
 )
@@ -425,6 +426,38 @@ func RequestApprovalContext(ctx context.Context, toolName string, args map[strin
 // the agent runtime. Missing UI is a host refusal and context cancellation is
 // a cancellation; neither is mislabeled as a user denial.
 func ResolveApprovalContext(ctx context.Context, request ApprovalRequest, callback func(ApprovalRequest)) ApprovalResponse {
+	return ResolveApprovalContextWithTimeout(ctx, request, callback, 0)
+}
+
+// ResolveApprovalContextWithTimeout is the same boundary with an unattended
+// answer.
+//
+// An AUTO run left alone hits its first approval and stops there. The prompt
+// waits on ctx.Done(), so nothing is executed without permission — but nothing
+// else happens either, and the turn's whole remaining wall budget is spent
+// standing in front of a modal nobody is going to answer. Coming back to a
+// cancelled turn that did no work is the outcome that makes unattended AUTO
+// useless in practice.
+//
+// After timeout with no answer the request is refused, not cancelled, and that
+// distinction is the entire point. A cancellation ends the turn; a host
+// refusal records a terminal event for this one call and lets dispatch carry
+// on with the rest, so the model sees the refusal and can take another route.
+// Authority is unchanged: the call did not run, and a timeout can only ever
+// withhold permission, never grant it.
+//
+// A model that answers a refusal by re-sending the identical call is already
+// bounded — maxIdenticalHostRefusals ends the turn — so this cannot become a
+// loop that burns the budget it was added to protect.
+//
+// A zero or negative timeout waits indefinitely, which is the right default
+// for an interactive session where someone is watching.
+func ResolveApprovalContextWithTimeout(
+	ctx context.Context,
+	request ApprovalRequest,
+	callback func(ApprovalRequest),
+	timeout time.Duration,
+) ApprovalResponse {
 	if callback == nil {
 		return Refuse("approval_ui_unavailable", "interactive approval is unavailable")
 	}
@@ -434,9 +467,21 @@ func ResolveApprovalContext(ctx context.Context, request ApprovalRequest, callba
 	// embedding callbacks may block while delivering the prompt. The buffered
 	// response channel lets a late answer finish after cancellation as well.
 	go callback(request)
+
+	var unanswered <-chan time.Time
+	if timeout > 0 {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		unanswered = timer.C
+	}
 	select {
 	case resp := <-ch:
 		return resp.Normalize()
+	case <-unanswered:
+		return Refuse("approval_timeout", fmt.Sprintf(
+			"no approval decision within %s, so the request was refused and the run continued. "+
+				"Do not retry it unchanged; take an approach that does not need this permission, "+
+				"or leave it for a human to authorize.", timeout))
 	case <-ctx.Done():
 		return Cancelled(ctx.Err().Error())
 	}
