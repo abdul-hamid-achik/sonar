@@ -49,6 +49,36 @@ func main() {
 	os.Exit(run())
 }
 
+// validateHeadlessFlagCombinations rejects flag pairings that cannot mean
+// anything, before run() builds a database, a provider, or an MCP registry.
+//
+// These are the checks that were inline at the top of a 1154-line run(): four
+// flags that only exist to shape a headless request, and a prompt that must
+// not be blank. Lifting them out is not cosmetic — as inline `return 2` blocks
+// they were unreachable from a test, so the exact wording a script sees on
+// stderr had no coverage at all. Each message names the flag that was rejected
+// and the flag it needs, because the caller is usually a shell script and the
+// exit code alone is 2 either way.
+func validateHeadlessFlagCombinations(options rootOptions) error {
+	if options.promptProvided && strings.TrimSpace(options.prompt) == "" {
+		return errors.New("prompt: -p/--prompt requires a non-empty value")
+	}
+	if options.promptProvided {
+		return nil
+	}
+	// Everything below is meaningless without a headless prompt to shape.
+	if options.toolsProvided {
+		return errors.New("tools: --tools requires a headless prompt via -p/--prompt")
+	}
+	if options.jsonReceipt {
+		return errors.New("json: --json requires a headless prompt via -p/--prompt")
+	}
+	if options.runID != "" || options.turnID != "" || options.actor != "" {
+		return errors.New("identity: --run-id, --turn-id, and --actor require a headless prompt via -p/--prompt")
+	}
+	return nil
+}
+
 func run() int {
 	if len(os.Args) > 1 {
 		switch os.Args[1] {
@@ -98,20 +128,8 @@ func run() int {
 	legacyYoloFlag := &options.legacyYolo
 	resumeFlag := options.resume
 	promptProvided := options.promptProvided
-	if promptProvided && strings.TrimSpace(promptFlag) == "" {
-		fmt.Fprintln(os.Stderr, "prompt: -p/--prompt requires a non-empty value")
-		return 2
-	}
-	if options.toolsProvided && !promptProvided {
-		fmt.Fprintln(os.Stderr, "tools: --tools requires a headless prompt via -p/--prompt")
-		return 2
-	}
-	if options.jsonReceipt && !promptProvided {
-		fmt.Fprintln(os.Stderr, "json: --json requires a headless prompt via -p/--prompt")
-		return 2
-	}
-	if (options.runID != "" || options.turnID != "" || options.actor != "") && !promptProvided {
-		fmt.Fprintln(os.Stderr, "identity: --run-id, --turn-id, and --actor require a headless prompt via -p/--prompt")
+	if err := validateHeadlessFlagCombinations(options); err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
 	externalRunID, externalTurnID, externalActor, err := resolveExternalTurnIdentity(options)
