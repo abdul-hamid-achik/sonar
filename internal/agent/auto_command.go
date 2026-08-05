@@ -48,6 +48,12 @@ const (
 	autoCommandReasonExecutable
 	autoCommandReasonArguments
 	autoCommandReasonPathAuthority
+	// autoCommandReasonHostToolAvailable is a refusal with a remedy: the host
+	// has a built-in that does this job under the workspace ignore policy.
+	// Reported separately from autoCommandReasonArguments because "arguments
+	// outside the host catalog" tells the model nothing it can act on, so it
+	// re-sends the same shell command and collects another approval prompt.
+	autoCommandReasonHostToolAvailable
 )
 
 // autoCommandAssessment is the bounded host-owned projection of one AUTO
@@ -90,6 +96,8 @@ func autoCommandReasonLabel(reason autoCommandReason, command string) string {
 		return "executable outside the host catalog"
 	case autoCommandReasonArguments:
 		return "arguments outside the host catalog"
+	case autoCommandReasonHostToolAvailable:
+		return "raw recursive search bypasses the workspace ignore policy; use the grep, glob, ls or read tools instead"
 	case autoCommandReasonPathAuthority:
 		return "operand outside the workspace"
 	case autoCommandReasonAllowed:
@@ -733,7 +741,15 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 		// `tree -a .`, or `ls -Ra .`). Built-in list/grep/read operations enforce
 		// that policy, so raw search and directory-enumeration processes remain
 		// approval-gated in AUTO even for workspace operands.
-		allowed = false
+		//
+		// The refusal is reported as its own reason because this one has a
+		// remedy. In a measured session four of six approval prompts were
+		// ordinary searches — `grep -rl "ollama" internal/ui`, `find . -name
+		// '*.go'` — that the built-in grep and glob tools serve directly, with
+		// the same arguments and without the bypass. Telling the model that is
+		// the difference between one prompt and one prompt per attempt.
+		assessment.reason = autoCommandReasonHostToolAvailable
+		return assessment
 	case "sort":
 		allowed = !containsLongOptionPrefix(args, "--compress-program", "--files0-from")
 	case "printf":
