@@ -11,6 +11,7 @@ import (
 
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
 	"github.com/abdul-hamid-achik/sonar/internal/command"
+	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/execution"
 	"github.com/abdul-hamid-achik/sonar/internal/goal"
 	"github.com/abdul-hamid-achik/sonar/internal/goaladvisor"
@@ -18,9 +19,19 @@ import (
 )
 
 const (
-	defaultGoalContinuationBudget int64 = 8
-	defaultGoalTokenBudget        int64 = 12_000
-	defaultGoalTimeBudget               = 30 * time.Minute
+	// A goal is the mechanism for durable, long-running work, so its defaults
+	// must not be tighter than a casual AUTO turn's. They were: 30 minutes
+	// against AUTO's 90, and a 12k eval-token cap that plain AUTO does not
+	// impose at all — roughly two substantial turns before exhaustion, which
+	// made "budget exhausted" the ordinary ending rather than the exceptional
+	// one. These now match config.DefaultAutoMaxWallTime and give the token
+	// budget room to be a real ceiling instead of a speed bump.
+	//
+	// All three remain editable in the goal form before the goal starts, and
+	// amendable afterwards, which is where a deliberately small budget belongs.
+	defaultGoalContinuationBudget int64 = 24
+	defaultGoalTokenBudget        int64 = 250_000
+	defaultGoalTimeBudget               = config.DefaultAutoMaxWallTime
 	goalAdvisorTimeout                  = 30 * time.Second
 	goalActor                           = "sonar"
 )
@@ -960,16 +971,24 @@ func (m *Model) beginGoalEvaluation(manual bool) tea.Cmd {
 		if manual {
 			return m.startGoalTurn(nil, true)
 		}
+		// Without Cortex the goal used to pause here after every turn and wait
+		// for an explicit resume, which made an unattended goal impossible: the
+		// mechanism built for durable work could not take a second step on its
+		// own.
+		//
+		// StateActive is not an absence of verification. RecordTurn pauses any
+		// turn whose report is not Productive, and Productive means the turn
+		// settled at least one successful tool receipt in the durable ledger.
+		// So reaching StateActive already carries evidence of concrete progress
+		// — weaker than Cortex acceptance, but not prose, and exactly the
+		// signal the local runtime was designed to gate on. Deferring to it is
+		// honouring the runtime's verdict rather than inventing a new one.
+		//
+		// Cortex stays authoritative when linked; this is only the unlinked
+		// path. Every other state still stops: paused, blocked, and exhausted
+		// are unchanged, and the goal's own budgets bound the whole run.
 		if snapshot.State == goal.StateActive {
-			if err := m.goalRuntime.Pause(context.Background(), "Cortex is not linked; automatic progress cannot be verified"); err != nil {
-				m.appendGoalError("Pause local goal: " + err.Error())
-				return nil
-			}
-			if err := m.persistGoalSession(); err != nil {
-				m.appendGoalError("Save local goal pause: " + err.Error())
-				return nil
-			}
-			m.appendGoalSystem("Goal paused · Cortex is not linked, so review the result and resume explicitly.")
+			return m.startGoalTurn(nil, false)
 		}
 		return nil
 	}

@@ -769,7 +769,15 @@ func TestBoundGoalSummaryPreservesUTF8AtByteLimit(t *testing.T) {
 	}
 }
 
-func TestGoalLocalOnlyProgressRequiresExplicitResume(t *testing.T) {
+// Without Cortex a goal used to pause after every turn and wait for an
+// explicit resume, so the mechanism built for durable work could not take a
+// second step unattended. It now defers to the local runtime's own verdict.
+//
+// StateActive is not an absence of verification: RecordTurn pauses any turn
+// whose report is not Productive, and Productive requires a successful tool
+// receipt in the durable ledger. Continuing on it is weaker than Cortex
+// acceptance but is still evidence, not prose.
+func TestGoalLocalOnlyVerifiedProgressContinuesAutomatically(t *testing.T) {
 	client := &goalCountingClient{}
 	m := newGoalRuntimeTestModel(t, client)
 	store, sessionID := attachGoalTestSession(t, m)
@@ -780,15 +788,37 @@ func TestGoalLocalOnlyProgressRequiresExplicitResume(t *testing.T) {
 	})
 	m.goalRuntime = runtime
 
-	if cmd := m.beginGoalEvaluation(false); cmd != nil {
-		t.Fatal("local-only progress scheduled an automatic provider turn")
+	if cmd := m.beginGoalEvaluation(false); cmd == nil {
+		t.Fatal("verified local progress did not schedule the next goal turn")
 	}
 	snapshot := snapshotUIGoal(t, runtime)
-	if snapshot.State != goal.StatePaused || !strings.Contains(snapshot.StateReason, "Cortex is not linked") {
-		t.Fatalf("local-only goal = state %s reason %q", snapshot.State, snapshot.StateReason)
+	if snapshot.State != goal.StateActive {
+		t.Fatalf("a productive local-only turn left the goal in %s (%q)", snapshot.State, snapshot.StateReason)
 	}
-	if client.calls.Load() != 0 || m.goalPersistenceDirty {
-		t.Fatalf("local-only pause calls=%d persistenceDirty=%v", client.calls.Load(), m.goalPersistenceDirty)
+}
+
+// The other half of the contract, and the reason continuing is safe: a turn
+// with no successful receipt is not progress, and the runtime pauses it. The
+// unlinked path must not turn a stalled goal into an unattended budget burn.
+func TestGoalLocalOnlyUnproductiveTurnStillPauses(t *testing.T) {
+	client := &goalCountingClient{}
+	m := newGoalRuntimeTestModel(t, client)
+	store, sessionID := attachGoalTestSession(t, m)
+	defer func() { _ = store.Close() }()
+	runtime := newUIGoalRuntime(t, sessionID, goal.BudgetLimits{MaxContinuationTurns: 3})
+	recordUIGoalTurn(t, runtime, goal.AdmissionInitial, goal.TurnReport{
+		TurnID: "turn_stall", Productive: false, Summary: "no concrete progress",
+	})
+	m.goalRuntime = runtime
+
+	if snapshot := snapshotUIGoal(t, runtime); snapshot.State != goal.StatePaused {
+		t.Fatalf("an unproductive turn left the goal in %s", snapshot.State)
+	}
+	if cmd := m.beginGoalEvaluation(false); cmd != nil {
+		t.Fatal("a paused goal scheduled an automatic provider turn")
+	}
+	if client.calls.Load() != 0 {
+		t.Fatalf("a paused goal dispatched %d provider call(s)", client.calls.Load())
 	}
 }
 
