@@ -59,6 +59,38 @@ type OpenAICompatibleOptions struct {
 // DialectDeepSeek marks the DeepSeek flavor of the OpenAI chat contract.
 const DialectDeepSeek = "deepseek"
 
+// parseProviderBaseURL validates and normalizes a base URL shared by every
+// OpenAI- and Anthropic-family dialect: reject embedded credentials or a
+// query/fragment (a validation error must never echo the raw input back), and
+// require TLS for every non-local host. name identifies the caller in error
+// text (e.g. "openai-compatible", "anthropic") without ever including the
+// URL itself.
+func parseProviderBaseURL(name, raw string) (*url.URL, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, fmt.Errorf("%s base_url is empty", name)
+	}
+	if !strings.Contains(raw, "://") {
+		raw = "https://" + raw
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return nil, fmt.Errorf("invalid %s base url", name)
+	}
+	if u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(raw, "#") {
+		return nil, fmt.Errorf("%s base url must not contain user information, a query, or a fragment", name)
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return nil, fmt.Errorf("%s base url must use http or https", name)
+	}
+	if scheme == "http" && !netpolicy.IsLocalHost(u.Hostname()) {
+		return nil, fmt.Errorf("%s remote base url requires https", name)
+	}
+	u.Path = strings.TrimRight(u.Path, "/")
+	return u, nil
+}
+
 // NewOpenAICompatibleClient builds a client against baseURL (for example
 // https://api.x.ai/v1). The API key may be empty only for local open servers.
 func NewOpenAICompatibleClient(opts OpenAICompatibleOptions) (*OpenAICompatibleClient, error) {
@@ -66,28 +98,10 @@ func NewOpenAICompatibleClient(opts OpenAICompatibleOptions) (*OpenAICompatibleC
 	if model == "" {
 		return nil, errors.New("openai-compatible model is empty")
 	}
-	raw := strings.TrimSpace(opts.BaseURL)
-	if raw == "" {
-		return nil, errors.New("openai-compatible base_url is empty")
+	u, err := parseProviderBaseURL("openai-compatible", opts.BaseURL)
+	if err != nil {
+		return nil, err
 	}
-	if !strings.Contains(raw, "://") {
-		raw = "https://" + raw
-	}
-	u, err := url.Parse(raw)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		return nil, errors.New("invalid openai-compatible base url")
-	}
-	if u.User != nil || u.RawQuery != "" || u.ForceQuery || strings.Contains(raw, "#") {
-		return nil, errors.New("openai-compatible base url must not contain user information, a query, or a fragment")
-	}
-	scheme := strings.ToLower(u.Scheme)
-	if scheme != "http" && scheme != "https" {
-		return nil, errors.New("openai-compatible base url must use http or https")
-	}
-	if scheme == "http" && !netpolicy.IsLocalHost(u.Hostname()) {
-		return nil, errors.New("openai-compatible remote base url requires https")
-	}
-	u.Path = strings.TrimRight(u.Path, "/")
 	client := newOpenAIHTTPClient(u)
 	return &OpenAICompatibleClient{
 		httpClient: client,
