@@ -16,8 +16,24 @@ func TestDeriveBashPrefix(t *testing.T) {
 		{command: "npm run build", want: "npm run", ok: true},
 		{command: "ls -la", want: "ls", ok: true},
 		{command: "true", want: "true", ok: true},
-		{command: "go test ./... && rm -rf /", want: "", ok: false},
+		// Static composition derives from the first segment. The grant carries
+		// executable authority only — whole-command matching still refuses
+		// control-bearing commands, and segment matching happens only inside a
+		// composition the host validated — so the text after the leading
+		// fields (including the other segments) gains nothing from the grant.
+		{command: "go test ./... && rm -rf /", want: "go test", ok: true},
+		{command: "swift test 2>&1 | xcbeautify", want: "swift", ok: true},
+		// node is not a multi-word runner, so the compound form derives the
+		// same single-field prefix its simple form always has.
+		{command: "node scripts/check.js && go test ./...", want: "node", ok: true},
+		{command: "go build ./... 2>/dev/null; go vet ./...", want: "go build", ok: true},
+		// Dynamic content stays non-derivable, and leading fields that are not
+		// plain bare words fail closed: sh would not parse them as the start
+		// of the first command the way a naive field split does.
 		{command: "echo $HOME", want: "", ok: false},
+		{command: "echo `date` && go test ./...", want: "", ok: false},
+		{command: `"go" test && rm -rf /`, want: "", ok: false},
+		{command: "go test&&rm -rf /", want: "", ok: false},
 		{command: "", want: "", ok: false},
 	}
 	for _, tt := range tests {
@@ -70,6 +86,39 @@ func TestBashPatternMatchesTrailingGlob(t *testing.T) {
 	}
 	if got, ok := NormalizeBashPattern("git status *"); !ok || got != "git status *" {
 		t.Fatalf("normalize = %q, %v", got, ok)
+	}
+}
+
+func TestBashSegmentPatternMatches(t *testing.T) {
+	if !BashSegmentPatternMatches([]string{"go", "test", "./..."}, "go test") {
+		t.Fatal("segment with extra args should match a literal prefix")
+	}
+	if !BashSegmentPatternMatches([]string{"go", "test"}, "go test") {
+		t.Fatal("exact segment should match a literal prefix")
+	}
+	if !BashSegmentPatternMatches([]string{"go", "test"}, "go test *") {
+		t.Fatal("trailing glob should match its exact head")
+	}
+	if !BashSegmentPatternMatches([]string{"node", "scripts/check.js", "--verbose"}, "node scripts/check.js") {
+		t.Fatal("two-field prefix should match with a variant tail")
+	}
+	if !BashSegmentPatternMatches([]string{"gofmt", "-l"}, "gofm*") {
+		t.Fatal("glued glob should match by word prefix")
+	}
+	if BashSegmentPatternMatches([]string{"go"}, "go test") {
+		t.Fatal("segment shorter than the pattern head must not match")
+	}
+	if BashSegmentPatternMatches([]string{"go", "test extra"}, "go test") {
+		t.Fatal("one argv word containing a space must not satisfy two pattern fields")
+	}
+	if BashSegmentPatternMatches([]string{"gotest"}, "go") {
+		t.Fatal("field matching must keep the word boundary")
+	}
+	if BashSegmentPatternMatches(nil, "go") {
+		t.Fatal("empty segment must not match")
+	}
+	if BashSegmentPatternMatches([]string{"go", "test"}, "*") {
+		t.Fatal("bare glob must stay rejected")
 	}
 }
 

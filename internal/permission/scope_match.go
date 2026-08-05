@@ -20,18 +20,57 @@ var multiWordBashRunners = map[string]struct{}{
 	"task": {}, "make": {}, "just": {}, "poetry": {}, "composer": {},
 }
 
+// plainBashLeadingField reports whether a whitespace-delimited field is a bare
+// shell word: no quoting, no escapes, no expansion or control characters. For
+// such a field a naive strings.Fields split and sh's own tokenizer agree, so
+// it is safe to lift into a derived prefix even when the rest of the command
+// carries composition markers.
+func plainBashLeadingField(field string) bool {
+	if field == "" || strings.ContainsAny(field, "'\"\\`$&|;<>(){}#") {
+		return false
+	}
+	for _, r := range field {
+		if unicode.IsControl(r) {
+			return false
+		}
+	}
+	return true
+}
+
 // DeriveBashPrefix extracts a safe session/workspace prefix from an approved
-// command. Compound shell commands return false so only exact-request applies.
+// command.
+//
+// A command whose control content is limited to static composition — &&, ||,
+// ;, |, newlines, redirects — derives the prefix from its FIRST segment
+// instead of failing. This is what makes an "always"-style approval mean
+// something for compound commands: in one audited AUTO session 33 of the 34
+// prompted commands carried a composition marker, so every always press fell
+// back to an exact-request grant keyed on an argument hash a model never
+// re-sends byte-identically — the user granted 14 times and zero grants ever
+// fired. The derived prefix carries executable authority only: whole-command
+// matching (BashPatternMatches) still refuses control-bearing commands, and
+// segment matching (BashSegmentPatternMatches) applies only inside a
+// composition the host has already validated, so the text after the leading
+// fields — including every other segment — gains nothing from the grant.
+//
+// Dynamic content stays non-derivable: any $ or backtick anywhere (even
+// quoted) refuses exactly as before, and for compound commands the leading
+// fields must be plain bare words, so the derived prefix is precisely what sh
+// would parse as the start of the first command.
 func DeriveBashPrefix(command string) (string, bool) {
 	command = strings.TrimSpace(command)
-	if command == "" || BashCommandHasControl(command) {
+	if command == "" || strings.ContainsAny(command, "$`") {
 		return "", false
 	}
 	fields := strings.Fields(command)
 	if len(fields) == 0 {
 		return "", false
 	}
+	compound := BashCommandHasControl(command)
 	first := fields[0]
+	if compound && !plainBashLeadingField(first) {
+		return "", false
+	}
 	// Reject path-looking binaries for durable-style prefixes; session may still
 	// store them, but prefer the basename only for relative ./bin style.
 	if strings.Contains(first, "/") || strings.Contains(first, `\`) {
@@ -42,6 +81,9 @@ func DeriveBashPrefix(command string) (string, bool) {
 	}
 	if _, multi := multiWordBashRunners[first]; multi && len(fields) >= 2 {
 		second := fields[1]
+		if compound && !plainBashLeadingField(second) {
+			return "", false
+		}
 		if second == "" || strings.ContainsAny(second, ";&|") {
 			return first, true
 		}
@@ -132,6 +174,61 @@ func matchBashTrailingGlob(command, pattern string) bool {
 	}
 	// Last required token is a prefix of the corresponding command field.
 	return strings.HasPrefix(cmdFields[len(headFields)-1], literalLast)
+}
+
+// BashSegmentPatternMatches authorizes ONE already-split command segment
+// against a saved prefix or pattern.
+//
+// It exists because BashPatternMatches deliberately refuses any command text
+// bearing control markers: that guard is host-independent, so it cannot know
+// whether a composition was validated, and it made saved prefixes unable to
+// reach the segments of compound commands at all. This matcher instead takes
+// the segment as the host's static split already produced it — words are argv
+// elements with quoting resolved and every unquoted control marker consumed by
+// the splitter — and matches field-wise against the pattern, so one argv word
+// containing a space or a quoted marker can never satisfy two pattern fields
+// (`go "test extra"` does not match "go test").
+//
+// The caller owns composition safety. The pattern supplies executable
+// authority only: the host must still have validated splitting, dynamic
+// syntax, redirect targets, and path operands before consulting this.
+func BashSegmentPatternMatches(words []string, pattern string) bool {
+	if len(words) == 0 {
+		return false
+	}
+	normalized, ok := NormalizeBashPattern(pattern)
+	if !ok {
+		return false
+	}
+	patternFields := strings.Fields(normalized)
+	if len(patternFields) == 0 {
+		return false
+	}
+	gluedPrefix := ""
+	glued := false
+	switch last := patternFields[len(patternFields)-1]; {
+	case last == "*":
+		// "head *" matches its exact head or the head plus arguments, exactly
+		// like the whole-command matcher's trailing-glob form.
+		patternFields = patternFields[:len(patternFields)-1]
+	case strings.HasSuffix(last, "*"):
+		gluedPrefix = strings.TrimSuffix(last, "*")
+		patternFields = patternFields[:len(patternFields)-1]
+		glued = true
+	}
+	required := len(patternFields)
+	if glued {
+		required++
+	}
+	if required == 0 || len(words) < required {
+		return false
+	}
+	for index, field := range patternFields {
+		if words[index] != field {
+			return false
+		}
+	}
+	return !glued || strings.HasPrefix(words[len(patternFields)], gluedPrefix)
 }
 
 // BashCommandHasControl reports shell operators that break single-command grants.

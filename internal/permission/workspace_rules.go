@@ -334,6 +334,18 @@ func (r WorkspaceRules) AllowsBash(command string) bool {
 	return false
 }
 
+// AllowsBashSegment reports whether any durable pattern authorizes one
+// host-split command segment. See BashSegmentPatternMatches for the contract:
+// the caller must have validated the surrounding composition first.
+func (r WorkspaceRules) AllowsBashSegment(words []string) bool {
+	for _, pattern := range r.BashPrefixes {
+		if BashSegmentPatternMatches(words, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
 // AllowsMCPTool reports an exact namespaced tool allow.
 func (r WorkspaceRules) AllowsMCPTool(tool string) bool {
 	tool = strings.TrimSpace(tool)

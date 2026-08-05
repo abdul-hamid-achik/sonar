@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/abdul-hamid-achik/sonar/internal/config"
+	permissionpkg "github.com/abdul-hamid-achik/sonar/internal/permission"
 )
 
 var autoCommandAssignment = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*=[^=]*$`)
@@ -295,6 +296,20 @@ func (a *Agent) assessAutoScopedCommand(command string) autoCommandAssessment {
 			simple = autoSimpleCommandAssessment{
 				allowed: true, effect: autoCommandEffectWorkspaceExecution,
 				reason: autoCommandReasonAllowed, workspaceExecutable: true,
+			}
+		}
+		// A user-saved bash prefix (an "always" session grant or a durable
+		// workspace rule) can supply the executable authority a segment lacks.
+		// This is what lets a grant reach INSIDE a compound command: the whole
+		// command's composition — splitting, dynamic syntax, redirect targets,
+		// path operands — has been or is still validated by the host either
+		// way, and the grant cures only catalog refusals, never composition or
+		// path ones. Before this, 33 of 34 prompted commands in one audited
+		// session carried a composition marker, so a saved prefix could match
+		// nothing the model actually sent and every "always" was a placebo.
+		if !simple.allowed && autoCommandGrantEligibleReason(simple.reason) {
+			if granted, ok := a.grantAuthorizedSegmentAssessment(words, baseDir); ok {
+				simple = granted
 			}
 		}
 		if !simple.allowed {
@@ -882,6 +897,99 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 	assessment.allowed = true
 	assessment.reason = autoCommandReasonAllowed
 	return assessment
+}
+
+// autoCommandGrantEligibleReason reports the refusals a user-saved bash prefix
+// may cure: the segment's executable or its argument form is outside the host
+// catalog. Composition refusals (dynamic syntax, splitting, bounds, ambiguous
+// pipelines) and path refusals (operands or redirect targets outside the
+// workspace) are never grant-curable — the user's rule supplies executable
+// authority only, so those checks answer exactly as they do without a grant.
+func autoCommandGrantEligibleReason(reason autoCommandReason) bool {
+	switch reason {
+	case autoCommandReasonExecutable, autoCommandReasonArguments, autoCommandReasonHostToolAvailable:
+		return true
+	default:
+		return false
+	}
+}
+
+// grantAuthorizedSegmentAssessment re-assesses one catalog-refused segment
+// under the user's saved bash prefixes. A match replaces only the catalog's
+// executable/argument verdict; everything the host owns still applies here:
+//
+//   - provenance: the executable must be a bare name that resolves through
+//     autoCommandExecutableAllowed, so PATH reaching a workspace-resident or
+//     workspace-symlinked binary stays refused even under a grant — otherwise
+//     a grant for "x" plus a planted ./x would run repository code with AUTO
+//     authority — and a path-qualified spelling never matches at all;
+//   - path authority: every operand goes through the same workspace
+//     resolution catalogued commands use, with read grants still excluded
+//     from raw shell.
+//
+// The effect is workspace execution — the widest class the catalog itself
+// assigns — because a granted executable's real behavior is whatever the user
+// vouched for, not something argv inspection can narrow.
+func (a *Agent) grantAuthorizedSegmentAssessment(words []string, baseDir string) (autoSimpleCommandAssessment, bool) {
+	refused := autoSimpleCommandAssessment{}
+	for len(words) > 0 && autoCommandAssignmentAllowed(words[0]) {
+		words = words[1:]
+	}
+	if len(words) == 0 {
+		return refused, false
+	}
+	executable := words[0]
+	if filepath.Base(executable) != executable {
+		return refused, false
+	}
+	if !a.autoCommandExecutableAllowed(executable) {
+		return refused, false
+	}
+	if !a.userBashGrantCoversSegment(words) {
+		return refused, false
+	}
+	args := words[1:]
+	for index, word := range args {
+		if autoCommandNonPathArgument(executable, args, index) {
+			continue
+		}
+		if a.autoCommandPathAssessment(word, baseDir, false) == autoPathDenied {
+			return refused, false
+		}
+	}
+	if _, ok := a.autoScopedAttachedPathOptionsAssessment(executable, args, baseDir, false); !ok {
+		return refused, false
+	}
+	return autoSimpleCommandAssessment{
+		allowed: true,
+		effect:  autoCommandEffectWorkspaceExecution,
+		reason:  autoCommandReasonAllowed,
+	}, true
+}
+
+// userBashGrantCoversSegment consults both grant surfaces the approval flow
+// writes: process-local session bash-prefix grants for this workspace, and the
+// durable workspace rules. Assignments were already stripped by the caller so
+// the pattern's first field lines up with the executable word.
+func (a *Agent) userBashGrantCoversSegment(words []string) bool {
+	workspace := a.approvalScopeWorkspace()
+	a.mu.RLock()
+	patterns := make([]string, 0, len(a.approvalGrants))
+	for key := range a.approvalGrants {
+		parts := strings.Split(key, "\x00")
+		if len(parts) >= 4 && parts[0] == workspace && parts[1] == "bash" &&
+			parts[2] == permissionpkg.ScopeSessionBashPrefix {
+			patterns = append(patterns, parts[3])
+		}
+	}
+	rules := a.workspaceRules
+	a.mu.RUnlock()
+	for _, pattern := range patterns {
+		if permissionpkg.BashSegmentPatternMatches(words, pattern) {
+			return true
+		}
+	}
+	return rules.AllowsBashSegment(words)
 }
 
 func autoCommandNonPathArgument(executable string, args []string, index int) bool {

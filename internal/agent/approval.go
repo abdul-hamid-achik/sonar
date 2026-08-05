@@ -21,7 +21,11 @@ const (
 	maxApprovalDiffBytes      = 256 * 1024
 )
 
-func (a *Agent) newApprovalRequest(ctx context.Context, mode AuthorityMode, tc llm.ToolCall, argumentsHash string) permissionpkg.ApprovalRequest {
+// approvalScopeWorkspace is the exact workspace key session grants are stored
+// under. Every reader of approvalGrants must compute it identically — a
+// divergent spelling (unresolved symlink, uncleaned join) would make saved
+// grants silently never fire.
+func (a *Agent) approvalScopeWorkspace() string {
 	workspace := a.filesystemContext().workDir
 	if workspace == "" {
 		workspace, _ = os.Getwd()
@@ -29,6 +33,11 @@ func (a *Agent) newApprovalRequest(ctx context.Context, mode AuthorityMode, tc l
 	if absolute, err := filepath.Abs(workspace); err == nil {
 		workspace = filepath.Clean(absolute)
 	}
+	return workspace
+}
+
+func (a *Agent) newApprovalRequest(ctx context.Context, mode AuthorityMode, tc llm.ToolCall, argumentsHash string) permissionpkg.ApprovalRequest {
+	workspace := a.approvalScopeWorkspace()
 	request := permissionpkg.ApprovalRequest{
 		RequestID:       tc.ID,
 		ToolName:        tc.Name,
