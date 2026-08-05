@@ -145,9 +145,16 @@ func (m *Model) View() tea.View {
 	case StateStreaming:
 		v.WindowTitle = windowTitle + " \u00b7 streaming..."
 	default:
-		if m.hasSuccessFooterNotice() {
+		switch {
+		case m.hasSuccessFooterNotice():
 			v.WindowTitle = windowTitle + " \u00b7 done"
-		} else {
+		case strings.TrimSpace(m.input.Value()) != "":
+			// An unsent draft is the one idle state worth seeing from another
+			// tab: it is the thing waiting on the user rather than on the
+			// harness. The draft text itself is never shown — only that one
+			// exists — since window titles reach window-manager history.
+			v.WindowTitle = windowTitle + " \u00b7 draft"
+		default:
 			v.WindowTitle = windowTitle
 		}
 	}

@@ -90,8 +90,22 @@ func (m *Model) renderTerminalPauseView(titleText, hint string, controlCandidate
 	return v
 }
 
+// windowTitleBase names the tab. A conversation title identifies a tab far
+// better than the product name repeated across every window, so it leads when
+// one exists and the product name is the fallback.
+//
+// The title is model-generated from the user's own prompt, and terminal titles
+// leak into window-manager history and terminal integrations — the same reason
+// the workspace basename is used here instead of the full path. So it is
+// sanitized to a single line and truncated, never passed through raw.
 func (m *Model) windowTitleBase() string {
 	const product = "SONAR"
+	lead := product
+	if m != nil {
+		if title := sanitizeTerminalSingleLine(strings.TrimSpace(m.activeSessionTitle)); title != "" {
+			lead = truncateDisplay(title, 48)
+		}
+	}
 	workspace := ""
 	if m != nil && m.agent != nil {
 		workspace = strings.TrimSpace(m.agent.WorkDir())
@@ -101,13 +115,13 @@ func (m *Model) windowTitleBase() string {
 	}
 	workspace = filepath.Clean(workspace)
 	if workspace == "." || filepath.Dir(workspace) == workspace {
-		return product
+		return lead
 	}
 	name := sanitizeTerminalSingleLine(filepath.Base(workspace))
 	if name == "" || name == "." || name == string(filepath.Separator) {
-		return product
+		return lead
 	}
-	return truncateDisplay(product+" · "+name, 72)
+	return truncateDisplay(lead+" · "+name, 72)
 }
 
 func (m *Model) renderCompletionModal() string {
