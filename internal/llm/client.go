@@ -32,12 +32,17 @@ func inferenceNotStarted(err error) error {
 	return fmt.Errorf("%w: %w", ErrInferenceNotStarted, err)
 }
 
-// remoteInferenceError marks an error produced after a non-Ollama provider
-// request crossed the dispatch boundary. Its text remains available to the
-// agent for transient diagnostics, while IsRemoteInferenceError lets the agent
-// replace that text before crossing a transcript or durable-session boundary.
-// The concrete type is private so arbitrary clients cannot forge remote
-// provenance and accidentally hide useful local Ollama diagnostics.
+// remoteInferenceError marks an error produced after a credentialed remote
+// provider request crossed the dispatch boundary. Its text remains available to
+// the agent for transient diagnostics, while IsRemoteInferenceError lets the
+// agent replace that text before crossing a transcript or durable-session
+// boundary. The concrete type is private so arbitrary clients cannot forge
+// remote provenance and accidentally hide useful local Ollama diagnostics.
+//
+// "Remote" is a property of the request, not of the Go type that issued it.
+// Ollama Cloud is a credentialed remote HTTPS provider served by OllamaClient,
+// so it marks its dispatched chat failures here too; a loopback Ollama does
+// not, and keeps its raw diagnostics.
 type remoteInferenceError struct {
 	cause error
 }
@@ -58,8 +63,9 @@ func markRemoteInferenceError(err error) error {
 }
 
 // IsRemoteInferenceError reports whether err carries exact provenance from a
-// dispatched OpenAI-compatible inference request. It deliberately does not
-// classify Ollama or host-side preflight failures by matching error strings.
+// dispatched inference request against a credentialed remote provider. It
+// deliberately does not classify local Ollama or host-side preflight failures,
+// and never decides provenance by matching error strings.
 func IsRemoteInferenceError(err error) bool {
 	var remoteErr *remoteInferenceError
 	return errors.As(err, &remoteErr)

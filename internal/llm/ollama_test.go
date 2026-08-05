@@ -300,6 +300,98 @@ func TestOllamaAPIKeyOnlyLeavesForRemoteHTTPSOrigin(t *testing.T) {
 	}
 }
 
+// Ollama Cloud is a credentialed remote HTTPS provider implemented as a
+// variant of OllamaClient, so classifying remote provenance by concrete client
+// type sent its failures down the agent's local branch — the one that prints
+// the raw error, built straight from the remote HTTP response body, into the
+// transcript and the durable session snapshot. The credential, not the Go
+// type, is the discriminator.
+//
+// httptest cannot present a non-local HTTPS origin, so the header is set the
+// way the constructor's non-local HTTPS branch sets it; that branch itself is
+// covered by TestOllamaAPIKeyOnlyLeavesForRemoteHTTPSOrigin.
+func TestOllamaCredentialedChatFailureIsMarkedRemote(t *testing.T) {
+	const providerPayload = "OLLAMA_CLOUD_SECRET /Users/provider/private.key"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = fmt.Fprintf(w, `{"error":%q}`, providerPayload)
+	}))
+	defer server.Close()
+
+	client, err := NewOllamaClient(server.URL, "qwen", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.authHeader = "Bearer test-secret"
+
+	streamErr := client.ChatStream(context.Background(), ChatOptions{}, func(StreamChunk) error { return nil })
+	if streamErr == nil {
+		t.Fatal("credentialed remote failure unexpectedly succeeded")
+	}
+	if !IsRemoteInferenceError(streamErr) {
+		t.Fatalf("credentialed remote failure not marked remote: %v", streamErr)
+	}
+	// The text stays available as a transient in-agent diagnostic; the marking
+	// is what lets the agent replace it at the transcript boundary.
+	if !strings.Contains(streamErr.Error(), providerPayload) {
+		t.Fatalf("provider diagnostic lost inside the adapter: %v", streamErr)
+	}
+	var statusErr *ollamaHTTPError
+	if !errors.As(streamErr, &statusErr) || statusErr.StatusCode != http.StatusBadRequest {
+		t.Fatalf("marking hid the typed status error: %v", streamErr)
+	}
+}
+
+// A truncated credentialed stream is still a dispatched remote failure.
+func TestOllamaCredentialedTruncatedStreamIsMarkedRemote(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprintln(w, `{"message":{"role":"assistant","content":"partial"}}`)
+	}))
+	defer server.Close()
+
+	client, err := NewOllamaClient(server.URL, "qwen", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client.authHeader = "Bearer test-secret"
+
+	streamErr := client.ChatStream(context.Background(), ChatOptions{}, func(StreamChunk) error { return nil })
+	if streamErr == nil || !IsRemoteInferenceError(streamErr) {
+		t.Fatalf("truncated credentialed stream not marked remote: %v", streamErr)
+	}
+}
+
+// Local Ollama diagnostics are deliberately actionable: they name the socket,
+// the model, and the reason, and the agent prints them verbatim on purpose.
+// Nothing about the fix above may reclassify them.
+func TestOllamaLocalChatFailureStaysUnmarked(t *testing.T) {
+	const localDiagnostic = "model requires more system memory than is available"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = fmt.Fprintf(w, `{"error":%q}`, localDiagnostic)
+	}))
+	defer server.Close()
+
+	client, err := NewOllamaClient(server.URL, "qwen", 4096)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if client.authHeader != "" {
+		t.Fatalf("loopback client unexpectedly credentialed: %q", client.authHeader)
+	}
+
+	streamErr := client.ChatStream(context.Background(), ChatOptions{}, func(StreamChunk) error { return nil })
+	if streamErr == nil {
+		t.Fatal("local failure unexpectedly succeeded")
+	}
+	if IsRemoteInferenceError(streamErr) {
+		t.Fatalf("local failure misclassified as remote: %v", streamErr)
+	}
+	if !strings.Contains(streamErr.Error(), localDiagnostic) {
+		t.Fatalf("local diagnostic lost: %v", streamErr)
+	}
+}
+
 func TestOllamaChatStreamPropagatesCallbackError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = fmt.Fprintln(w, `{"message":{"role":"assistant","content":"answer"},"done":true}`)

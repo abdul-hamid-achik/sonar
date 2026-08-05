@@ -394,12 +394,39 @@ func (o *OllamaClient) ChatStream(ctx context.Context, opts ChatOptions, fn func
 		return fn(chunk)
 	})
 	if err != nil {
-		return err
+		return o.markRemoteFailure(err)
 	}
 	if !sawDone {
-		return fmt.Errorf("ollama chat stream ended before done: %w", io.ErrUnexpectedEOF)
+		return o.markRemoteFailure(fmt.Errorf("ollama chat stream ended before done: %w", io.ErrUnexpectedEOF))
 	}
 	return nil
+}
+
+// markRemoteFailure applies the remote-inference redaction contract to a
+// dispatched request that carried a credential.
+//
+// Ollama Cloud is a credentialed remote HTTPS provider that happens to be
+// implemented as a variant of this client rather than as its own type, so
+// classifying provenance by concrete client type left it on the local branch —
+// the one that deliberately prints the raw error, which ollamaStatusError
+// builds straight from the remote HTTP response body, into the transcript and
+// from there into the durable session snapshot. The credential is the
+// discriminator that survives that implementation detail: it is set only for
+// an HTTPS host that is not local, which is exactly the population whose
+// failure text is somebody else's server talking.
+//
+// A genuinely local Ollama sends no Authorization header and keeps its raw
+// diagnostics, which are actionable and are meant to be shown.
+//
+// Only ChatStream needs this. It is the sole Ollama entry point whose error
+// crosses a transcript or durable-session boundary; Ping, Embed, and the
+// inventory calls report through host-authored copy that never carries the
+// provider body.
+func (o *OllamaClient) markRemoteFailure(err error) error {
+	if o.authHeader == "" {
+		return err
+	}
+	return markRemoteInferenceError(err)
 }
 
 // Embed generates embeddings for the given texts using the specified model.
