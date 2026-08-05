@@ -47,6 +47,15 @@ const (
 	autoCommandReasonDynamicSyntax
 	autoCommandReasonAmbiguousComposition
 	autoCommandReasonExecutable
+	// autoCommandReasonExecutableUncatalogued distinguishes "installed, but
+	// the catalog has no argument contract for it" from
+	// autoCommandReasonExecutable's "did not resolve to a trusted host path at
+	// all". The distinction earns its keep in the refusal text: an installed
+	// xcrun/node used to fall through to "arguments outside the host catalog",
+	// and the audited session shows the model taking that literally —
+	// re-sending the same executable with shuffled arguments and collecting a
+	// prompt each time, when no argument form could ever be admitted.
+	autoCommandReasonExecutableUncatalogued
 	autoCommandReasonArguments
 	autoCommandReasonPathAuthority
 	// autoCommandReasonHostToolAvailable is a refusal with a remedy: the host
@@ -100,6 +109,8 @@ func autoCommandReasonLabel(reason autoCommandReason, command string) string {
 		return "ambiguous command composition"
 	case autoCommandReasonExecutable:
 		return "executable outside the host catalog"
+	case autoCommandReasonExecutableUncatalogued:
+		return "executable installed but outside the host catalog; changing arguments cannot admit it"
 	case autoCommandReasonArguments:
 		return "arguments outside the host catalog"
 	case autoCommandReasonHostToolAvailable:
@@ -888,7 +899,13 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 		"pwd", "cat", "head", "uniq", "cut", "tr", "stat", "which", "basename", "dirname", "realpath", "echo", "true", "false", "test", "cmp":
 		allowed = true
 	default:
-		allowed = false
+		// The executable resolved through the provenance check but has no
+		// argument contract in this catalog, so no argument reshuffle can
+		// admit it. Report the executable, not the arguments: the generic
+		// "arguments outside the host catalog" fall-through invited exactly
+		// those futile reshuffles for installed xcrun/node commands.
+		assessment.reason = autoCommandReasonExecutableUncatalogued
+		return assessment
 	}
 	if !allowed {
 		assessment.reason = autoCommandReasonArguments
@@ -907,7 +924,8 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 // authority only, so those checks answer exactly as they do without a grant.
 func autoCommandGrantEligibleReason(reason autoCommandReason) bool {
 	switch reason {
-	case autoCommandReasonExecutable, autoCommandReasonArguments, autoCommandReasonHostToolAvailable:
+	case autoCommandReasonExecutable, autoCommandReasonExecutableUncatalogued,
+		autoCommandReasonArguments, autoCommandReasonHostToolAvailable:
 		return true
 	default:
 		return false
@@ -1005,6 +1023,86 @@ func autoCommandNonPathArgument(executable string, args []string, index int) boo
 	}
 	if executable == "rg" || executable == "grep" {
 		return autoSearchPatternArgument(args, index, executable == "rg")
+	}
+	if executable == "sed" {
+		return autoSedProgramArgument(args, index)
+	}
+	return false
+}
+
+// autoSedProgramArgument distinguishes sed PROGRAM text — an address/command
+// script such as `/<\/style>/,/<\/html>/p` — from filesystem operands. The
+// generic operand loop read the leading slash of an address regex as an
+// absolute path and reported "operand outside the workspace", sending the
+// model into path shuffles that could never succeed (5 of 34 refusals in one
+// audited session). rg/grep pattern text already has this exemption
+// (autoSearchPatternArgument); sed programs are data in exactly the same way.
+//
+// The exemption decides only which words face path authority; admission still
+// belongs to autoScopedSedCommandAllowed, which keeps refusing every
+// non-print program (`w` can create files, some dialects execute commands).
+//
+// sed's grammar makes the classification tractable: with no -e/-f (or their
+// long forms) the first non-option word IS the program — never an input file —
+// and with -e/-f present there is no positional program at all, so only an
+// explicit -e/--expression value is program text. A -f value names a script
+// FILE and deliberately stays a path operand.
+func autoSedProgramArgument(args []string, target int) bool {
+	if sedHasExpressionOrFileOption(args) {
+		expectProgram := false
+		endOptions := false
+		for index, argument := range args {
+			if expectProgram {
+				expectProgram = false
+				if index == target {
+					return true
+				}
+				continue
+			}
+			if !endOptions && argument == "--" {
+				endOptions = true
+				continue
+			}
+			if endOptions || !strings.HasPrefix(argument, "-") || argument == "-" {
+				continue
+			}
+			switch {
+			case argument == "-e" || argument == "--expression":
+				expectProgram = true
+			case strings.HasPrefix(argument, "-e") || strings.HasPrefix(argument, "--expression="):
+				if index == target {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	endOptions := false
+	for index, argument := range args {
+		if !endOptions && argument == "--" {
+			endOptions = true
+			continue
+		}
+		if !endOptions && strings.HasPrefix(argument, "-") && argument != "-" {
+			continue
+		}
+		// First positional word: the program. Everything after it is an input
+		// file and keeps full path authority.
+		return index == target
+	}
+	return false
+}
+
+func sedHasExpressionOrFileOption(args []string) bool {
+	for _, argument := range args {
+		if argument == "--" {
+			return false
+		}
+		if strings.HasPrefix(argument, "-e") || strings.HasPrefix(argument, "-f") ||
+			argument == "--expression" || strings.HasPrefix(argument, "--expression=") ||
+			argument == "--file" || strings.HasPrefix(argument, "--file=") {
+			return true
+		}
 	}
 	return false
 }

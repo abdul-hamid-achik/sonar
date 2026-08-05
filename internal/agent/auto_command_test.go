@@ -1040,6 +1040,76 @@ func TestAutoCommandRedirectsRequireWorkspaceTargets(t *testing.T) {
 	}
 }
 
+// TestSedProgramArgumentsAreNotPathOperands pins the refusal REASON, not the
+// refusal: general sed programs stay approval-gated (a `w` command can create
+// files), but an address regex such as `/<\/style>/,/<\/html>/p` is program
+// text, and reporting its leading slash as "operand outside the workspace"
+// sent the model into futile path shuffles.
+func TestSedProgramArgumentsAreNotPathOperands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	installGrantTestExecutables(t, "sed")
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+
+	regexProgram := ag.assessAutoScopedCommand(`sed -n '/<\/style>/,/<\/html>/p' index.html`)
+	if regexProgram.admitted() {
+		t.Fatalf("regex sed program gained AUTO authority: %#v", regexProgram)
+	}
+	if regexProgram.reason == autoCommandReasonPathAuthority {
+		t.Fatalf("sed program text was treated as a filesystem operand: %#v", regexProgram)
+	}
+	if regexProgram.reason != autoCommandReasonArguments {
+		t.Fatalf("regex sed program refusal reason = %#v, want autoCommandReasonArguments", regexProgram)
+	}
+
+	// A -f value names a script FILE: that is a real path operand and keeps
+	// real path authority.
+	scriptFile := ag.assessAutoScopedCommand("sed -f /etc/evil.sed index.html")
+	if scriptFile.admitted() || scriptFile.reason != autoCommandReasonPathAuthority {
+		t.Fatalf("sed -f script path assessment = %#v, want path-authority refusal", scriptFile)
+	}
+	// So does an external INPUT file, even with an exempt program ahead of it.
+	externalInput := ag.assessAutoScopedCommand("sed -n '1,120p' /etc/passwd")
+	if externalInput.admitted() || externalInput.reason != autoCommandReasonPathAuthority {
+		t.Fatalf("external sed input assessment = %#v, want path-authority refusal", externalInput)
+	}
+	// And the admitted print form is unchanged.
+	if assessment := ag.assessAutoScopedCommand("sed -n '1,120p' index.html"); !assessment.admitted() {
+		t.Fatalf("bounded sed print form lost AUTO authority: %#v", assessment)
+	}
+}
+
+// TestUncataloguedInstalledExecutableReportsExecutableReason pins 5(b): an
+// installed executable with no argument contract must say the EXECUTABLE is
+// the problem — "arguments outside the host catalog" invited argument
+// shuffles that could never succeed.
+func TestUncataloguedInstalledExecutableReportsExecutableReason(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	installGrantTestExecutables(t, "xcrun", "go")
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+
+	installed := ag.assessAutoScopedCommand("xcrun simctl list devices")
+	if installed.admitted() || installed.reason != autoCommandReasonExecutableUncatalogued {
+		t.Fatalf("installed uncatalogued executable assessment = %#v, want autoCommandReasonExecutableUncatalogued", installed)
+	}
+	// A name that does not resolve at all keeps the original reason.
+	missing := ag.assessAutoScopedCommand("definitely-not-installed-fixture --version")
+	if missing.admitted() || missing.reason != autoCommandReasonExecutable {
+		t.Fatalf("unresolvable executable assessment = %#v, want autoCommandReasonExecutable", missing)
+	}
+	// A catalogued executable with a refused argument form keeps the
+	// arguments reason — there, reshaping arguments genuinely can succeed.
+	arguments := ag.assessAutoScopedCommand("go test -exec=curl ./...")
+	if arguments.admitted() || arguments.reason != autoCommandReasonArguments {
+		t.Fatalf("catalogued-executable argument refusal = %#v, want autoCommandReasonArguments", arguments)
+	}
+}
+
 func TestAutoCommandAssessmentIsBounded(t *testing.T) {
 	ag := New(nil, nil, 4096)
 	ag.SetWorkDir(t.TempDir())
@@ -1083,6 +1153,7 @@ func TestAutoCommandReasonLabelIsBoundedOperatorFacingText(t *testing.T) {
 		{name: "dynamic syntax without a command", reason: autoCommandReasonDynamicSyntax, command: "", want: "dynamic shell syntax"},
 		{name: "ambiguous composition", reason: autoCommandReasonAmbiguousComposition, command: "cd /tmp && ls", want: "ambiguous command composition"},
 		{name: "executable", reason: autoCommandReasonExecutable, command: "custom-tool", want: "executable outside the host catalog"},
+		{name: "uncatalogued installed executable", reason: autoCommandReasonExecutableUncatalogued, command: "xcrun simctl list", want: "executable installed but outside the host catalog; changing arguments cannot admit it"},
 		{name: "arguments", reason: autoCommandReasonArguments, command: "go build -ldflags x", want: "arguments outside the host catalog"},
 		{name: "path authority", reason: autoCommandReasonPathAuthority, command: "cat ../secret.txt", want: "operand outside the workspace"},
 		{name: "redirect target", reason: autoCommandReasonRedirectTarget, command: "go test ./... > /tmp/out.txt", want: "redirect only into workspace files; this redirect target resolves outside the workspace"},
