@@ -37,36 +37,171 @@ func plainBashLeadingField(field string) bool {
 	return true
 }
 
+// bashTrivialSegmentLeaders are shell builtins the AUTO catalog admits
+// unconditionally; a prefix for one of them is never what an approval prompt
+// was about. Skipping them when choosing the derivation segment is the
+// difference between offering "echo" for
+// `echo "=== TODO ==="; grep -rn TODO src | head` — a placebo, since echo
+// never prompted — and offering the grep that actually tripped the modal. In
+// the audited session ten of the fourteen always presses landed on echo- or
+// cd-led compounds exactly like that one.
+var bashTrivialSegmentLeaders = map[string]struct{}{
+	"echo": {}, "cd": {}, "true": {}, "false": {}, "pwd": {}, "test": {}, "printf": {}, ":": {}, "exit": {},
+}
+
+// inertBashStatusParameter mirrors the host scanner's rule: $?, $$, $# and $!
+// are fixed by POSIX to decimal integers, so the ubiquitous
+// `; echo "EXIT=$?"` tail cannot expand into a command or a path and does not
+// forfeit derivation. Every other $ form remains dynamic and refuses.
+func inertBashStatusParameter(runes []rune, index int) bool {
+	if index+1 >= len(runes) {
+		return false
+	}
+	switch runes[index+1] {
+	case '?', '$', '#', '!':
+		return true
+	default:
+		return false
+	}
+}
+
+// firstDerivableBashSegment walks the command's top-level static segments with
+// a quote-aware scan and returns the whitespace fields of the first segment
+// worth deriving a prefix from: the first whose leading word is not a trivial
+// builtin, falling back to the first trivial one when nothing else exists.
+//
+// It fails closed — nothing is offered — when the command contains dynamic
+// syntax (a non-inert $, a backtick, grouping, input redirection) or any
+// segment whose leading word is not a plain bare token: in both cases sh may
+// parse a different command than a naive field split suggests. Sloppiness
+// here can never over-grant — the offered prefix is displayed to the user
+// before it is saved, and matching goes through the host's own splitter — but
+// a misleading offer is still an offer, so ambiguity refuses.
+func firstDerivableBashSegment(command string) ([]string, bool) {
+	runes := []rune(command)
+	var quote rune
+	escaped := false
+	segmentStart := 0
+	var chosen []string
+	var fallback []string
+	closeSegment := func(end int) bool {
+		fields := strings.Fields(string(runes[segmentStart:end]))
+		if len(fields) == 0 {
+			return true
+		}
+		if !plainBashLeadingField(fields[0]) {
+			return false
+		}
+		if _, trivial := bashTrivialSegmentLeaders[fields[0]]; trivial {
+			if fallback == nil {
+				fallback = fields
+			}
+			return true
+		}
+		if chosen == nil {
+			chosen = fields
+		}
+		return true
+	}
+	for index := 0; index < len(runes); index++ {
+		r := runes[index]
+		if escaped {
+			escaped = false
+			continue
+		}
+		if r == '\\' && quote != '\'' {
+			escaped = true
+			continue
+		}
+		if quote == '\'' {
+			if r == '\'' {
+				quote = 0
+			}
+			continue
+		}
+		if quote == '"' {
+			switch r {
+			case '"':
+				quote = 0
+			case '$':
+				if !inertBashStatusParameter(runes, index) {
+					return nil, false
+				}
+				index++
+			case '`':
+				return nil, false
+			}
+			continue
+		}
+		switch r {
+		case '\'', '"':
+			quote = r
+		case '$':
+			if !inertBashStatusParameter(runes, index) {
+				return nil, false
+			}
+			index++
+		case '`', '(', ')', '{', '}', '<':
+			return nil, false
+		case ';', '\n', '|', '&':
+			// && and || read as two boundaries with an empty segment between;
+			// empty segments are skipped, so the effect is identical.
+			if !closeSegment(index) {
+				return nil, false
+			}
+			segmentStart = index + 1
+		}
+	}
+	if quote != 0 || escaped {
+		return nil, false
+	}
+	if !closeSegment(len(runes)) {
+		return nil, false
+	}
+	if chosen != nil {
+		return chosen, true
+	}
+	if fallback != nil {
+		return fallback, true
+	}
+	return nil, false
+}
+
 // DeriveBashPrefix extracts a safe session/workspace prefix from an approved
 // command.
 //
 // A command whose control content is limited to static composition — &&, ||,
-// ;, |, newlines, redirects — derives the prefix from its FIRST segment
-// instead of failing. This is what makes an "always"-style approval mean
-// something for compound commands: in one audited AUTO session 33 of the 34
-// prompted commands carried a composition marker, so every always press fell
-// back to an exact-request grant keyed on an argument hash a model never
-// re-sends byte-identically — the user granted 14 times and zero grants ever
-// fired. The derived prefix carries executable authority only: whole-command
-// matching (BashPatternMatches) still refuses control-bearing commands, and
-// segment matching (BashSegmentPatternMatches) applies only inside a
-// composition the host has already validated, so the text after the leading
-// fields — including every other segment — gains nothing from the grant.
-//
-// Dynamic content stays non-derivable: any $ or backtick anywhere (even
-// quoted) refuses exactly as before, and for compound commands the leading
-// fields must be plain bare words, so the derived prefix is precisely what sh
-// would parse as the start of the first command.
+// ;, |, newlines, redirects, inert status parameters — derives the prefix
+// from its first non-trivial segment instead of failing. This is what makes
+// an "always"-style approval mean something for compound commands: in one
+// audited AUTO session 33 of the 34 prompted commands carried a composition
+// marker, so every always press fell back to an exact-request grant keyed on
+// an argument hash a model never re-sends byte-identically — the user granted
+// 14 times and zero grants ever fired. The derived prefix carries executable
+// authority only: whole-command matching (BashPatternMatches) still refuses
+// control-bearing commands, and segment matching (BashSegmentPatternMatches)
+// applies only inside a composition the host has already validated, so the
+// text outside the derived fields — including every other segment — gains
+// nothing from the grant.
 func DeriveBashPrefix(command string) (string, bool) {
 	command = strings.TrimSpace(command)
-	if command == "" || strings.ContainsAny(command, "$`") {
+	if command == "" {
 		return "", false
 	}
-	fields := strings.Fields(command)
+	if !BashCommandHasControl(command) {
+		return deriveBashPrefixFields(strings.Fields(command), false)
+	}
+	fields, ok := firstDerivableBashSegment(command)
+	if !ok {
+		return "", false
+	}
+	return deriveBashPrefixFields(fields, true)
+}
+
+func deriveBashPrefixFields(fields []string, compound bool) (string, bool) {
 	if len(fields) == 0 {
 		return "", false
 	}
-	compound := BashCommandHasControl(command)
 	first := fields[0]
 	if compound && !plainBashLeadingField(first) {
 		return "", false

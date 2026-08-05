@@ -16,24 +16,36 @@ func TestDeriveBashPrefix(t *testing.T) {
 		{command: "npm run build", want: "npm run", ok: true},
 		{command: "ls -la", want: "ls", ok: true},
 		{command: "true", want: "true", ok: true},
-		// Static composition derives from the first segment. The grant carries
+		// Static composition derives from a segment. The grant carries
 		// executable authority only — whole-command matching still refuses
 		// control-bearing commands, and segment matching happens only inside a
-		// composition the host validated — so the text after the leading
-		// fields (including the other segments) gains nothing from the grant.
+		// composition the host validated — so the text outside the derived
+		// fields (including every other segment) gains nothing from the grant.
 		{command: "go test ./... && rm -rf /", want: "go test", ok: true},
 		{command: "swift test 2>&1 | xcbeautify", want: "swift", ok: true},
 		// node is not a multi-word runner, so the compound form derives the
 		// same single-field prefix its simple form always has.
 		{command: "node scripts/check.js && go test ./...", want: "node", ok: true},
 		{command: "go build ./... 2>/dev/null; go vet ./...", want: "go build", ok: true},
-		// Dynamic content stays non-derivable, and leading fields that are not
-		// plain bare words fail closed: sh would not parse them as the start
-		// of the first command the way a naive field split does.
+		{command: "go test&&rm -rf /", want: "go test", ok: true},
+		// The derivation segment is the first NON-TRIVIAL one: offering "echo"
+		// or "cd" for these — the audited session's dominant shapes — kept the
+		// always press a placebo for the command that actually prompted.
+		{command: `echo "=== TODO ==="; grep -rn TODO packages | head -5`, want: "grep", ok: true},
+		{command: "cd native/ios && xcodebuild test -scheme Core", want: "xcodebuild", ok: true},
+		{command: "xcrun simctl list devices available 2>/dev/null | grep -i iphone | head -4", want: "xcrun", ok: true},
+		{command: "echo hi && echo bye", want: "echo", ok: true},
+		// The inert status parameter is fixed by POSIX to a decimal integer —
+		// the same rule the host scanner applies — so the ubiquitous
+		// `; echo "EXIT=$?"` tail does not forfeit derivation.
+		{command: `bun run lint > /tmp/vn-lint.log 2>&1; echo "LINT_EXIT=$?" >> /tmp/vn-lint.log`, want: "bun run", ok: true},
+		// Dynamic content stays non-derivable, and a segment whose leading
+		// word is not a plain bare token fails the whole derivation: sh would
+		// not parse it the way a naive field split does.
 		{command: "echo $HOME", want: "", ok: false},
 		{command: "echo `date` && go test ./...", want: "", ok: false},
 		{command: `"go" test && rm -rf /`, want: "", ok: false},
-		{command: "go test&&rm -rf /", want: "", ok: false},
+		{command: "for p in a b; do echo $p; done", want: "", ok: false},
 		{command: "", want: "", ok: false},
 	}
 	for _, tt := range tests {
