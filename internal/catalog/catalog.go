@@ -47,7 +47,6 @@ type (
 
 var (
 	loadOnce  sync.Once
-	loaded    []Provider
 	loadErr   error
 	byID      map[ProviderID]Provider
 	modelsBy  map[ProviderID]map[string]Model
@@ -81,7 +80,6 @@ func load() {
 			modelsBy[provider.ID] = models
 		}
 		sort.Slice(sortedIDs, func(i, j int) bool { return sortedIDs[i] < sortedIDs[j] })
-		loaded = providers
 	})
 }
 

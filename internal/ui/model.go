@@ -233,7 +233,6 @@ type Model struct {
 	contextDoctorState       *ContextDoctorState
 	contextDoctorRequest     uint64
 	modelPickerState         *ModelPickerState
-	modelInventoryRequest    uint64
 	manualOnlyModels         map[string]struct{}
 	settingsPickerState      *SettingsPickerState
 	permissionsPanelState    *PermissionsPanelState
@@ -332,7 +331,6 @@ type Model struct {
 	ollamaInventoryAttempted  bool
 	pendingOllamaInventory    *OllamaModelInventoryMsg
 	ollamaInventoryCommitting bool
-	ollamaInventoryCommitID   uint64
 	agentProfile              string
 	agentList                 []string
 	toolCount                 int

@@ -59,19 +59,6 @@ type OllamaModelInventoryMsg struct {
 	Err       error
 }
 
-// ollamaModelInventoryCommittedMsg returns after the manager has atomically
-// installed one inventory snapshot outside Bubble Tea's Update goroutine.
-type ollamaModelInventoryCommittedMsg struct {
-	Inventory        OllamaModelInventoryMsg
-	RecoveredModel   string
-	RecoveryErr      error
-	SelectionChanged bool
-	PreviousModel    string
-	SelectedModel    string
-	SelectionReason  string
-	SelectionErr     error
-}
-
 // OllamaModelDetailsRequestedMsg asks the parent to enrich/show one model.
 // Cached descriptors may be rendered immediately while /api/show completes.
 type OllamaModelDetailsRequestedMsg struct{ Model OllamaModelDescriptor }

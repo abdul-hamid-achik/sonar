@@ -1,7 +1,5 @@
 package ui
 
-import "fmt"
-
 // ModelPreferenceStore is the narrow user-runtime persistence boundary for a
 // manually selected model and optional provider profile. It is intentionally
 // independent from session state.
@@ -33,19 +31,6 @@ func (m *Model) saveManualModelPreference(model string) {
 			Content: "Model selected, but its restart preference could not be saved.",
 		})
 	}
-}
-
-func (m *Model) clearManualModelPreference() error {
-	if m.modelPreferenceStore == nil {
-		return nil
-	}
-	if err := m.modelPreferenceStore.ClearManualModel(); err != nil {
-		if m.logger != nil {
-			m.logger.Error("clear model preference", "error", err)
-		}
-		return fmt.Errorf("automatic routing was not enabled because the saved model preference could not be cleared")
-	}
-	return nil
 }
 
 func (m *Model) saveManualProviderPreference(name string) {
