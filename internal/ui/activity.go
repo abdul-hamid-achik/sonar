@@ -147,7 +147,7 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 		return workingActivity{
 			label:        "Continuing automatically",
 			compactLabel: "AUTO continuing",
-			detail:       fmt.Sprintf("checkpoint %d/%d", m.autoCheckpoints.segmentsContinued, m.autoCheckpoints.segmentCeiling()),
+			detail:       m.autoContinuationBudgetDetail(),
 			cancellable:  true,
 		}, true
 	case m.capabilityRoute != nil && (m.state == StateWaiting || m.state == StateStreaming):
@@ -605,4 +605,53 @@ func (m *Model) renderContextStatus() string {
 		return ""
 	}
 	return m.formatContextStatusWithPercent(m.displayContextPercent())
+}
+
+// autoContinuationBudgetDetail reports how much of the AUTO turn budget is
+// spent, in the two dimensions that actually end the run.
+//
+// The segment counter alone was enough while the whole-turn ceiling was a
+// fixed 8 segments and 90 minutes. Now that both are configurable and a run
+// can be given hours, "checkpoint 3/40" says almost nothing: the wall clock is
+// what bites first on a long job, and the row carried no time at all.
+//
+// Elapsed here is the logical turn's, not the segment's — the ceiling it is
+// measured against is the turn's — so it does not duplicate the per-activity
+// elapsed counter, which times the current operation.
+func (m *Model) autoContinuationBudgetDetail() string {
+	segments := fmt.Sprintf("checkpoint %d/%d",
+		m.autoCheckpoints.segmentsContinued, m.autoCheckpoints.segmentCeiling())
+	if m == nil || m.autoCheckpoints.startedAt.IsZero() {
+		return segments
+	}
+	ceiling := m.autoCheckpoints.elapsedCeiling()
+	if ceiling <= 0 {
+		return segments
+	}
+	spent := m.nowTime().Sub(m.autoCheckpoints.startedAt)
+	if spent < 0 {
+		spent = 0
+	}
+	return segments + " · " + formatBudgetSpan(spent) + "/" + formatBudgetSpan(ceiling)
+}
+
+// formatBudgetSpan renders a duration at the coarsest unit that still
+// distinguishes it, so a six-hour ceiling reads as "6h" rather than "360m" and
+// a two-minute run does not read as "0h".
+func formatBudgetSpan(d time.Duration) string {
+	if d < 0 {
+		d = 0
+	}
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d/time.Second))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d/time.Minute))
+	}
+	hours := d / time.Hour
+	minutes := (d % time.Hour) / time.Minute
+	if minutes == 0 {
+		return fmt.Sprintf("%dh", int(hours))
+	}
+	return fmt.Sprintf("%dh%02dm", int(hours), int(minutes))
 }
