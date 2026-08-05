@@ -26,7 +26,7 @@ preconditions:
 steps:
     - wait:
         screen:
-            contains: "try: ollama serve"
+            contains: "remote prompts"
         timeoutMs: 5000
     - wait:
         screen:

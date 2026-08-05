@@ -22,14 +22,14 @@
                      │   /cmd              Run slash command                                      │
                      │   team / swarm / …  Ask naturally for a read-only expert consultation      │
                      │                     when enabled                                           │
-                     │   enter (running)   Queue one follow-up; it sends after the current turn   │
-                     │                     settles successfully                                   │
+                     │   enter (running)   Slash commands run immediately; other drafts queue     │
+                     │                     until the current turn settles                         │
                      │   esc (running)     Clear a queued follow-up first; press again to cancel  │
                      │                     the turn                                               │
-                     │                                                                            │
                      │ Slash Commands                                                             │
                      │   /help             Show help overlay with shortcuts and commands          │
                      │   /clear            Clear conversation history                             │
                      │   /plan             Open a guided read-only planning form                  │
-                     │ esc/q close · j/k scroll · pgup/pgdn page · 31%                            │
+                     │   /goal             Create, inspect, pause, resume, budget, or drop a      │
+                     │ esc/q close · j/k scroll · pgup/pgdn page · 28%                            │
                      ╰────────────────────────────────────────────────────────────────────────────╯
