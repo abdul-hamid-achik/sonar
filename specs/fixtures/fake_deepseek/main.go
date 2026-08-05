@@ -83,6 +83,71 @@ type wireRequest struct {
 	Stream   bool          `json:"stream"`
 }
 
+// sessionTitleMarker appears in the system prompt sonar sends when it asks a
+// provider to name a session. That request is an ordinary chat completion, so
+// without recognising it the fixture answers "Fixture answer N" and the
+// session is titled nothing — which fails any spec that checks the title in
+// the top bar.
+const sessionTitleMarker = "Reply with ONLY a short session title"
+
+// titleFor derives a plausible title from the request being summarised.
+//
+// The title prompt wraps the user's text in scaffolding — "Workspace: …",
+// "Mode: …", then "User request:" — so a naive read of the message titles the
+// session "Workspace external-read-workspace Mode NORMAL", which is what the
+// first attempt did. The marker is what separates the two.
+//
+// Three to eight words, no punctuation, as the system prompt asks. A fixture
+// that ignored those rules would let a real regression in the title parser
+// pass unnoticed.
+func titleFor(messages []wireMessage) string {
+	source := ""
+	for _, message := range messages {
+		if message.Role == "user" && strings.TrimSpace(message.Content) != "" {
+			source = message.Content
+		}
+	}
+	if _, after, found := strings.Cut(source, "User request:"); found {
+		source = after
+	}
+	if before, _, found := strings.Cut(source, "Session title:"); found {
+		source = before
+	}
+	if before, _, found := strings.Cut(source, "Assistant reply"); found {
+		source = before
+	}
+	words := strings.Fields(strings.Map(func(r rune) rune {
+		if r == '"' || r == '.' || r == ',' {
+			return ' '
+		}
+		return r
+	}, source))
+	kept := make([]string, 0, 8)
+	for _, word := range words {
+		// Absolute paths are not words a title should spend its budget on.
+		if strings.ContainsAny(word, "/\\") || strings.HasPrefix(word, "<") {
+			continue
+		}
+		kept = append(kept, word)
+		if len(kept) == 6 {
+			break
+		}
+	}
+	if len(kept) == 0 {
+		return "Fixture session"
+	}
+	return strings.Join(kept, " ")
+}
+
+func isTitleRequest(messages []wireMessage) bool {
+	for _, message := range messages {
+		if message.Role == "system" && strings.Contains(message.Content, sessionTitleMarker) {
+			return true
+		}
+	}
+	return false
+}
+
 func main() { os.Exit(run()) }
 
 func run() int {
@@ -192,6 +257,9 @@ func handleChat(state *fixtureState, w http.ResponseWriter, r *http.Request) {
 
 	index := state.nextChat()
 	answer := fmt.Sprintf("Fixture answer %d.", index)
+	if isTitleRequest(request.Messages) {
+		answer = titleFor(request.Messages)
+	}
 
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
