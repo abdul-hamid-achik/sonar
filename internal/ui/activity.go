@@ -317,7 +317,14 @@ func (m *Model) renderWorkingLine() string {
 				if m.chatPaneWidth() >= 58 {
 					cells = 6
 				}
-				motion = m.scramble.ViewN(cells)
+				// Once a first-echo baseline exists, the waiting cells encode
+				// elapsed-vs-typical (sonar_ping.go) instead of random
+				// shimmer. The first wait of a model keeps the scramble: with
+				// no baseline the trace would have nothing honest to say.
+				motion = m.sonarWaitTrace(cells)
+				if motion == "" {
+					motion = m.scramble.ViewN(cells)
+				}
 				if motion == "" {
 					motion = motionStyle.Render(glyphEllipsis(m.glyphProfile))
 				}

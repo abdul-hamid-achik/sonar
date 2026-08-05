@@ -38,6 +38,11 @@ type chromeSpringState struct {
 
 	token   uint64
 	pending bool
+
+	// ping is the sonar wait-trace record (sonar_ping.go). It lives here
+	// because Model already owns this presentation-only struct; it drives no
+	// spring and schedules no ticks of its own.
+	ping sonarPingState
 }
 
 func newChromeSpringState() chromeSpringState {
@@ -158,7 +163,13 @@ func (m *Model) startChromeSpringTick() tea.Cmd {
 
 // maybeKickChromeSpring updates targets and schedules a frame if motion remains.
 func (m *Model) maybeKickChromeSpring() tea.Cmd {
-	if m == nil || !m.ready {
+	if m == nil {
+		return nil
+	}
+	// Sonar ping observation rides the same per-update hook. It only records
+	// state transitions; it never schedules ticks, in any motion mode.
+	m.observeSonarPing()
+	if !m.ready {
 		return nil
 	}
 	m.pullChromeSpringTargets()
