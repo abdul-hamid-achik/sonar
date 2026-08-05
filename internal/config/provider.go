@@ -534,9 +534,9 @@ func (c ProviderConfig) ResolveAPIKey() (string, error) {
 // ResolveAPIKey reads this profile's key from the environment.
 func (p ProviderProfile) ResolveAPIKey() (string, error) {
 	resolved := p.Resolve()
-	if !resolved.IsRemote() {
-		return "", nil
-	}
+	// No local-runtime exemption: every provider sonar can select is hosted and
+	// therefore needs a credential. The branch that returned an empty key for
+	// an unauthenticated daemon went with the daemon.
 	envName := strings.TrimSpace(resolved.APIKeyEnv)
 	if envName == "" {
 		return "", errors.New("provider.api_key_env is empty")

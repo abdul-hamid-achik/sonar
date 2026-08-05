@@ -118,9 +118,16 @@ that would need one is the local daemon's.
 
 `ProviderProfile.IsRemote()` is therefore constant `true`. It stays as a named
 boundary rather than being deleted — it is the seam to reopen if a local
-runtime ever returns — but two things hang off it that are now permanently
-inert: the RAM-fit model guard (nothing loads weights here) and expert
-consultation (it needs a multi-model local inventory).
+runtime ever returns — and the branches it made unreachable are gone: the
+switch-back-to-local path in `manager.go`, the credential exemption in
+`ResolveAPIKey`, and the expert-consultation wiring in `cmd/sonar`. The RAM-fit
+model guard is inert for the same reason and stays, because it is reached
+through `Validate()` rather than a branch.
+
+What has *not* been untangled is `internal/ui`: the model picker, inventory
+views and Agent Hub still reference the local runtime and `expertteam`. None of
+it can be reached, but no file is Ollama-only, so removing it is a rewrite of
+those surfaces rather than a deletion.
 
 ### The DeepSeek contract
 

@@ -51,7 +51,6 @@ type ModelManager struct {
 	// Provider catalog for multi-profile switching (/provider).
 	providerCatalog  config.ProviderConfig
 	providerActive   string
-	ollamaFallback   string // model restored when switching back to ollama
 	privacyLocalOnly bool
 }
 
@@ -103,9 +102,6 @@ func (m *ModelManager) ConfigureProviderCatalog(catalog config.ProviderConfig, l
 	defer m.mu.Unlock()
 	m.providerCatalog = catalog
 	m.privacyLocalOnly = localOnly
-	if strings.TrimSpace(ollamaModel) != "" {
-		m.ollamaFallback = ollamaModel
-	}
 	if m.providerActive == "" {
 		m.providerActive = catalog.ActiveName()
 	}
@@ -205,8 +201,6 @@ func (m *ModelManager) SwitchProviderContext(ctx context.Context, name string) e
 
 	m.mu.Lock()
 	catalog := m.providerCatalog
-	fallback := m.ollamaFallback
-	current := m.currentModel
 	m.mu.Unlock()
 
 	profileName, profile, err := resolveSwitchTarget(catalog, name)
@@ -217,33 +211,10 @@ func (m *ModelManager) SwitchProviderContext(ctx context.Context, name string) e
 		return err
 	}
 
-	if !profile.IsRemote() {
-		restore := fallback
-		if restore == "" {
-			restore = current
-		}
-		if strings.TrimSpace(profile.Model) != "" {
-			// Optional model pin on an ollama profile
-			restore = profile.Model
-		}
-		if restore == "" {
-			return errors.New("no Ollama model available to restore; set ollama.model")
-		}
-		m.mu.Lock()
-		m.remote = nil
-		m.remoteContext = 0
-		m.remoteLabel = ""
-		m.providerActive = profileName
-		m.mu.Unlock()
-		inventoryCtx, cancelInventory := context.WithTimeout(ctx, 2*time.Second)
-		_ = m.ensureModelLocalFresh(inventoryCtx, restore)
-		cancelInventory()
-		m.mu.Lock()
-		m.currentModel = restore
-		m.mu.Unlock()
-		return nil
-	}
-
+	// Every provider is hosted, so there is no local path to switch back to.
+	// This is where a switch to `ollama` used to drop the remote client and
+	// restore a locally installed model; `ollama` now names Ollama Cloud and
+	// takes the same route as every other provider below.
 	apiKey, err := profile.ResolveAPIKey()
 	if err != nil {
 		return err
@@ -253,9 +224,6 @@ func (m *ModelManager) SwitchProviderContext(ctx context.Context, name string) e
 		return err
 	}
 	m.mu.Lock()
-	if m.remote == nil && current != "" {
-		m.ollamaFallback = current
-	}
 	err = m.attachRemoteLocked(client, profile.ContextSize, profileName)
 	m.mu.Unlock()
 	return err

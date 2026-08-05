@@ -22,7 +22,6 @@ import (
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/db"
 	executionpkg "github.com/abdul-hamid-achik/sonar/internal/execution"
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 	"github.com/abdul-hamid-achik/sonar/internal/goal"
 	"github.com/abdul-hamid-achik/sonar/internal/goaladvisor"
 	"github.com/abdul-hamid-achik/sonar/internal/ice"
@@ -384,21 +383,15 @@ func run() int {
 	ag.SetToolsConfig(cfg.Tools)
 	ag.SetContinuationsConfig(cfg.Continuations)
 	ag.SetRouter(router)
-	var (
-		expertConsultant *expertteam.Runtime
-		expertErr        error
-	)
-	if provider.IsRemote() {
-		expertErr = fmt.Errorf("expert consultation requires local Ollama multi-model inventory; disabled for remote provider %q", providerName)
-		fmt.Fprintf(os.Stderr, "warning: %v\n", expertErr)
-	} else {
-		expertConsultant, expertErr = newRuntimeExpertConsultant(cfg, modelManager, agentsDir, ollamaInventory)
-		if expertErr != nil {
-			fmt.Fprintf(os.Stderr, "warning: expert consultation disabled: %v\n", expertErr)
-		} else if expertConsultant != nil {
-			ag.SetExpertConsultant(expertConsultant)
-		}
-	}
+	// No expert consultation. It selects several distinct models from a local
+	// multi-model inventory and runs them side by side; sonar reaches hosted
+	// providers, which serve one model per profile and expose no inventory to
+	// choose from. This used to warn on every single launch about a feature the
+	// operator had no way to enable, and then mark the runtime "setup failed" —
+	// reporting the failure of something that was never offered.
+	//
+	// specs/pending/tui_agents.yml keeps the coverage against the day it is
+	// rebuilt on multiple hosted profiles.
 	// Cap any single tool result so a runaway read/command can't blow the
 	// (small, local) context window. ~96KB is generous for code/output.
 	ag.AddToolHook(agent.NewSizeCapHook(96 * 1024))
@@ -995,9 +988,6 @@ func run() int {
 		log.Printf("warning: image attachments unavailable: %v", imageErr)
 	} else {
 		m.SetImageStore(imageStore)
-	}
-	if expertErr != nil {
-		m.SetExpertRuntimeSetupFailed()
 	}
 	if permChecker.SkipsApprovals() {
 		m.SetApprovalPosture(ui.ApprovalPostureSkipApprovals)
