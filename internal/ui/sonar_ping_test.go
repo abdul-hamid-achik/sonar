@@ -131,22 +131,34 @@ func TestSonarWaitTraceRendersHeadMarkerAndTrack(t *testing.T) {
 	m.chromeSpring.ping.last = 2 * time.Second
 	m.chromeSpring.ping.samples = 1
 
-	trace := ansi.Strip(m.sonarWaitTrace(sonarTraceCells))
-	if trace != "●··│··" {
-		t.Fatalf("early trace = %q, want %q", trace, "●··│··")
+	// The head follows the spring, not the arithmetic, so each position is
+	// reached by settling rather than by assignment. That is the behaviour
+	// change: on the first frame of a ping the head is still at the origin and
+	// eases out, which is what makes it read as motion.
+	settle := func() string {
+		for range 400 {
+			m.advanceSonarPing()
+		}
+		return ansi.Strip(m.sonarWaitTrace(sonarTraceCells))
+	}
+
+	// A quarter of the way to the baseline puts the true position at 0.75 of a
+	// cell: the head renders on cell 1 and smears back onto cell 0. Two lit
+	// cells is one head in flight, not two heads.
+	trace := settle()
+	if trace != "●●·│··" {
+		t.Fatalf("early trace = %q, want %q", trace, "●●·│··")
 	}
 
 	// At the baseline the head covers the marker.
 	m.chromeSpring.ping.waitStart = base.Add(-2 * time.Second)
-	trace = ansi.Strip(m.sonarWaitTrace(sonarTraceCells))
-	if trace != "···●··" {
+	if trace = settle(); trace != "···●··" {
 		t.Fatalf("on-time trace = %q, want %q", trace, "···●··")
 	}
 
 	// Overdue: head pinned at the right edge, marker visible again.
 	m.chromeSpring.ping.waitStart = base.Add(-10 * time.Second)
-	trace = ansi.Strip(m.sonarWaitTrace(sonarTraceCells))
-	if trace != "···│·●" {
+	if trace = settle(); trace != "···│·●" {
 		t.Fatalf("overdue trace = %q, want %q", trace, "···│·●")
 	}
 
@@ -242,5 +254,129 @@ func TestSonarWaitTraceReducedMotionSchedulesNoTicksAndRendersStaticFrame(t *tes
 	}
 	if strings.Contains(first, "●") || strings.Contains(first, "│") {
 		t.Fatalf("reduced-motion frame contains frozen trace glyphs:\n%s", first)
+	}
+}
+
+// The spring is the animation. Without it the head is a counter that teleports
+// between six integer cells; with it the head has momentum, which is what the
+// eye reads as movement. These pin the physics rather than the arithmetic.
+func TestSonarPingSpringGivesTheHeadMomentum(t *testing.T) {
+	base := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	m := sonarTestModel(t, base)
+	m.state = StateWaiting
+	m.chromeSpring.ping.inWait = true
+	m.chromeSpring.ping.waitStart = base
+	m.chromeSpring.ping.baseline = 2 * time.Second
+	m.chromeSpring.ping.samples = 1
+
+	// Hold elapsed at the baseline, so the target is the marker and stays
+	// there. A spring must approach it over several frames.
+	m.now = func() time.Time { return base.Add(2 * time.Second) }
+	target := sonarTraceTarget(2*time.Second, 2*time.Second, sonarTraceCells)
+	if target != float64(sonarTraceCells/2) {
+		t.Fatalf("target at the baseline = %v, want the marker at %d", target, sonarTraceCells/2)
+	}
+
+	m.advanceSonarPing()
+	first := m.chromeSpring.ping.headPos
+	if first <= 0 {
+		t.Fatalf("head did not leave the origin: %v", first)
+	}
+	if first >= target {
+		t.Fatalf("head reached %v in a single frame; a spring eases in, it does not teleport", first)
+	}
+
+	// It keeps closing the distance frame over frame.
+	m.advanceSonarPing()
+	second := m.chromeSpring.ping.headPos
+	if second <= first {
+		t.Fatalf("head stalled: %v then %v", first, second)
+	}
+
+	// Under-damped: it overshoots the marker before settling. That frame is
+	// where a wait visibly crosses from "normal" to "late".
+	overshot := false
+	for range 200 {
+		m.advanceSonarPing()
+		if m.chromeSpring.ping.headPos > target {
+			overshot = true
+			break
+		}
+	}
+	if !overshot {
+		t.Error("head never overshot the marker; the damping ratio is no longer under-damped")
+	}
+}
+
+// A new request must start from the left edge at rest. Carrying the previous
+// wait's velocity would fling the head across the track on the next turn.
+func TestSonarPingResetsMomentumBetweenRequests(t *testing.T) {
+	base := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	m := sonarTestModel(t, base)
+	m.chromeSpring.ping.baseline = time.Second
+	m.chromeSpring.ping.samples = 1
+	m.chromeSpring.ping.headPos = 4.5
+	m.chromeSpring.ping.headVel = 9
+
+	m.state = StateWaiting
+	m.observeSonarPing()
+	if m.chromeSpring.ping.headPos != 0 || m.chromeSpring.ping.headVel != 0 {
+		t.Fatalf("new request inherited motion: pos=%v vel=%v",
+			m.chromeSpring.ping.headPos, m.chromeSpring.ping.headVel)
+	}
+}
+
+// Reduced motion means no motion: the spring must not advance at all, so
+// nothing is mid-flight if the setting is turned off later.
+func TestSonarPingSpringIsInertUnderReducedMotion(t *testing.T) {
+	base := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	m := sonarTestModel(t, base)
+	m.reducedMotion = true
+	m.state = StateWaiting
+	m.chromeSpring.ping.inWait = true
+	m.chromeSpring.ping.waitStart = base
+	m.chromeSpring.ping.baseline = time.Second
+	m.chromeSpring.ping.samples = 1
+	m.now = func() time.Time { return base.Add(time.Second) }
+
+	m.advanceSonarPing()
+	if m.chromeSpring.ping.headPos != 0 || m.chromeSpring.ping.headVel != 0 {
+		t.Errorf("reduced motion advanced the spring: pos=%v vel=%v",
+			m.chromeSpring.ping.headPos, m.chromeSpring.ping.headVel)
+	}
+}
+
+// The trailing echo is what makes six cells read as travel. It lights the cell
+// being vacated in proportion to how far between cells the head sits, and
+// nothing when the head is settled on a centre.
+func TestSonarPingTrailLightsTheVacatedCell(t *testing.T) {
+	if cell, weight := sonarTraceTrail(3.0, 3); cell != -1 || weight != 0 {
+		t.Errorf("settled head produced a trail: cell=%d weight=%v", cell, weight)
+	}
+	// Past the rendered cell's centre: the head is between 3 and 4, so 4 is the
+	// neighbour it is smearing into.
+	cell, weight := sonarTraceTrail(3.4, 3)
+	if cell != 4 {
+		t.Errorf("trail for pos 3.4 = %d, want 4", cell)
+	}
+	if weight <= 0 || weight > 1 {
+		t.Errorf("trail weight = %v, want within (0,1]", weight)
+	}
+	// Short of it: between 2 and 3, so 2.
+	if cell, _ := sonarTraceTrail(2.6, 3); cell != 2 {
+		t.Errorf("trail for pos 2.6 = %d, want 2", cell)
+	}
+	// Never off the ends. Short of cell 0 would smear onto -1.
+	if cell, _ := sonarTraceTrail(-0.4, 0); cell != -1 {
+		t.Errorf("trail ran off the left edge: %d", cell)
+	}
+	// Past the last cell would smear onto one that does not exist.
+	last := sonarTraceCells - 1
+	if cell, _ := sonarTraceTrail(float64(last)+0.4, last); cell != -1 {
+		t.Errorf("trail ran off the right edge: %d", cell)
+	}
+	// Arriving at the last cell from the left still trails the one before it.
+	if cell, _ := sonarTraceTrail(float64(last)-0.4, last); cell != last-1 {
+		t.Errorf("trail into the right edge = %d, want %d", cell, last-1)
 	}
 }
