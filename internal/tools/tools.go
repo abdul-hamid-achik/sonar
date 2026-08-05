@@ -101,7 +101,7 @@ func GlobToolDef() llm.ToolDef {
 func BashToolDef() llm.ToolDef {
 	return llm.ToolDef{
 		Name:        "bash",
-		Description: "Execute a shell command. Use this to run git, npm, go, or other command-line tools. Output is returned after completion. Set background to true for a long-running command such as a dev server, watch build, or log tail.",
+		Description: "Execute a shell command. Commands already run in the working directory named in the system prompt, foreground and background alike, so never prefix one with a 'cd' into that directory: the extra cd can turn an auto-approved command into an approval prompt. Use this to run git, npm, go, or other command-line tools. Output is returned after completion. Set background to true for a long-running command such as a dev server, watch build, or log tail.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{

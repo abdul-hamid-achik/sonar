@@ -514,7 +514,9 @@ func TestRunTurnWithLimitsChargesExpertChildrenToParentBudget(t *testing.T) {
 			Report: "bounded finding", EvalTokens: 3, PromptEvalTokens: 4, ChargedEvalTokens: 3,
 		}},
 	}, events: []expertteam.ProgressEvent{{Sequence: 1, Phase: expertteam.ProgressPlanned, Total: 1, Queued: 1}}}
-	agent := New(client, nil, 4096)
+	// Window size is incidental; see the note in
+	// TestRunTurnDispatchesAtMostOneExpertConsultation.
+	agent := New(client, nil, 8192)
 	agent.SetWorkDir(t.TempDir())
 	agent.SetExpertConsultant(consultant)
 	agent.AddUserMessage("Consult an expert, then synthesize within the goal budget.")
