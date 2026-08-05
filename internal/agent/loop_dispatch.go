@@ -182,7 +182,8 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 			t.a.failedToolCall(tc, t.out, result, t.turnNumCtx)
 			continue
 		}
-		if kind == executionPkg.KindBuiltin && effectiveEffect == executionPkg.EffectReadOnly {
+		if kind == executionPkg.KindBuiltin && effectiveEffect == executionPkg.EffectReadOnly &&
+			!builtinResultVariesOverTime(tc.Name) {
 			fingerprint := tc.Name + "\x00" + tracked.argumentsHash()
 			if _, duplicate := t.completedBuiltinCalls[fingerprint]; duplicate {
 				result := capToolResultForContext(repeatedBuiltinCorrection, t.turnNumCtx)
@@ -549,7 +550,8 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 			tc.Name, tracked.argumentsHash(), tracked.identity.EffectClass,
 			terminalType, projection,
 		)
-		if kind == executionPkg.KindBuiltin && tracked.identity.EffectClass == executionPkg.EffectReadOnly {
+		if kind == executionPkg.KindBuiltin && tracked.identity.EffectClass == executionPkg.EffectReadOnly &&
+			!builtinResultVariesOverTime(tc.Name) {
 			t.completedBuiltinCalls[tc.Name+"\x00"+tracked.argumentsHash()] = struct{}{}
 		}
 		t.a.settleBobContextAdmission(t.out, bobAdmission, projection, continuationReceipt, assembly, terminalType)
@@ -637,4 +639,21 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 		}
 	}
 	return dispatchOutcome{preflightRejections: preflightRejections, capabilityRouteFailed: capabilityRouteFailed}, nil
+}
+
+// builtinResultVariesOverTime reports whether repeating a read-only built-in
+// with identical arguments can legitimately return something new.
+//
+// The duplicate-suppression guard above assumes a read-only built-in is a pure
+// function of its arguments until some tool changes state, which holds for
+// read, grep, ls and the rest. It does not hold for a poll against a process
+// running outside the tool loop: bash_output exists to be asked the same
+// question repeatedly while a background command produces more output, so
+// suppressing the second call refuses the only correct way to ask.
+//
+// Observed in a real session: four consecutive bash_output calls were
+// suppressed as duplicates while the command they were polling was still
+// running. The guard predates background execution and nobody reconciled them.
+func builtinResultVariesOverTime(name string) bool {
+	return name == "bash_output"
 }
