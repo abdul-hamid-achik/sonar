@@ -189,9 +189,15 @@ const (
 // ArgumentsSHA256; hosts may render them in a viewport and must not impose an
 // arbitrary whole-request display limit.
 type ApprovalPreview struct {
-	Kind              ApprovalPreviewKind
-	ActionLabel       string
-	Consequence       string
+	Kind        ApprovalPreviewKind
+	ActionLabel string
+	Consequence string
+	// Reason is a host-authored, deterministic explanation of why this exact
+	// request still needs a human decision (for example, which scoped-shell
+	// rule a bash command tripped). It is static policy text, never raw model
+	// or MCP content, and must be stable across rebuilds so preview
+	// revalidation can compare it safely.
+	Reason            string
 	Path              string
 	SourcePath        string
 	DestinationPath   string
