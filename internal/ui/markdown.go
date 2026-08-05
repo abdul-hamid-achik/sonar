@@ -5,7 +5,6 @@ import (
 	"image/color"
 	"strings"
 
-	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/ansi"
 	glamourStyles "github.com/charmbracelet/glamour/styles"
@@ -43,21 +42,50 @@ func markdownStyleConfig(isDark bool, themeID string) ansi.StyleConfig {
 		style = glamourStyles.DarkStyleConfig
 	}
 
-	// Glamour's standard themes use the same red foreground for inline code
-	// in both light and dark terminals. In a harness, red already means a
-	// failure or blocked action, so ordinary paths and commands looked like
-	// errors. Keep the standard Markdown grammar and code-block highlighting,
-	// but project inline code through sonar's adaptive text vocabulary;
-	// the background already gives code its distinct visual treatment.
+	// Project the Markdown grammar through the active scheme.
+	//
+	// Only inline code used to be overridden, and its background was two
+	// literal hexes — Nord's, so every other scheme rendered code blocks in
+	// Nord grey. Everything else came from Glamour's stock light/dark theme,
+	// which meant headings, links and emphasis ignored /theme entirely: the
+	// transcript changed colour around the prose while the prose did not.
+	//
+	// The mapping answers the existing vocabulary rather than inventing one.
+	// Headings and links take Accent, the role already used for the surfaces
+	// a reader navigates by. Emphasis takes Accent2, its companion. Quotes and
+	// list markers take Muted, which is what every other secondary text uses.
+	// No new colour meanings; the ten roles already cover this.
 	palette := newSemanticPalette(isDark, themeID)
-	lightDark := lipgloss.LightDark(isDark)
-	foreground := colorHex(palette.Text)
-	background := colorHex(lightDark(
-		lipgloss.Color("#ECEFF4"),
-		lipgloss.Color("#3B4252"),
-	))
-	style.Code.Color = &foreground
-	style.Code.BackgroundColor = &background
+	accent := colorHex(palette.Accent)
+	accent2 := colorHex(palette.Accent2)
+	muted := colorHex(palette.Muted)
+	text := colorHex(palette.Text)
+	// Border, not Background: the page background would make inline code
+	// invisible, and the background is exactly what distinguishes code from
+	// prose. Border is the scheme's own "a surface separated from the page"
+	// value, which is what this is.
+	codeBackground := colorHex(palette.Border)
+
+	// Inline code keeps the scheme's text colour rather than Glamour's red: in
+	// a harness red already means a failure or a blocked action, so ordinary
+	// paths and commands read as errors. The background is what distinguishes
+	// code, and it now comes from the scheme too.
+	style.Code.Color = &text
+	style.Code.BackgroundColor = &codeBackground
+
+	for _, heading := range []*ansi.StyleBlock{
+		&style.Heading, &style.H1, &style.H2, &style.H3, &style.H4, &style.H5, &style.H6,
+	} {
+		heading.Color = &accent
+	}
+	style.Link.Color = &accent
+	style.LinkText.Color = &accent2
+	style.Emph.Color = &accent2
+	style.Strong.Color = &accent
+	style.BlockQuote.Color = &muted
+	style.Item.Color = &muted
+	style.Enumeration.Color = &muted
+	style.HorizontalRule.Color = &muted
 
 	// Glamour's stock themes inset the document by two columns. The transcript
 	// already owns its left chrome through ContentGrid, so that second margin
@@ -65,6 +93,8 @@ func markdownStyleConfig(isDark bool, themeID string) ansi.StyleConfig {
 	// notices, and status all sat at the grid origin. Zero here makes the grid
 	// the single owner of the left edge; newMarkdownTermRenderer gives the two
 	// reclaimed columns back to the wrap budget so the right edge is unchanged.
+	applySchemeSyntaxHighlighting(&style, palette)
+
 	style.Document.Margin = uintPointer(0)
 	return style
 }
@@ -319,4 +349,79 @@ func (mr *MarkdownRenderer) SetWidth(width int) {
 	if err == nil {
 		mr.renderer = r
 	}
+}
+
+// applySchemeSyntaxHighlighting projects Chroma's syntax classes onto the
+// active scheme.
+//
+// Glamour ships fixed highlighting — #00AAFF keywords, #676767 comments,
+// #C69669 strings — so a code block rendered identically on all ten schemes.
+// Switching to Gruvbox or Catppuccin recoloured the entire TUI except the
+// inside of a fenced block, which is where a reader spends most of their
+// attention.
+//
+// The mapping answers the existing ten roles and invents no new meanings, as
+// the theme contract requires:
+//
+//   - Dim for comments, which is exactly what Dim is for — present, secondary,
+//     not competing with the code.
+//   - Special for keywords, the one role reserved for a distinct grammatical
+//     class rather than a status.
+//   - Success for strings and Warning for numbers, matching the convention
+//     every syntax theme already trains a reader on.
+//   - Accent for definitions and Accent2 for types and builtins, the same
+//     pairing the prose grammar uses for headings and emphasis.
+//   - Error for Chroma's error class, so broken syntax reads as broken.
+func applySchemeSyntaxHighlighting(style *ansi.StyleConfig, palette semanticPalette) {
+	if style.CodeBlock.Chroma == nil {
+		style.CodeBlock.Chroma = &ansi.Chroma{}
+	}
+	text := colorHex(palette.Text)
+	dim := colorHex(palette.Dim)
+	accent := colorHex(palette.Accent)
+	accent2 := colorHex(palette.Accent2)
+	special := colorHex(palette.Special)
+	success := colorHex(palette.Success)
+	warning := colorHex(palette.Warning)
+	failure := colorHex(palette.Error)
+
+	chroma := style.CodeBlock.Chroma
+	paint := func(target *ansi.StylePrimitive, hex string) {
+		value := hex
+		target.Color = &value
+	}
+	paint(&chroma.Text, text)
+	paint(&chroma.Name, text)
+	paint(&chroma.NameAttribute, text)
+	paint(&chroma.Operator, text)
+	paint(&chroma.Punctuation, text)
+
+	paint(&chroma.Comment, dim)
+	paint(&chroma.CommentPreproc, dim)
+
+	paint(&chroma.Keyword, special)
+	paint(&chroma.KeywordReserved, special)
+	paint(&chroma.KeywordNamespace, special)
+
+	paint(&chroma.KeywordType, accent2)
+	paint(&chroma.NameBuiltin, accent2)
+	paint(&chroma.NameClass, accent2)
+
+	paint(&chroma.NameFunction, accent)
+	paint(&chroma.NameTag, accent)
+	paint(&chroma.NameDecorator, accent)
+
+	paint(&chroma.Literal, success)
+	paint(&chroma.LiteralString, success)
+	paint(&chroma.LiteralStringEscape, success)
+
+	paint(&chroma.LiteralNumber, warning)
+
+	paint(&chroma.Error, failure)
+	paint(&chroma.GenericDeleted, failure)
+	paint(&chroma.GenericInserted, success)
+	paint(&chroma.GenericEmph, accent2)
+	paint(&chroma.GenericStrong, accent)
+	paint(&chroma.GenericSubheading, dim)
+	paint(&chroma.Background, text)
 }

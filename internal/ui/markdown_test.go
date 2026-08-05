@@ -8,29 +8,76 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestMarkdownStyleUsesAdaptiveNonErrorInlineCode(t *testing.T) {
-	tests := []struct {
-		name       string
-		isDark     bool
-		foreground string
-		background string
-	}{
-		{name: "light", foreground: "#3B4252", background: "#ECEFF4"},
-		{name: "dark", isDark: true, foreground: "#E5E9F0", background: "#3B4252"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			style := markdownStyleConfig(tt.isDark, defaultThemeID)
-			if style.Code.Color == nil || *style.Code.Color != tt.foreground {
-				t.Fatalf("inline code foreground = %v, want %s", style.Code.Color, tt.foreground)
+// Inline code must come from the active scheme, and must not be Glamour's red:
+// in a harness red already means a failure or a blocked action, so ordinary
+// paths and commands read as errors.
+//
+// This used to assert two literal hexes. They were Nord's, so the assertion
+// passed while every other scheme rendered inline code in Nord grey — the
+// test encoded the bug it was meant to prevent.
+func TestInlineCodeFollowsTheActiveScheme(t *testing.T) {
+	for _, themeID := range themeIDs() {
+		for _, isDark := range []bool{true, false} {
+			style := markdownStyleConfig(isDark, themeID)
+			palette := newSemanticPalette(isDark, themeID)
+
+			if style.Code.Color == nil || style.Code.BackgroundColor == nil {
+				t.Fatalf("%s dark=%v: inline code has no colours", themeID, isDark)
 			}
-			if style.Code.BackgroundColor == nil || *style.Code.BackgroundColor != tt.background {
-				t.Fatalf("inline code background = %v, want %s", style.Code.BackgroundColor, tt.background)
+			if want := colorHex(palette.Text); *style.Code.Color != want {
+				t.Errorf("%s dark=%v: inline code foreground = %s, want the scheme text %s",
+					themeID, isDark, *style.Code.Color, want)
+			}
+			if want := colorHex(palette.Border); *style.Code.BackgroundColor != want {
+				t.Errorf("%s dark=%v: inline code background = %s, want the scheme border %s",
+					themeID, isDark, *style.Code.BackgroundColor, want)
+			}
+			// The background is what separates code from prose; matching the
+			// page would erase the distinction entirely.
+			if *style.Code.BackgroundColor == colorHex(palette.Background) {
+				t.Errorf("%s dark=%v: inline code background matches the page", themeID, isDark)
 			}
 			if *style.Code.Color == "203" {
-				t.Fatal("inline code retained Glamour's error-like red foreground")
+				t.Errorf("%s dark=%v: inline code kept Glamour's error-like red", themeID, isDark)
 			}
-		})
+		}
+	}
+}
+
+// The rest of the Markdown grammar has to follow /theme too. Headings, links
+// and emphasis came from Glamour's stock light/dark theme, so the transcript
+// changed colour around the prose while the prose itself did not.
+func TestMarkdownGrammarFollowsTheActiveScheme(t *testing.T) {
+	for _, themeID := range themeIDs() {
+		style := markdownStyleConfig(true, themeID)
+		palette := newSemanticPalette(true, themeID)
+		accent := colorHex(palette.Accent)
+		accent2 := colorHex(palette.Accent2)
+		muted := colorHex(palette.Muted)
+
+		for _, check := range []struct {
+			name string
+			got  *string
+			want string
+		}{
+			{"heading", style.Heading.Color, accent},
+			{"h1", style.H1.Color, accent},
+			{"h3", style.H3.Color, accent},
+			{"link", style.Link.Color, accent},
+			{"strong", style.Strong.Color, accent},
+			{"link text", style.LinkText.Color, accent2},
+			{"emphasis", style.Emph.Color, accent2},
+			{"block quote", style.BlockQuote.Color, muted},
+			{"list item", style.Item.Color, muted},
+		} {
+			if check.got == nil {
+				t.Errorf("%s: %s has no colour", themeID, check.name)
+				continue
+			}
+			if *check.got != check.want {
+				t.Errorf("%s: %s = %s, want %s", themeID, check.name, *check.got, check.want)
+			}
+		}
 	}
 }
 
