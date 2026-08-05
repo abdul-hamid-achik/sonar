@@ -149,16 +149,24 @@ func NewDeepSeekClient(opts DeepSeekOptions) (*OpenAICompatibleClient, error) {
 // wire type alone would produce a client that connects, answers once, and then
 // fails every tool-call turn with a 400.
 //
+// The anthropic-family branch below is the one place selecting by wire type
+// would actually have been safe — Catwalk's "anthropic" type genuinely means
+// "speaks the real Anthropic Messages API" for all four providers that carry
+// it — but identity is still used, for the same reason as DeepSeek: it keeps
+// dialect selection independent of how Catwalk chooses to classify a provider
+// upstream, and it is one line longer than a wire-type switch would have been.
+//
 // Both the startup path and the runtime /provider switch go through here so
 // the two can never disagree about which dialect a provider gets.
-func NewProviderClient(providerType, baseURL, model, apiKey string) (*OpenAICompatibleClient, error) {
+func NewProviderClient(providerType, baseURL, model, apiKey string) (RemoteChatClient, error) {
 	normalized := config.NormalizedProviderType(providerType)
 	resolved, err := ResolveProviderModel(normalized, model)
 	if err != nil {
 		return nil, err
 	}
-	if normalized == config.ProviderTypeDeepSeek {
-		return NewDeepSeekClient(DeepSeekOptions{
+	switch {
+	case normalized == config.ProviderTypeDeepSeek:
+		client, err := NewDeepSeekClient(DeepSeekOptions{
 			APIKey:  apiKey,
 			Model:   resolved,
 			BaseURL: baseURL,
@@ -167,15 +175,31 @@ func NewProviderClient(providerType, baseURL, model, apiKey string) (*OpenAIComp
 			Thinking:        true,
 			ReasoningEffort: DeepSeekDefaultEffort,
 		})
+		if err != nil {
+			return nil, err
+		}
+		return client, nil
+	case IsAnthropicFamilyProvider(normalized):
+		client, err := NewAnthropicProviderClient(normalized, baseURL, resolved, apiKey)
+		if err != nil {
+			return nil, err
+		}
+		return client, nil
+	default:
+		// Everything else currently rides the plain OpenAI-compatible dialect.
+		// That covers 27 of the catalog's 40 providers; google and the
+		// cloud-credential families still need their own dialects before they
+		// will work.
+		client, err := NewOpenAICompatibleClient(OpenAICompatibleOptions{
+			BaseURL: baseURL,
+			Model:   resolved,
+			APIKey:  apiKey,
+		})
+		if err != nil {
+			return nil, err
+		}
+		return client, nil
 	}
-	// Everything else currently rides the plain OpenAI-compatible dialect. That
-	// covers 27 of the catalog's 40 providers; anthropic, google, and the
-	// cloud-credential families need their own dialects before they will work.
-	return NewOpenAICompatibleClient(OpenAICompatibleOptions{
-		BaseURL: baseURL,
-		Model:   resolved,
-		APIKey:  apiKey,
-	})
 }
 
 // EstimateDeepSeekCostUSD returns the estimated turn cost from a token receipt.

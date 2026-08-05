@@ -42,10 +42,10 @@ type ModelManager struct {
 	cloudModels  map[string]struct{}
 	cloudGrants  map[string]struct{}
 	nativeCtx    map[string]int
-	// remote, when non-nil, routes ChatStream/Ping/Model through an
-	// OpenAI-compatible provider instead of Ollama. Embeddings still use
-	// Ollama when ICE is enabled.
-	remote        *OpenAICompatibleClient
+	// remote, when non-nil, routes ChatStream/Ping/Model through a remote
+	// provider (OpenAI-compatible or Anthropic Messages API) instead of
+	// Ollama. Embeddings still use Ollama when ICE is enabled.
+	remote        RemoteChatClient
 	remoteContext int
 	remoteLabel   string
 	// Provider catalog for multi-profile switching (/provider).
@@ -111,10 +111,11 @@ func (m *ModelManager) ConfigureProviderCatalog(catalog config.ProviderConfig, l
 	}
 }
 
-// ConfigureRemoteProvider attaches an OpenAI-compatible chat backend. When set,
-// ordinary chat, ping, and model selection use the remote client. Local Ollama
-// inventory, admission guards, and embeddings remain available for ICE.
-func (m *ModelManager) ConfigureRemoteProvider(client *OpenAICompatibleClient, contextSize int, label string) error {
+// ConfigureRemoteProvider attaches a remote chat backend (OpenAI-compatible or
+// Anthropic Messages API). When set, ordinary chat, ping, and model selection
+// use the remote client. Local Ollama inventory, admission guards, and
+// embeddings remain available for ICE.
+func (m *ModelManager) ConfigureRemoteProvider(client RemoteChatClient, contextSize int, label string) error {
 	if client == nil {
 		return errors.New("remote provider client is nil")
 	}
@@ -131,7 +132,7 @@ func (m *ModelManager) ConfigureRemoteProvider(client *OpenAICompatibleClient, c
 	return m.attachRemoteLocked(client, contextSize, label)
 }
 
-func (m *ModelManager) attachRemoteLocked(client *OpenAICompatibleClient, contextSize int, label string) error {
+func (m *ModelManager) attachRemoteLocked(client RemoteChatClient, contextSize int, label string) error {
 	m.remote = client
 	m.remoteContext = contextSize
 	m.remoteLabel = label

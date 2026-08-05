@@ -81,6 +81,26 @@ type Client interface {
 	Embed(ctx context.Context, model string, texts []string) ([][]float32, error)
 }
 
+// RemoteChatClient is the superset of Client that ModelManager needs to route
+// ordinary chat, ping, and model switching through a single active remote
+// provider (see ModelManager.ConfigureRemoteProvider). It exists so
+// NewProviderClient can hand back distinct dialect implementations (the
+// OpenAI-compatible client, the Anthropic Messages API client) through one
+// interface without widening Client itself — every existing Client
+// implementation, including the fakes littered across the agent/ice test
+// suites, would otherwise be forced to grow SetModel/PingContext methods they
+// never use.
+type RemoteChatClient interface {
+	Client
+
+	// SetModel updates the model id for subsequent requests.
+	SetModel(model string) error
+
+	// PingContext checks reachability like Ping but honors ctx's
+	// cancellation and deadline.
+	PingContext(ctx context.Context) error
+}
+
 // ChatOptions holds parameters for a chat request.
 type ChatOptions struct {
 	Messages      []Message
