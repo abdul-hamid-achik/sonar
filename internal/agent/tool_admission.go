@@ -25,23 +25,22 @@ const (
 )
 
 var essentialLocalToolRank = map[string]int{
-	"read":            0,
-	"grep":            1,
-	"glob":            2,
-	"ls":              3,
-	"find":            4,
-	"bash":            5,
-	"exists":          6,
-	"write":           7,
-	"edit":            8,
-	"load_skill":      9,
-	"consult_experts": 10,
+	"read":       0,
+	"grep":       1,
+	"glob":       2,
+	"ls":         3,
+	"find":       4,
+	"bash":       5,
+	"exists":     6,
+	"write":      7,
+	"edit":       8,
+	"load_skill": 9,
 }
 
 var localToolNames = map[string]struct{}{
 	"grep": {}, "read": {}, "write": {}, "glob": {}, "bash": {}, "bash_output": {},
 	"ls": {}, "find": {}, "diff": {}, "edit": {}, "mkdir": {}, "remove": {},
-	"copy": {}, "move": {}, "exists": {}, "load_skill": {}, "consult_experts": {},
+	"copy": {}, "move": {}, "exists": {}, "load_skill": {},
 }
 
 var memoryToolNames = map[string]struct{}{

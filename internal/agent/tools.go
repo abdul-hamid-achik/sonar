@@ -24,15 +24,16 @@ const (
 
 func (a *Agent) toolsBuiltinToolDefs() []llm.ToolDef {
 	defs := tools.AllToolDefs()
-	if a.hasSkillLoader() && a.hasExpertConsultant() {
-		return defs
-	}
 	filtered := make([]llm.ToolDef, 0, len(defs))
 	for _, def := range defs {
-		if def.Name == "load_skill" && !a.hasSkillLoader() {
+		// internal/tools is drift-synced byte-identical with the sibling repo
+		// and still defines consult_experts. sonar has no expert runtime — a
+		// hosted provider serves one model per profile and exposes no local
+		// inventory — so the definition must never reach the model.
+		if def.Name == "consult_experts" {
 			continue
 		}
-		if def.Name == "consult_experts" && !a.hasExpertConsultant() {
+		if def.Name == "load_skill" && !a.hasSkillLoader() {
 			continue
 		}
 		filtered = append(filtered, def)
@@ -78,8 +79,6 @@ func (a *Agent) handleToolsTool(ctx context.Context, tc llm.ToolCall) (string, b
 		return a.handleExists(tc.Arguments)
 	case "load_skill":
 		return a.handleLoadSkill(tc.Arguments)
-	case "consult_experts":
-		return a.handleConsultExperts(ctx, tc.Arguments)
 	default:
 		return fmt.Sprintf("unknown tool: %s", tc.Name), true
 	}

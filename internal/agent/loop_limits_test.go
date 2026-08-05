@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/abdul-hamid-achik/sonar/internal/expertselector"
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 	"github.com/abdul-hamid-achik/sonar/internal/ice"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
 	"github.com/abdul-hamid-achik/sonar/internal/memory"
@@ -72,17 +70,6 @@ func (o *limitOutput) ToolCallStart(string, string, map[string]any)             
 func (*limitOutput) ToolCallResult(string, string, string, bool, time.Duration) {}
 func (*limitOutput) SystemMessage(string)                                       {}
 func (*limitOutput) Error(string)                                               {}
-
-type expertProgressOutput struct {
-	limitOutput
-	callIDs []string
-	events  []expertteam.ProgressEvent
-}
-
-func (output *expertProgressOutput) ExpertProgress(callID string, event expertteam.ProgressEvent) {
-	output.callIDs = append(output.callIDs, callID)
-	output.events = append(output.events, event)
-}
 
 type contextBudgetOutput struct {
 	limitOutput
@@ -295,34 +282,6 @@ type joinedAutoMemoryClient struct {
 	mainCalls   atomic.Int64
 }
 
-type expertBudgetTurnClient struct {
-	calls  atomic.Int64
-	limits []int
-	repeat bool
-}
-
-type expertCorrectionTurnClient struct {
-	calls atomic.Int64
-}
-
-type cancellationReceiptExpertConsultant struct {
-	started chan struct{}
-	calls   atomic.Int64
-}
-
-func (consultant *cancellationReceiptExpertConsultant) Consult(ctx context.Context, request expertteam.Request) (expertteam.Result, error) {
-	consultant.calls.Add(1)
-	close(consultant.started)
-	<-ctx.Done()
-	return expertteam.Result{
-		Strategy: request.Strategy,
-		Experts: []expertteam.ExpertReceipt{{
-			Name: "cancelled", Status: expertteam.ExpertFailed, ErrorCode: "cancelled",
-			ChargedEvalTokens: request.MaxTotalEvalTokens, UsageEstimated: true,
-		}},
-	}, ctx.Err()
-}
-
 type postTerminalTurnClient struct{}
 
 func (*postTerminalTurnClient) ChatStream(_ context.Context, _ llm.ChatOptions, emit func(llm.StreamChunk) error) error {
@@ -395,54 +354,6 @@ type textCountingOutput struct {
 
 func (output *textCountingOutput) StreamText(string) { output.textChunks.Add(1) }
 
-func (c *expertBudgetTurnClient) ChatStream(_ context.Context, options llm.ChatOptions, emit func(llm.StreamChunk) error) error {
-	call := c.calls.Add(1)
-	c.limits = append(c.limits, options.MaxEvalTokens)
-	if call == 1 || (c.repeat && call == 2) {
-		return emit(llm.StreamChunk{
-			Done: true, EvalCount: 2,
-			ToolCalls: []llm.ToolCall{{
-				ID: "expert-consult", Name: "consult_experts", Arguments: map[string]any{
-					"strategy": "team", "objective": "Review the bounded integration.",
-				},
-			}},
-		})
-	}
-	return emit(llm.StreamChunk{Text: "synthesis", Done: true, EvalCount: options.MaxEvalTokens})
-}
-
-func (c *expertCorrectionTurnClient) ChatStream(_ context.Context, _ llm.ChatOptions, emit func(llm.StreamChunk) error) error {
-	switch call := c.calls.Add(1); call {
-	case 1:
-		return emit(llm.StreamChunk{Done: true, EvalCount: 1, ToolCalls: []llm.ToolCall{{
-			ID: "invented-experts", Name: "consult_experts", Arguments: map[string]any{
-				"strategy": "swarm", "objective": "Compare game engines.",
-				"experts": []any{"Game Engine Architect", "Networking Engineer"},
-			},
-		}}})
-	case 2:
-		return emit(llm.StreamChunk{Done: true, EvalCount: 1, ToolCalls: []llm.ToolCall{{
-			ID: "automatic-experts", Name: "consult_experts", Arguments: map[string]any{
-				"strategy": "swarm", "objective": "Compare game engines.",
-			},
-		}}})
-	default:
-		return emit(llm.StreamChunk{Text: "synthesis", Done: true, EvalCount: 1})
-	}
-}
-
-func (*expertCorrectionTurnClient) Ping() error   { return nil }
-func (*expertCorrectionTurnClient) Model() string { return "expert-correction-test" }
-func (*expertCorrectionTurnClient) Embed(context.Context, string, []string) ([][]float32, error) {
-	return nil, nil
-}
-
-func (*expertBudgetTurnClient) Ping() error   { return nil }
-func (*expertBudgetTurnClient) Model() string { return "expert-budget-test" }
-func (*expertBudgetTurnClient) Embed(context.Context, string, []string) ([][]float32, error) {
-	return nil, nil
-}
-
 func (c *joinedAutoMemoryClient) ChatStream(ctx context.Context, options llm.ChatOptions, emit func(llm.StreamChunk) error) error {
 	if options.MaxEvalTokens == 0 {
 		close(c.autoStarted)
@@ -505,186 +416,53 @@ func TestRunTurnWithLimitsCapsProviderRequestToContextReserve(t *testing.T) {
 	}
 }
 
-func TestRunTurnWithLimitsChargesExpertChildrenToParentBudget(t *testing.T) {
-	client := &expertBudgetTurnClient{}
-	consultant := &fakeExpertConsultant{result: expertteam.Result{
-		Strategy: expertselector.StrategyTeam,
-		Experts: []expertteam.ExpertReceipt{{
-			Name: "critic", Model: "qwen:2b", Status: expertteam.ExpertCompleted,
-			Report: "bounded finding", EvalTokens: 3, PromptEvalTokens: 4, ChargedEvalTokens: 3,
-		}},
-	}, events: []expertteam.ProgressEvent{{Sequence: 1, Phase: expertteam.ProgressPlanned, Total: 1, Queued: 1}}}
-	// Window size is incidental; see the note in
-	// TestRunTurnDispatchesAtMostOneExpertConsultation.
-	agent := New(client, nil, 8192)
-	agent.SetWorkDir(t.TempDir())
-	agent.SetExpertConsultant(consultant)
-	agent.AddUserMessage("Consult an expert, then synthesize within the goal budget.")
-	output := &expertProgressOutput{}
-
-	if err := agent.RunTurnWithLimits(context.Background(), output, "turn_expert_budget", TurnLimits{MaxEvalTokens: 10}); err != nil {
-		t.Fatal(err)
-	}
-	if consultant.request.MaxTotalEvalTokens != 8 {
-		t.Fatalf("expert shared cap=%d, want remaining 8", consultant.request.MaxTotalEvalTokens)
-	}
-	if got := output.evalTokens.Load(); got != 10 {
-		t.Fatalf("parent charged usage=%d, want 2 parent + 3 expert + 5 synthesis", got)
-	}
-	if len(client.limits) != 2 || client.limits[0] != 10 || client.limits[1] != 5 {
-		t.Fatalf("parent request limits=%v", client.limits)
-	}
-	if len(output.callIDs) != 1 || output.callIDs[0] != "expert-consult" || len(output.events) != 1 || output.events[0].Phase != expertteam.ProgressPlanned {
-		t.Fatalf("correlated expert progress callIDs=%v events=%#v", output.callIDs, output.events)
-	}
+// hallucinatedExpertClient invents a consult_experts call even though the
+// definition is filtered out of the catalog, then answers normally.
+type hallucinatedExpertClient struct {
+	calls atomic.Int64
 }
 
-func TestRunTurnWithLimitsPreservesCancellationWhenExpertReservationExhaustsBudget(t *testing.T) {
-	client := &expertBudgetTurnClient{}
-	consultant := &cancellationReceiptExpertConsultant{started: make(chan struct{})}
-	agent := New(client, nil, 4096)
-	agent.SetWorkDir(t.TempDir())
-	agent.SetExpertConsultant(consultant)
-	agent.AddUserMessage("Cancel while the bounded expert consultation is running.")
-	output := &limitOutput{}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() {
-		<-consultant.started
-		cancel()
-	}()
-
-	err := agent.RunTurnWithLimits(ctx, output, "turn_cancelled_expert_budget", TurnLimits{MaxEvalTokens: 10})
-	if !errors.Is(err, context.Canceled) || !errors.Is(err, ErrTurnEvalBudgetExhausted) {
-		t.Fatalf("error=%v, want joined cancellation and budget exhaustion", err)
+func (c *hallucinatedExpertClient) ChatStream(_ context.Context, _ llm.ChatOptions, emit func(llm.StreamChunk) error) error {
+	if c.calls.Add(1) == 1 {
+		return emit(llm.StreamChunk{Done: true, EvalCount: 1, ToolCalls: []llm.ToolCall{{
+			ID: "invented-experts", Name: "consult_experts", Arguments: map[string]any{
+				"strategy": "team", "objective": "Review this repository.",
+			},
+		}}})
 	}
-	if got := output.evalTokens.Load(); got != 10 {
-		t.Fatalf("cancelled parent charge=%d, want 2 parent + 8 expert reservation", got)
-	}
-	if calls := consultant.calls.Load(); calls != 1 {
-		t.Fatalf("expert dispatches=%d, want 1", calls)
-	}
-	if calls := client.calls.Load(); calls != 1 {
-		t.Fatalf("parent calls=%d, want no synthesis after cancellation", calls)
-	}
+	return emit(llm.StreamChunk{Text: "answered without experts", Done: true, EvalCount: 1})
 }
 
-func TestRunTurnDispatchesAtMostOneExpertConsultation(t *testing.T) {
-	client := &expertBudgetTurnClient{repeat: true}
-	consultant := &fakeExpertConsultant{result: expertteam.Result{
-		Strategy: expertselector.StrategyTeam,
-		Experts: []expertteam.ExpertReceipt{{
-			Name: "critic", Model: "qwen:2b", Status: expertteam.ExpertCompleted, Report: "one consultation",
-			EvalTokens: 1, ChargedEvalTokens: 1,
-		}},
-	}}
-	// The window size is incidental here: this test asserts expert dispatch
-	// accounting, and only needs a window that holds the built-in tool schemas
-	// plus two expert receipts. The bounded-turn context gate itself is covered
-	// on purpose by TestRunRejectsUncompactableToolResultBeforeSecondProviderCall.
-	agent := New(client, nil, 8192)
-	agent.SetWorkDir(t.TempDir())
-	agent.SetExpertConsultant(consultant)
-	agent.AddUserMessage("Try consulting twice, then answer.")
-
-	if err := agent.RunTurn(context.Background(), &limitOutput{}, "turn_one_expert_consult"); err != nil {
-		t.Fatal(err)
-	}
-	if consultant.calls != 1 {
-		t.Fatalf("expert runtime dispatches=%d, want exactly one", consultant.calls)
-	}
+func (*hallucinatedExpertClient) Ping() error   { return nil }
+func (*hallucinatedExpertClient) Model() string { return "hallucinated-expert-test" }
+func (*hallucinatedExpertClient) Embed(context.Context, string, []string) ([][]float32, error) {
+	return nil, nil
 }
 
-func TestRunTurnCanCorrectInventedExpertProfilesWithoutConsumingDispatch(t *testing.T) {
-	client := &expertCorrectionTurnClient{}
-	consultant := &fakeExpertConsultant{
-		result: expertteam.Result{
-			Strategy: expertselector.StrategySwarm,
-			Experts: []expertteam.ExpertReceipt{{
-				Name: "architect", Model: "qwen:2b", Status: expertteam.ExpertCompleted,
-				Report: "bounded finding", EvalTokens: 1, ChargedEvalTokens: 1,
-			}},
-		},
-		validate: func(request expertteam.Request) error {
-			if len(request.ExpertNames) > 0 {
-				return errors.Join(expertteam.ErrInvalidRequest, expertselector.ErrUnknownExplicitProfile)
-			}
-			return nil
-		},
-	}
-	// Window size is incidental; see the note in
-	// TestRunTurnDispatchesAtMostOneExpertConsultation.
-	agent := New(client, nil, 8192)
-	agent.SetWorkDir(t.TempDir())
-	agent.SetExpertConsultant(consultant)
-	agent.AddUserMessage("Use a swarm to compare game engines.")
-
-	if err := agent.RunTurn(context.Background(), &limitOutput{}, "turn_correct_expert_catalog"); err != nil {
-		t.Fatal(err)
-	}
-	if consultant.calls != 1 {
-		t.Fatalf("expert runtime dispatches=%d, want only the corrected request", consultant.calls)
-	}
-	if got := client.calls.Load(); got != 3 {
-		t.Fatalf("parent iterations=%d, want invalid correction + consultation + synthesis", got)
-	}
-}
-
-func TestRunTurnWithLimitsChargesReservationForInvalidExpertUsage(t *testing.T) {
-	client := &expertBudgetTurnClient{}
-	consultant := &fakeExpertConsultant{result: expertteam.Result{
-		Strategy: expertselector.StrategyTeam,
-		Experts: []expertteam.ExpertReceipt{{
-			Name: "invalid", Status: expertteam.ExpertFailed, ChargedEvalTokens: -1,
-		}},
-	}}
-	agent := New(client, nil, 4096)
-	agent.SetWorkDir(t.TempDir())
-	agent.SetExpertConsultant(consultant)
-	agent.AddUserMessage("Consult the invalid fake runtime.")
+// The consult_experts definition never reaches the model, but a model can
+// still invent the call. It must settle as an ordinary failed tool receipt the
+// model can recover from — not a panic, an approval prompt, or a stuck turn.
+func TestRunTurnSettlesHallucinatedConsultExpertsAsFailedReceipt(t *testing.T) {
+	client := &hallucinatedExpertClient{}
+	ag := New(client, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+	ag.AddUserMessage("Review this repository.")
 	output := &limitOutput{}
 
-	err := agent.RunTurnWithLimits(context.Background(), output, "turn_invalid_expert_usage", TurnLimits{MaxEvalTokens: 10})
-	if !errors.Is(err, ErrTurnEvalBudgetExhausted) {
-		t.Fatalf("error=%v, want budget exhaustion", err)
+	if err := ag.RunTurn(context.Background(), output, "turn_hallucinated_experts"); err != nil {
+		t.Fatalf("hallucinated consult_experts broke the turn: %v", err)
 	}
-	if got := output.evalTokens.Load(); got != 10 {
-		t.Fatalf("conservative parent charge=%d, want full 10", got)
+	if got := client.calls.Load(); got != 2 {
+		t.Fatalf("provider iterations = %d, want rejection + recovery answer", got)
 	}
-	if calls := client.calls.Load(); calls != 1 {
-		t.Fatalf("parent calls=%d, want no synthesis after invalid usage", calls)
+	var receipt string
+	for _, message := range ag.Messages() {
+		if message.Role == "tool" && message.ToolName == "consult_experts" {
+			receipt = message.Content
+		}
 	}
-}
-
-func TestRunTurnValidatesExpertUsageBeforeEmittingIt(t *testing.T) {
-	if strconv.IntSize < 64 {
-		t.Skip("64-bit overflow boundary")
-	}
-	client := &expertBudgetTurnClient{}
-	maxInt := int(^uint(0) >> 1)
-	consultant := &fakeExpertConsultant{result: expertteam.Result{
-		Strategy: expertselector.StrategyTeam,
-		Experts: []expertteam.ExpertReceipt{{
-			Name: "overflow", Status: expertteam.ExpertCompleted, Report: "invalid huge receipt",
-			EvalTokens: maxInt, ChargedEvalTokens: maxInt,
-		}},
-	}}
-	agent := New(client, nil, 4096)
-	agent.SetWorkDir(t.TempDir())
-	agent.SetExpertConsultant(consultant)
-	agent.AddUserMessage("Exercise an overflowing custom usage receipt.")
-	output := &limitOutput{}
-	maxEval := int64(^uint64(0) >> 1)
-
-	err := agent.RunTurnWithLimits(context.Background(), output, "turn_expert_usage_overflow", TurnLimits{MaxEvalTokens: maxEval})
-	if !errors.Is(err, ErrTurnEvalBudgetExhausted) {
-		t.Fatalf("error=%v, want budget exhaustion", err)
-	}
-	if got := output.evalTokens.Load(); got != maxEval {
-		t.Fatalf("validated conservative charge=%d, want %d", got, maxEval)
-	}
-	if calls := client.calls.Load(); calls != 1 {
-		t.Fatalf("parent calls=%d, want no synthesis after overflow", calls)
+	if !strings.Contains(receipt, "blocked in current mode") {
+		t.Fatalf("hallucinated consult_experts receipt = %q, want a mode-policy block", receipt)
 	}
 }
 

@@ -138,6 +138,17 @@ func TestLoadSkillToolExposureByConfigurationAndMode(t *testing.T) {
 	}
 }
 
+// internal/tools is drift-synced byte-identical with the sibling repo and
+// still defines consult_experts; sonar removed the expert runtime, so the
+// host-side filter is the only thing keeping that definition from the model.
+func TestConsultExpertsDefinitionNeverReachesTheModel(t *testing.T) {
+	ag := New(nil, nil, 0)
+	ag.SetSkillLoader(&fakeSkillLoader{})
+	if hasToolDef(ag.toolsBuiltinToolDefs(), "consult_experts") {
+		t.Fatal("consult_experts leaked into the model-visible tool catalog")
+	}
+}
+
 func TestLoadSkillExecutionContractAndExactHandler(t *testing.T) {
 	ag := New(nil, nil, 0)
 	kind, effect := ag.executionKind("load_skill")

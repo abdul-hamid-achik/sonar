@@ -69,8 +69,7 @@ func completeToolOutputDetail(
 	durableResult string,
 	structured json.RawMessage,
 ) *ToolOutputDetail {
-	if toolName == "consult_experts" ||
-		completePostRedaction == "" ||
+	if completePostRedaction == "" ||
 		len(structured) > 0 ||
 		durableResult != contextResult {
 		return nil
@@ -88,9 +87,6 @@ func emitSemanticToolResult(
 	projection ecosystem.ToolProjection,
 	detail *ToolOutputDetail,
 ) {
-	if name == "consult_experts" {
-		detail = nil
-	}
 	if semantic, ok := out.(SemanticToolDetailOutput); ok {
 		displayResult := result
 		if len(structured) > 0 {

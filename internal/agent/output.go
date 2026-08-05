@@ -3,7 +3,6 @@ package agent
 import (
 	"time"
 
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
 )
 
@@ -33,13 +32,6 @@ type Output interface {
 
 	// Error reports a non-fatal error to the user.
 	Error(msg string)
-}
-
-// ExpertProgressOutput is an optional output capability. Agent supplies the
-// tool call ID for correlation; ProgressEvent itself remains independent of
-// provider text, prompts, paths, reports, and reasoning.
-type ExpertProgressOutput interface {
-	ExpertProgress(callID string, event expertteam.ProgressEvent)
 }
 
 // ProviderReceiptOutput is an optional output capability for terminal

@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 	"time"
 
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 	ecosystemPkg "github.com/abdul-hamid-achik/sonar/internal/ecosystem"
 	executionPkg "github.com/abdul-hamid-achik/sonar/internal/execution"
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
 	mcpPkg "github.com/abdul-hamid-achik/sonar/internal/mcp"
 )
@@ -167,12 +165,7 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 			return dispatchOutcome{}, ctxErr
 		}
 
-		var preflightErr error
-		if tc.Name == "consult_experts" && t.expertConsultations >= 1 {
-			preflightErr = errors.New("consult_experts may be dispatched at most once per parent turn")
-		} else {
-			preflightErr = t.a.preflightToolCall(kind, tc)
-		}
+		preflightErr := t.a.preflightToolCall(kind, tc)
 		if preflightErr != nil {
 			preflightRejections++
 			result := capToolResultForContext(fmt.Sprintf("tool request failed preflight: %v", preflightErr), t.turnNumCtx)
@@ -373,55 +366,7 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 		var stopAfterTool error
 		switch kind {
 		case executionPkg.KindBuiltin:
-			if tc.Name == "consult_experts" {
-				t.expertConsultations++
-				remaining := 0
-				if t.limits.MaxEvalTokens > 0 {
-					remaining = boundedEvalLimit(t.limits.MaxEvalTokens - t.totalEvalTokens)
-				}
-				var usage expertteam.Usage
-				var usageErr error
-				var progress expertteam.Observer
-				if progressOut, ok := t.out.(ExpertProgressOutput); ok {
-					progress = func(event expertteam.ProgressEvent) {
-						progressOut.ExpertProgress(tc.ID, event)
-					}
-				}
-				result, isErr, usage, usageErr = t.a.handleConsultExpertsWithBudgetAndProgress(ctx, tc.Arguments, remaining, progress)
-				if usageErr != nil {
-					if remaining > 0 {
-						t.out.StreamDone(remaining, 0)
-						t.totalEvalTokens += int64(remaining)
-						stopAfterTool = fmt.Errorf("%w: expert consultation returned an invalid usage receipt; conservatively charged %d reserved token(s)", ErrTurnEvalBudgetExhausted, remaining)
-					} else {
-						stopAfterTool = errors.New("expert consultation usage could not be validated")
-					}
-					isErr = true
-				} else if usage.EvalTokens > 0 || usage.PromptEvalTokens > 0 {
-					if int64(usage.EvalTokens) > math.MaxInt64-t.totalEvalTokens {
-						if remaining > 0 {
-							t.out.StreamDone(remaining, 0)
-							t.totalEvalTokens += int64(remaining)
-							stopAfterTool = fmt.Errorf("%w: expert consultation usage overflowed the parent counter; conservatively charged %d reserved token(s)", ErrTurnEvalBudgetExhausted, remaining)
-						} else {
-							stopAfterTool = errors.New("expert consultation usage overflowed the parent turn counter")
-						}
-						isErr = true
-					} else {
-						t.out.StreamDone(usage.EvalTokens, usage.PromptEvalTokens)
-						t.totalEvalTokens += int64(usage.EvalTokens)
-						if t.limits.MaxEvalTokens > 0 && t.totalEvalTokens >= t.limits.MaxEvalTokens {
-							stopAfterTool = fmt.Errorf("%w after expert consultation: used %d of %d", ErrTurnEvalBudgetExhausted, t.totalEvalTokens, t.limits.MaxEvalTokens)
-							if t.totalEvalTokens > t.limits.MaxEvalTokens {
-								isErr = true
-								result = "error: expert provider exceeded the remaining evaluation-token budget\n" + result
-							}
-						}
-					}
-				}
-			} else {
-				result, isErr = t.a.handleBuiltinToolWithCancellation(ctx, tc, tracked.identity.EffectClass != executionPkg.EffectReadOnly)
-			}
+			result, isErr = t.a.handleBuiltinToolWithCancellation(ctx, tc, tracked.identity.EffectClass != executionPkg.EffectReadOnly)
 		case executionPkg.KindMemory:
 			result, isErr = t.a.handleMemoryTool(tc)
 		default:

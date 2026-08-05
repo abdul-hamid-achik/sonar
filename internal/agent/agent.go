@@ -17,7 +17,6 @@ import (
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 	"github.com/abdul-hamid-achik/sonar/internal/ecosystem"
 	"github.com/abdul-hamid-achik/sonar/internal/execution"
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 	"github.com/abdul-hamid-achik/sonar/internal/ice"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
 	"github.com/abdul-hamid-achik/sonar/internal/mcp"
@@ -114,7 +113,6 @@ type Agent struct {
 	capabilityStatsExpires time.Time
 	// capabilityMetrics is process-local routing telemetry (no prompt text).
 	capabilityMetrics CapabilityRoutingMetrics
-	expertConsultant  ExpertConsultant
 	imageResolver     ImageResolver
 	mcphubResults     *ecosystem.MCPHubResultAssembler
 	// continuationContracts is a bounded, ephemeral cache of exact downstream
@@ -155,27 +153,6 @@ type Agent struct {
 	executionRunIDErr   error
 	requireExecutionLog bool
 	unresolvedExecution *UnresolvedExecutionError
-}
-
-// ExpertConsultant is the bounded read-only team runtime surface. Keeping the
-// interface on Agent allows deterministic fakes without coupling tests to a
-// provider implementation.
-type ExpertConsultant interface {
-	Consult(context.Context, expertteam.Request) (expertteam.Result, error)
-}
-
-// ExpertProgressConsultant is an optional extension. Existing embedders keep
-// the stable ExpertConsultant surface; runtimes that implement this interface
-// can expose only the bounded host-owned progress projection.
-type ExpertProgressConsultant interface {
-	ConsultWithProgress(context.Context, expertteam.Request, expertteam.Observer) (expertteam.Result, error)
-}
-
-// ExpertRequestValidator is an optional pure preflight extension. Production
-// runtimes use it to reject unavailable exact profile names before the one
-// consultation dispatch allowed for a parent turn is consumed.
-type ExpertRequestValidator interface {
-	ValidateRequest(context.Context, expertteam.Request) error
 }
 
 // contextWindowProvider is an optional capability implemented by clients that
@@ -271,14 +248,6 @@ func New(llmClient llm.Client, registry *mcp.Registry, numCtx int) *Agent {
 // SetRouter sets the model router for auto-selection.
 func (a *Agent) SetRouter(router config.ModelRouter) {
 	a.router = router
-}
-
-// SetExpertConsultant installs application-level Team/Swarm/MoE support. A nil
-// consultant removes the model-visible tool.
-func (a *Agent) SetExpertConsultant(consultant ExpertConsultant) {
-	a.mu.Lock()
-	a.expertConsultant = consultant
-	a.mu.Unlock()
 }
 
 // SetImageResolver installs the path-free content-addressed lookup used to

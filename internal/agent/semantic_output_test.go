@@ -548,49 +548,6 @@ func TestCompleteToolOutputDetailAdmitsOnlyOrdinaryUnstructuredResults(t *testin
 	if detail := completeToolOutputDetail("read_file", "", "", "", nil); detail != nil {
 		t.Fatalf("empty result gained detail capability: %#v", detail)
 	}
-	if detail := completeToolOutputDetail(
-		"consult_experts",
-		complete,
-		"bounded expert receipt",
-		"bounded expert receipt",
-		nil,
-	); detail != nil {
-		t.Fatalf("expert report gained detail capability: %#v", detail)
-	}
-}
-
-func TestEmitSemanticToolResultDropsExpertDetailBeforeOutputBoundary(t *testing.T) {
-	t.Parallel()
-
-	recorder := &semanticOutputRecorder{}
-	projection := projectSemanticToolReceipt(
-		"consult_experts",
-		nil,
-		"bounded consultation receipt",
-		nil,
-		nil,
-		false,
-		false,
-		true,
-	)
-	emitSemanticToolResult(
-		recorder,
-		"expert-call",
-		"consult_experts",
-		"bounded consultation receipt",
-		nil,
-		false,
-		false,
-		time.Second,
-		projection,
-		&ToolOutputDetail{Text: "PRIVATE EXPERT REPORT", Complete: true},
-	)
-	if recorder.detail != nil {
-		t.Fatalf("expert detail crossed output interface: %#v", recorder.detail)
-	}
-	if recorder.result != "bounded consultation receipt" {
-		t.Fatalf("expert display receipt changed: %q", recorder.result)
-	}
 }
 
 func TestSemanticToolContentsKeepsHitspecDiscoveryTransient(t *testing.T) {

@@ -97,7 +97,6 @@ type turnRuntime struct {
 	previousIterationEndedWithToolResult bool
 	malformedToolIterations              int
 	capabilityReroutes                   int
-	expertConsultations                  int
 	hostRefusalCounts                    map[string]int
 	completedBuiltinCalls                map[string]struct{}
 

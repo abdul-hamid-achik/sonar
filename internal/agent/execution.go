@@ -505,7 +505,7 @@ func (a *Agent) executionKindForCall(call llm.ToolCall) (executionpkg.Kind, exec
 		// bash_output only reads a bounded buffer this host already captured
 		// from a process it already started; it cannot signal, start, or
 		// otherwise reach a backend, so the read is genuinely effect-free.
-		case "grep", "read", "glob", "ls", "find", "diff", "exists", "bash_output", "load_skill", "consult_experts":
+		case "grep", "read", "glob", "ls", "find", "diff", "exists", "bash_output", "load_skill":
 			return executionpkg.KindBuiltin, executionpkg.EffectReadOnly
 		case "bash":
 			// Shell remains approval-gated unless the separate AUTO policy admits
@@ -784,8 +784,6 @@ func (a *Agent) preflightToolCall(kind executionpkg.Kind, tc llm.ToolCall) error
 				return errors.New("name must be one exact catalog name")
 			}
 			return nil
-		case "consult_experts":
-			return a.preflightConsultExperts(tc.Arguments)
 		case "diff":
 			if err := preflightRequiredString(tc.Arguments, "path", false); err != nil {
 				return err
