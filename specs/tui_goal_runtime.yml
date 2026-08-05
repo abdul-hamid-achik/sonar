@@ -7,7 +7,12 @@ intent: |
     observe provider failure without false completion, inspect locked budget
     editing, and drop the goal explicitly.
 target:
-    cmd: ["./bin/sonar"]
+    # Driven through the fake DeepSeek fixture so a turn can complete; see
+    # specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/goal-protocol.txt"
     cwd: "."
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/goal-home"
@@ -19,7 +24,7 @@ terminal:
     rows: 32
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/goal-home .glyphrun/tmp/goal-agents && mkdir -p .glyphrun/tmp/goal-home/.config/sonar .glyphrun/tmp/goal-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/goal-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/goal-protocol.txt .glyphrun/tmp/goal-home .glyphrun/tmp/goal-agents && mkdir -p .glyphrun/tmp/goal-home/.config/sonar .glyphrun/tmp/goal-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/goal-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
 steps:
@@ -29,7 +34,7 @@ steps:
         timeoutMs: 5000
     - wait:
         screen:
-            contains: "try: ollama serve"
+            contains: "remote prompts"
         timeoutMs: 5000
     - type: "/goal new"
     - press: "enter"
@@ -103,7 +108,10 @@ steps:
         timeoutMs: 2000
     - wait:
         screen:
-            contains: "not productive · 0 eval · just now"
+            # 4 eval tokens is what fake_deepseek reports in its terminal
+            # usage receipt; asserting it also pins that usage accounting
+            # reaches the goal inspector.
+            contains: "not productive · 4 eval · just now"
         timeoutMs: 2000
     - wait:
         idle:

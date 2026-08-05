@@ -1220,8 +1220,18 @@ func (m *Model) validateRestoredProviderReference(state persistedSessionState) e
 	ref := state.Provider
 	if ref == nil {
 		if actualLocality == persistedProviderRemote {
+			// The rule is right and unchanged: a session saved before provider
+			// identity was recorded was necessarily local, so restoring it
+			// under a remote provider would send an old local conversation to
+			// a paid endpoint that never saw it.
+			//
+			// The remedy was wrong. "switch to a local provider" is advice a
+			// harness for hosted models cannot act on — the same shape as
+			// telling a configured DeepSeek session to install a 2.7 GB Ollama
+			// model. Naming the risk works in both harnesses; prescribing a
+			// local provider only works in one.
 			return fmt.Errorf(
-				"restore provider: legacy session has no provider identity; switch to a local provider before restoring it",
+				"restore provider: this session predates provider identity, so it cannot be restored under a remote provider — its prompts would leave the machine for the first time without ever having been reviewed. Start a new session instead",
 			)
 		}
 		return nil

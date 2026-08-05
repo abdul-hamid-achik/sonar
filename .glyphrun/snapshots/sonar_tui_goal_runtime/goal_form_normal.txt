@@ -1,7 +1,7 @@
-   main · local-agent                       qwen3.5:2b · offline · 0/16.4k · 0%
+   main · sonar     DEEPSEEK · remote prompts · deepseek-v4-flash · 0/1.0M · 0%
 
-   notice · ollama: no model selected
-   try: ollama serve · ollama pull qwen3.5:2b
+
+
 
 
 
@@ -20,9 +20,9 @@
 │                                                                             │
 │                                                                             │
 │ Limits · set at least one                                                   │
-│ Auto turns   8                                                              │
-│ Tokens       12000                                                          │
-│ Time         30m                                                            │
+│ Auto turns   24                                                             │
+│ Tokens       250000                                                         │
+│ Time         1h30m                                                          │
 │                                                                             │
 │ Actions                                                                     │
 │ ▸ Save goal ·   Cancel                                                      │

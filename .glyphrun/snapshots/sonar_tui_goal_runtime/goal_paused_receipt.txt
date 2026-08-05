@@ -1,9 +1,9 @@
-   main · local-agent                       qwen3.5:2b · offline · 0/16.4k · 0%
-
-   notice · ollama: no model selected
-   try: ollama serve · ollama pull qwen3.5:2b
+   main · sonar    DEEPSEEK · remote prompts · deepseek-v4-flash · 12/1.0M · 0%
    notice · Goal saved · Cortex is not configured; starting one bounded
    local turn…
+
+   Fixture answer 1.
+
 
   ╭──────────────────────────────────────────────────────────────────────────╮
   │ Goal inspector · 0/1 verified                                            │
@@ -13,15 +13,15 @@
   │ Productive turns are progress signals, not acceptance proof.             │
   │                                                                          │
   │ State                                                                    │
-  │ paused · unproductive turn: inference not started: no model selected     │
+  │ paused · unproductive turn: assistant yielded without a concrete tool    │
+  │ receipt                                                                  │
   │                                                                          │
   │ Last turn                                                                │
-  │ not productive · 0 eval · just now                                       │
+  │ not productive · 4 eval · just now                                       │
   │                                                                          │
   │ Cortex                                                                   │
   │ not linked · bounded local goal                                          │
   │                                                                          │
-  │ Budget                                                                   │
   │ Actions                                                                  │
   │ Pause ×  › Resume  Budget  Drop                                          │
   │ Resume or safely retry goal evaluation                                   │

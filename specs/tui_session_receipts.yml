@@ -12,7 +12,12 @@ intent: |
     an effect has a durable dispatch marker without a terminal receipt, and
     leave with a copyable short resume command.
 target:
-    cmd: ["./bin/sonar"]
+    # Driven through the fake DeepSeek fixture so a turn can complete; see
+    # specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/session-receipts-protocol.txt"
     cwd: "."
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/session-receipts-home"
@@ -24,7 +29,7 @@ terminal:
     rows: 40
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/session-receipts-home .glyphrun/tmp/session-receipts-agents && mkdir -p .glyphrun/tmp/session-receipts-home/.config/sonar .glyphrun/tmp/session-receipts-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/session-receipts-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/session-receipts-protocol.txt .glyphrun/tmp/session-receipts-home .glyphrun/tmp/session-receipts-agents && mkdir -p .glyphrun/tmp/session-receipts-home/.config/sonar .glyphrun/tmp/session-receipts-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/session-receipts-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
         - run: "go run ./specs/fixtures/session_receipts .glyphrun/tmp/session-receipts-home/.config/sonar/sonar.db '${projectRoot}'"
@@ -37,7 +42,7 @@ steps:
         timeoutMs: 5000
     - wait:
         screen:
-            contains: "try: ollama serve"
+            contains: "remote prompts"
         timeoutMs: 5000
     - press: "ctrl+p"
     - wait:

@@ -1,11 +1,11 @@
-no model selected
-
+without a concrete tool
+receipt
 ╭───────────────────────────╮
 │ Goal budgets · 1/4        │
 │ Locked · Ship a polish…   │
 │ 1 acceptance criterion    │
 │ Auto-turn budget          │
-│ > 8                       │
+│ > 24                      │
 │ esc cancel                │
 │ enter/tab next            │
 ╰───────────────────────────╯

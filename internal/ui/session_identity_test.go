@@ -458,8 +458,19 @@ func TestLegacySessionWithoutProviderIdentityCannotRestoreUnderRemoteProvider(t 
 	target.entries = []ChatEntry{{Kind: "system", Content: "keep transcript"}}
 
 	err := target.restoreSessionState(state)
-	if err == nil || !strings.Contains(err.Error(), "legacy session has no provider identity") {
-		t.Fatalf("legacy remote restore error = %v", err)
+	if err == nil {
+		t.Fatal("a legacy session restored under a remote provider")
+	}
+	// The refusal must name the risk it is preventing, not prescribe a remedy.
+	// "switch to a local provider" was advice a hosted-model harness cannot
+	// act on, which makes a correct refusal read as a broken one.
+	for _, want := range []string{"predates provider identity", "leave the machine"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("legacy remote restore error omits %q: %v", want, err)
+		}
+	}
+	if strings.Contains(err.Error(), "switch to a local provider") {
+		t.Errorf("the refusal still prescribes an action this harness cannot take: %v", err)
 	}
 	if len(target.entries) != 1 || target.entries[0].Content != "keep transcript" {
 		t.Fatalf("rejected legacy restore mutated transcript: %#v", target.entries)

@@ -1,11 +1,11 @@
-   main · local-agent                       qwen3.5:2b · offline · 0/16.4k · 0%
+   main · sonar    DEEPSEEK · remote prompts · deepseek-v4-flash · 12/1.0M · 0%
    notice · Goal saved · Cortex is not configured; starting one bounded
    local turn…
-    ✗ error
-   Inference not started: no model selected
-   notice · Goal paused · unproductive turn: inference not started: no
-   model selected
 
+   Fixture answer 1.
+
+   notice · Goal paused · unproductive turn: assistant yielded without a
+   concrete tool receipt
 ───────────────────────────────────────────────────────────────────────────────
 ╭─────────────────────────────────────────────────────────────────────────────╮
 │ Goal budgets                                                                │
@@ -20,9 +20,9 @@
 │                                                                             │
 │                                                                             │
 │ Limits · set at least one                                                   │
-│ Auto turns > 8                                                              │
-│ Tokens       12000                                                          │
-│ Time         30m                                                            │
+│ Auto turns > 24                                                             │
+│ Tokens       250000                                                         │
+│ Time         1h30m                                                          │
 │                                                                             │
 │ Actions                                                                     │
 │ ▸ Save budgets ·   Cancel                                                   │

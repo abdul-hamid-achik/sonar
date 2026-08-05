@@ -1,16 +1,16 @@
-   main · local-agent                                 qwen3.5:2b · offline · 0/16.4k · 0%
+   main · sonar               DEEPSEEK · remote prompts · deepseek-v4-flash · 0/1.0M · 0%
 
-   notice · ollama: no model selected
-   try: ollama serve · ollama pull qwen3.5:2b
+
+
 
 
 
       ╭────────────────────────────────────────────────────────────────────────────╮
       │ Settings                                                                   │
       │                                                                            │
-      │ │ Model · Pinned · qwen3.5:2b                                              │
-      │ │ Choose an installed local model or Ollama Cloud model                    │
-      │   Provider · ollama · local                                                │
+      │ │ Model · DEEPSEEK · remote prompts · deepseek-v4-flash · Pinned           │
+      │ │ Choose a model                                                           │
+      │   Provider · deepseek · remote                                             │
       │   Switch Ollama or OpenAI-compatible remote profiles                       │
       │   Agent profile · Default                                                  │
       │   Change prompt, skills, model, and MCP scope                              │

@@ -1,6 +1,6 @@
-
-  Ollama model · ctrl+o
-
+API-first · prompts on
+DEEPSEEK · remote prompts
+Ask · /help
 ╭───────────────────────────╮
 │ Goal · 2/6                │
 │ Acceptance criteria       │

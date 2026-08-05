@@ -5,7 +5,12 @@ intent: |
     a user can compose a multiline draft, visit Settings without losing it, and
     safely review a large bracketed paste before accepting a bounded fenced block.
 target:
-    cmd: ["./bin/sonar"]
+    # Driven through the fake DeepSeek fixture so a turn can complete; see
+    # specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/composer-paste-protocol.txt"
     cwd: "."
     env:
         HOME: "${projectRoot}/.glyphrun/tmp/composer-paste-home"
@@ -17,7 +22,7 @@ terminal:
     rows: 32
 preconditions:
     commands:
-        - run: "rm -rf .glyphrun/tmp/composer-paste-home .glyphrun/tmp/composer-paste-agents && mkdir -p .glyphrun/tmp/composer-paste-home/.config/sonar .glyphrun/tmp/composer-paste-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/composer-paste-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar"
+        - run: "rm -rf .glyphrun/tmp/composer-paste-protocol.txt .glyphrun/tmp/composer-paste-home .glyphrun/tmp/composer-paste-agents && mkdir -p .glyphrun/tmp/composer-paste-home/.config/sonar .glyphrun/tmp/composer-paste-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/composer-paste-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
           cwd: "."
           timeoutMs: 30000
 steps:
@@ -27,7 +32,7 @@ steps:
         timeoutMs: 5000
     - wait:
         screen:
-            contains: "try: ollama serve"
+            contains: "remote prompts"
         timeoutMs: 5000
     - type: "Review the first receipt."
     - send:
