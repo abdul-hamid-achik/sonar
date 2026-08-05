@@ -103,7 +103,12 @@ func run() int {
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	cmd.Env = replaceEnv(os.Environ(), "OLLAMA_HOST", "http://"+listener.Addr().String())
+	// The fixture fakes Ollama, so it says so. Relying on the default
+	// provider made the spec depend on whether a hosted credential
+	// happened to be exported in the ambient shell.
+	cmdEnv := replaceEnv(hermeticEnv(), "OLLAMA_HOST", "http://"+listener.Addr().String())
+	cmdEnv = replaceEnv(cmdEnv, "SONAR_PROVIDER", "ollama")
+	cmd.Env = cmdEnv
 	if err := cmd.Start(); err != nil {
 		_ = listener.Close()
 		fmt.Fprintf(os.Stderr, "start sonar: %v\n", err)
@@ -279,6 +284,37 @@ func writeNDJSON(w http.ResponseWriter, value any) {
 	if flusher, ok := w.(http.Flusher); ok {
 		flusher.Flush()
 	}
+}
+
+// hermeticEnv strips every provider credential and provider override the
+// ambient shell may carry before this fixture declares its own.
+//
+// Without it a spec is not hermetic. This suite runs on machines where
+// DEEPSEEK_API_KEY is routinely exported, os.Environ() passes it straight
+// through, and sonar then configures a real hosted provider the spec never
+// asked for — so the fake server owns the model inventory while a different
+// provider dispatches. Observed: a top bar reading "DEEPSEEK · remote prompts
+// · qwen3.5:0.8b", the same spec passing or failing depending on whether a key
+// happened to be exported, and a test run reaching a metered endpoint with a
+// real credential.
+//
+// A deterministic terminal suite must not be able to bill you.
+func hermeticEnv() []string {
+	environment := os.Environ()
+	result := make([]string, 0, len(environment))
+	for _, entry := range environment {
+		key, _, found := strings.Cut(entry, "=")
+		if !found {
+			continue
+		}
+		if strings.HasPrefix(key, "SONAR_PROVIDER") ||
+			strings.HasSuffix(key, "_API_KEY") ||
+			strings.HasSuffix(key, "_API_TOKEN") {
+			continue
+		}
+		result = append(result, entry)
+	}
+	return result
 }
 
 func replaceEnv(environ []string, key, value string) []string {

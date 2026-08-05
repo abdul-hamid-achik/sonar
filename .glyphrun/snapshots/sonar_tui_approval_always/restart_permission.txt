@@ -12,7 +12,7 @@
 ─────────────────────────────────────────────────────────────────────────────────────────
 ◇  Permission · write · NORMAL
    Action     Write 23 B
-   Target     <temp>/local-agent-glyphrun-always/session-grant.txt
+   Target     <temp>/sonar-glyphrun-always/session-grant.txt
    Impact     Creates or replaces the target file with the proposed content.
    Scope      Exact arguments · this process only
 

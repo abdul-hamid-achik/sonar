@@ -1,4 +1,4 @@
-   main · local-agent                               qwen3.5:0.8b · 7/16.4k · 0%
+   main · sonar                                     qwen3.5:0.8b · 7/16.4k · 0%
 
 
 ▌  Consult one generalist about the Agent Hub.

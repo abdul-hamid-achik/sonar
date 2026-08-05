@@ -11,7 +11,7 @@
 ─────────────────────────────────────────────────────────────────────────────────────────
 ◇  Permission · write · NORMAL
    Action     Write 19 B
-   Target     <temp>/local-agent-glyphrun-denial/approval-probe.txt
+   Target     <temp>/sonar-glyphrun-denial/approval-probe.txt
    Impact     Creates or replaces the target file with the proposed content.
    Scope      Exact arguments · this process only
 

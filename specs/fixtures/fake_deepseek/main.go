@@ -108,7 +108,7 @@ func run() int {
 	command.Stderr = os.Stderr
 	// The provider is selected entirely through the environment so the spec's
 	// config fixture stays about the behaviour under test.
-	env := os.Environ()
+	env := hermeticEnv()
 	env = replaceEnv(env, "SONAR_PROVIDER", "deepseek")
 	env = replaceEnv(env, "SONAR_PROVIDER_BASE_URL", "http://"+listener.Addr().String()+"/v1")
 	env = replaceEnv(env, "SONAR_PROVIDER_MODEL", fixtureModel)
@@ -219,6 +219,41 @@ func writeChunk(w io.Writer, flusher http.Flusher, payload map[string]any) {
 	}
 	_, _ = io.WriteString(w, "data: "+string(encoded)+"\n\n")
 	flusher.Flush()
+}
+
+// hermeticEnv strips every provider credential and provider override the
+// ambient shell may carry before a fixture declares its own.
+//
+// Without it a spec is not hermetic: this suite runs on a developer machine
+// where DEEPSEEK_API_KEY is routinely exported, os.Environ() passes it
+// straight through, and sonar then configures a real hosted provider the spec
+// never asked for. Observed consequences, in increasing order of seriousness:
+// the top bar reads "DEEPSEEK · remote prompts · qwen3.5:0.8b" because the
+// fake server owns the inventory while a different provider dispatches; the
+// same spec passes or fails depending on whether a key happens to be
+// exported; and a test run can send a prompt to a metered endpoint with the
+// developer's real credential.
+//
+// A deterministic terminal suite must not be able to bill you.
+func hermeticEnv() []string {
+	out := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		key, _, found := strings.Cut(entry, "=")
+		if !found {
+			continue
+		}
+		if strings.HasPrefix(key, "SONAR_PROVIDER") ||
+			strings.HasSuffix(key, "_API_KEY") ||
+			strings.HasSuffix(key, "_API_TOKEN") {
+			// OLLAMA_HOST is deliberately NOT stripped: specs point it at a
+			// dead port to keep the local runtime out of the picture, and
+			// removing it would let sonar reach a developer's real daemon.
+
+			continue
+		}
+		out = append(out, entry)
+	}
+	return out
 }
 
 func replaceEnv(env []string, key, value string) []string {
