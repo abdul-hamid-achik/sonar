@@ -8,12 +8,12 @@
  │   shift+enter  New line ·          │
  │                ctrl+j/alt+enter    │
  │                also                │
+ │   ctrl+v       Paste text; on      │
+ │                macOS convert a     │
+ │                clipboard image to  │
+ │                PNG and attach it   │
  │   tab          Autocomplete        │
  │   ↑            Previous input      │
  │                (empty input)       │
- │   ↓            Next input          │
- │                (history active)    │
- │   ctrl+e       Open in             │
- │                $VISUAL/$EDITOR     │
  │ esc/q close · pgdn · g/shift+g     │
  ╰────────────────────────────────────╯

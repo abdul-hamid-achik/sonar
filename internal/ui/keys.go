@@ -24,6 +24,9 @@ type KeyMap struct {
 	CompleteSelect    key.Binding
 	CopyLast          key.Binding
 	ToggleMouse       key.Binding
+	Paste             key.Binding
+	InspectOutput     key.Binding
+	InspectDiff       key.Binding
 	CycleMode         key.Binding
 	ModelPicker       key.Binding
 	SettingsPicker    key.Binding
@@ -129,6 +132,22 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("ctrl+y"),
 			key.WithHelp("ctrl+y", "copy last response (empty input)"),
 		),
+		Paste: key.NewBinding(
+			key.WithKeys("ctrl+v"),
+			key.WithHelp("ctrl+v", "paste text; on macOS convert a clipboard image to PNG and attach it"),
+		),
+		// Contextual: these act only while a tool receipt is inspected. They
+		// were handled by literal msg.String() cases and appeared in no help
+		// group at all, so the diff viewer — the thing people most want after
+		// an edit — was reachable only by knowing it existed.
+		InspectOutput: key.NewBinding(
+			key.WithKeys("alt+o"),
+			key.WithHelp("alt+o", "open full output (inspected receipt)"),
+		),
+		InspectDiff: key.NewBinding(
+			key.WithKeys("alt+d"),
+			key.WithHelp("alt+d", "open full diff (inspected receipt)"),
+		),
 		ToggleMouse: key.NewBinding(
 			key.WithKeys("alt+m"),
 			key.WithHelp("alt+m", "mouse capture off/on — turn off to select and copy with the mouse"),
@@ -209,13 +228,15 @@ type KeyHelpSection struct {
 func (k KeyMap) HelpSections() []KeyHelpSection {
 	return []KeyHelpSection{
 		{"Compose", []key.Binding{
-			k.Send, k.NewLine, k.Complete, k.HistoryUp, k.HistoryDown, k.ExternalEditor,
+			k.Send, k.NewLine, k.Paste, k.Complete, k.HistoryUp, k.HistoryDown,
+			k.ExternalEditor,
 		}},
 		{"Read", []key.Binding{
 			k.PageUp, k.PageDown, k.HalfPageUp, k.HalfPageDn, k.JumpLatest, k.TranscriptSearch,
 		}},
 		{"Inspect", []key.Binding{
-			k.ToggleTools, k.ToggleFocusedTool, k.ToggleThinking, k.CopyLast, k.ToggleMouse,
+			k.ToggleTools, k.ToggleFocusedTool, k.ToggleThinking, k.InspectOutput, k.InspectDiff,
+			k.CopyLast, k.ToggleMouse,
 			k.CompactToggle,
 		}},
 		{"Session", []key.Binding{

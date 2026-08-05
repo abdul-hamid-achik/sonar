@@ -1,6 +1,10 @@
                      ╭────────────────────────────────────────────────────────────────────────────╮
                      │ Help                                                                       │
                      │                                                                            │
+                     │   Session                                                                  │
+                     │   shift+tab         Cycle mode (NORMAL/PLAN/AUTO)                          │
+                     │   ctrl+o            Open model picker                                      │
+                     │   ctrl+p            Open settings                                          │
                      │   ctrl+n            New conversation                                       │
                      │   ctrl+l            Clear screen                                           │
                      │   f1                Show help (empty input)                                │
@@ -11,8 +15,6 @@
                      │                                                                            │
                      │ Input Shortcuts                                                            │
                      │   @file / @agent    Insert file or agent mention text                      │
-                     │   ctrl+v            Paste text; on macOS convert a clipboard image to PNG  │
-                     │                     and attach it                                          │
                      │   paste/drag imag…  Attach up to four PNG, JPEG, or GIF files to the       │
                      │                     pending prompt                                         │
                      │   shift+drag        Select and copy: Ghostty, kitty, WezTerm, Alacritty,   │
@@ -29,7 +31,5 @@
                      │ Slash Commands                                                             │
                      │   /help             Show help overlay with shortcuts and commands          │
                      │   /clear            Clear conversation history                             │
-                     │   /plan             Open a guided read-only planning form                  │
-                     │   /goal             Create, inspect, pause, resume, budget, or drop a      │
                      │ esc/q close · j/k scroll · pgup/pgdn page · 28%                            │
                      ╰────────────────────────────────────────────────────────────────────────────╯

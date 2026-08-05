@@ -20,7 +20,7 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		switch {
 		case key.Matches(msg, m.keys.Quit):
 			return m.beginShutdown(), true
-		case msg.String() == "ctrl+v" && m.composerEditable():
+		case key.Matches(msg, m.keys.Paste) && m.composerEditable():
 			return m.readClipboardPaste(), true
 		case key.Matches(msg, m.keys.NewLine) && m.composerEditable():
 			m.clearCompletionSuppression()
@@ -51,14 +51,14 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if m.transcriptOwnsScrollKey(msg) {
 		return m.updateTranscriptScroll(msg), true
 	}
-	if msg.String() == "ctrl+v" && m.composerEditable() {
+	if key.Matches(msg, m.keys.Paste) && m.composerEditable() {
 		return m.readClipboardPaste(), true
 	}
 	if _, ok := m.currentInspectedToolTarget(); ok {
-		switch msg.String() {
-		case "alt+o":
+		switch {
+		case key.Matches(msg, m.keys.InspectOutput):
 			return m.dispatchInspectedToolAction(toolOpenOutputActionID), true
-		case "alt+d":
+		case key.Matches(msg, m.keys.InspectDiff):
 			return m.dispatchInspectedToolAction(toolOpenDiffActionID), true
 		}
 	}
