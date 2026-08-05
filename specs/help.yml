@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:e3e0bd12a9955ebab9102449fd2a44132c1b7633ea98609f1091984345e3ecd0
-name: local_agent_help
+name: sonar_help
 intent: |
     a user can run sonar -h and discover the supported CLI flags.
 target:

@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:7a7fe6a6bb5832d28b5ede403ccb372a885227c74a1d54629f39271b2102c539
-name: local_agent_tui_transcript_search
+name: sonar_tui_transcript_search
 intent: |
     a reader can search the safe transcript projection, navigate matches, and
     close search without changing an existing draft or paused reading intent.

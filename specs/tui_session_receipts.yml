@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:f7726e8afb773284737de4326e06652a71a9693231474e3b494319659aad1289
-name: local_agent_tui_session_receipts
+name: sonar_tui_session_receipts
 # Runner note (2026-07-16): under a loaded full local suite, the filtered
 # session view has occasionally rendered after the former 2 s budget. The
 # isolated contract and CI pass, so retain the assertion with a 5 s allowance.

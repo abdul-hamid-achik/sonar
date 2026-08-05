@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:f7b4d3619121783cf8ec17dab5a2678bc3e723d00db03425dc449012af5d959e
-name: local_agent_tui_goal_runtime
+name: sonar_tui_goal_runtime
 intent: |
     a user can define a bounded durable goal in the inline composer surface at
     normal and minimum terminal sizes, continue safely without optional Cortex,

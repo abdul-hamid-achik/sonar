@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:90815d24e4cb8ed5dc9f2c5504b50de8c152c3083f581af5bf61f3d0cb644b87
-name: local_agent_tui_help
+name: sonar_tui_help
 intent: |
     a user can open the sonar TUI help overlay, see shortcut and slash-command guidance, close it, and quit.
 target:

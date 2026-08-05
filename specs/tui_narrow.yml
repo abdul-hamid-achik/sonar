@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:c6d23e5a5513c6fe236899448c2950ffad41ab5f71b498f98b086bdbaadb6f60
-name: local_agent_tui_narrow
+name: sonar_tui_narrow
 intent: |
     a user can begin at the supported 30x12 minimum, then keep a full-width
     conversation at 40 columns while the mode rail, composer-owned command

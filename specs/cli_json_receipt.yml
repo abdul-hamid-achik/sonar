@@ -1,5 +1,5 @@
 version: 1
-name: local_agent_cli_json_receipt
+name: sonar_cli_json_receipt
 intent: |
     a headless --json run keeps stdout silent while the turn streams and ends
     the process with exactly one sonar.turn-receipt.v1 document carrying

@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:f0324e1fe8da44ec72a04dc99e651953ede34007f5fc3c7b66a52db93b777752
-name: local_agent_tui_composer_paste
+name: sonar_tui_composer_paste
 intent: |
     a user can compose a multiline draft, visit Settings without losing it, and
     safely review a large bracketed paste before accepting a bounded fenced block.

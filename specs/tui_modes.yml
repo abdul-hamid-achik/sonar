@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:f98cb7ae7bf73e4773aea02edcf26ec8cec357dadf74ccb6c2e68ebd297a4ab3
-name: local_agent_tui_modes
+name: sonar_tui_modes
 intent: |
     Normal remains the quiet interactive default, Shift+Tab cycles
     NORMAL -> PLAN -> AUTO -> NORMAL without opening forms, PLAN sends ordinary

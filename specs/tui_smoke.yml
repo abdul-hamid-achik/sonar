@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:4c9f0e9d1529017ba37ce36a8c4d89d314aee4a211c25451b6303e2ae1bf3e36
-name: local_agent_tui_smoke
+name: sonar_tui_smoke
 intent: |
     a user can launch the sonar TUI, see the initial screen, and quit with ctrl+c.
 target:

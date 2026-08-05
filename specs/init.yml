@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:dde9ac66669107cc8fd9fe7d752686c45955ca0d727afcb063a5454a0aa6bc08
-name: local_agent_init
+name: sonar_init
 intent: |
     a user can run sonar init in an empty project directory and create AGENTS.md.
 target:

@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:1928813352c06f26ddb6ac0696858b4addbc1811d0b8b92645fd930173775bbd
-name: local_agent_cli_skip_approvals
+name: sonar_cli_skip_approvals
 intent: |
     --skip-approvals starts the ordinary interactive TUI with approval prompts
     skipped while host and tool boundaries remain visible. It does not silently

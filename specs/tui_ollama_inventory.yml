@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:7481bd59fcaa34fb105fec1cfc22e2ea3c479435ac6e93b57a2403446f85cda6
-name: local_agent_tui_ollama_inventory
+name: sonar_tui_ollama_inventory
 # Runner note (2026-07-16): a restricted sandbox can deny the wrapper's
 # 127.0.0.1:0 listener before sonar starts. Glyphrun currently reports
 # that immediate exit as a blank-screen timeout; CI and unrestricted runs pass.

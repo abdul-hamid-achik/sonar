@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:0de466571150a88459547bebd5f0589153a832c74b40176d3819fb54c8af3513
-name: local_agent_tui_agents
+name: sonar_tui_agents
 intent: |
     a user can inspect the empty Agent Hub, open a live consultation with
     Ctrl+G, inspect its bounded subagent projection without exposing child

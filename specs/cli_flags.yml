@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:578f7fa7bd469211d1c5f8df31f059dd98ee418e4f9e5fb8a0ca6551391dfa3b
-name: local_agent_cli_flags
+name: sonar_cli_flags
 intent: |
     command-line users can discover and safely combine the public headless
     aliases. --prompt is equivalent to -p, --auto and --plan require a prompt

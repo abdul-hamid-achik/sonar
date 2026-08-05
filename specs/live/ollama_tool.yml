@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:be4064e5077dab5735cbc5113835c44ebe2d755f82ea049cdc91a9ef79167b7e
-name: local_agent_live_ollama_tool
+name: sonar_live_ollama_tool
 intent: |
     the documented default small local Qwen model can call the built-in read tool through the headless harness and use its result in a distinct final answer without cloud inference.
 target:

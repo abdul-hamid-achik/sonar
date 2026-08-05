@@ -1,6 +1,6 @@
 version: 1
 contractHash: sha256:ce67026f46365eaa3235d546ccd77919c50a129d157791c01407d80b3e482926
-name: local_agent_tui_external_read
+name: sonar_tui_external_read
 intent: |
     a prompt can name one existing file outside the startup workspace, pause
     before model dispatch for an exact read-only review, ignore hidden decisions
