@@ -203,6 +203,96 @@ func TestAutoCheckpointSegmentBoundaryProjectsCompletedEffect(t *testing.T) {
 	}
 }
 
+// TestSettledProjectionWithdrawsItsOwnRepairInstruction covers the second half
+// of the same brick: when settlement advances the snapshot cursor past the
+// effect a run just flagged, `sonar session repair` would answer "already
+// current". The transcript must not keep telling the user to run it, and no
+// recovery latch may survive a repair that is a no-op.
+func TestSettledProjectionWithdrawsItsOwnRepairInstruction(t *testing.T) {
+	fixture := newAutoCheckpointProjectionFixture(t)
+	m := fixture.m
+	m.state = StateStreaming
+	m.now = func() time.Time { return time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC) }
+
+	// Reproduce the exact failure a strict pre-provider scan reports for an
+	// answered non-read-only effect that is newer than the saved snapshot.
+	unresolved := &agent.UnresolvedExecutionError{
+		SessionID: fixture.sessionID, WorkspaceID: fixture.workspaceID,
+		SnapshotCursor: 0, TurnID: "turn_auto_segment_one",
+		ExecutionID: "exec_auto_segment", ToolName: "write",
+		EventType: execution.EventCompleted,
+		Cause:     errors.New("completed effect is newer than the session snapshot and must be projected before provider work"),
+	}
+	// A latch left by an earlier hazard must not outlive this settlement.
+	m.standaloneRecovery = &standaloneRecoveryState{target: *unresolved}
+
+	updated, _ := m.Update(AgentDoneMsg{TurnID: "turn-root", SegmentTurnID: "turn-root", Err: unresolved})
+	m = updated.(*Model)
+
+	if m.executionCursor <= 0 {
+		t.Fatalf("settlement did not advance the snapshot cursor: %d", m.executionCursor)
+	}
+	if m.standaloneRecovery != nil {
+		t.Fatalf("a repaired projection left the session latched: %#v", m.standaloneRecovery)
+	}
+	for _, entry := range m.entries {
+		if entry.Kind == "error" && strings.Contains(entry.Content, "sonar session repair") {
+			t.Fatalf("transcript still demands a no-op repair: %q", entry.Content)
+		}
+	}
+	withdrawn := false
+	for _, entry := range m.entries {
+		if entry.Kind == "system" && strings.Contains(entry.Content, "Recovery resolved") {
+			withdrawn = true
+		}
+	}
+	if !withdrawn {
+		t.Fatalf("withdrawal receipt missing: %#v", m.entries)
+	}
+	// The transcript must stay encodable: a withdrawn notice is removed, never
+	// rewritten in place, because block lifecycles are monotonic.
+	if err := m.persistSessionState(context.Background()); err != nil {
+		t.Fatalf("persist after withdrawal: %v", err)
+	}
+}
+
+// TestUnrepairedProjectionKeepsItsRecoveryNotice is the negative control: when
+// settlement cannot advance the cursor, the instruction must survive.
+func TestUnrepairedProjectionKeepsItsRecoveryNotice(t *testing.T) {
+	fixture := newAutoCheckpointProjectionFixture(t)
+	m := fixture.m
+	// Drop the tool receipt so the effect can no longer be proven projected.
+	m.agent.ReplaceMessages([]llm.Message{{Role: "user", Content: "do the long job"}})
+	m.state = StateStreaming
+	m.now = func() time.Time { return time.Date(2026, time.July, 16, 12, 0, 0, 0, time.UTC) }
+
+	unresolved := &agent.UnresolvedExecutionError{
+		SessionID: fixture.sessionID, WorkspaceID: fixture.workspaceID,
+		SnapshotCursor: 0, TurnID: "turn_auto_segment_one",
+		ExecutionID: "exec_auto_segment", ToolName: "write",
+		EventType: execution.EventCompleted,
+		Cause:     errors.New("completed effect is newer than the session snapshot and must be projected before provider work"),
+	}
+	updated, _ := m.Update(AgentDoneMsg{TurnID: "turn-root", SegmentTurnID: "turn-root", Err: unresolved})
+	m = updated.(*Model)
+
+	if m.executionCursor != 0 {
+		t.Fatalf("unprojected effect advanced the cursor to %d", m.executionCursor)
+	}
+	kept := false
+	for _, entry := range m.entries {
+		if entry.Kind == "error" && strings.Contains(entry.Content, "sonar session repair") {
+			kept = true
+		}
+		if entry.Kind == "system" && strings.Contains(entry.Content, "Recovery resolved") {
+			t.Fatalf("an unrepaired projection was reported as resolved: %q", entry.Content)
+		}
+	}
+	if !kept {
+		t.Fatalf("unrepaired projection lost its repair instruction: %#v", m.entries)
+	}
+}
+
 // TestAutoCheckpointStopsCleanlyWhenProjectionBoundaryFails proves the segment
 // boundary fails closed: an effect the transcript cannot account for must stop
 // the continuation instead of launching a segment that is guaranteed to die.

@@ -55,3 +55,41 @@ func appendExecutionRecoveryNotice(entries []ChatEntry, unresolved *agent.Unreso
 	}
 	return append(entries, ChatEntry{Kind: "error", Content: notice}), true
 }
+
+// settledExecutionProjectionNotice replaces a projection-repair instruction
+// once the effect it names is provably in the saved snapshot.
+func settledExecutionProjectionNotice(unresolved *agent.UnresolvedExecutionError) string {
+	if unresolved == nil {
+		return ""
+	}
+	return fmt.Sprintf(
+		"Recovery resolved · %s\nThe %s effect is now projected into the saved session: settlement confirmed its receipt in the transcript and advanced the snapshot cursor past it. No repair is needed and the next prompt continues normally.\nExecution %s",
+		unresolved.ToolName, unresolved.EventType, unresolved.ExecutionID,
+	)
+}
+
+// downgradeExecutionRecoveryNotice withdraws a projection-repair notice that
+// the same settlement pass has already made moot. `sonar session repair` would
+// answer "already current" for that state, so leaving the instruction standing
+// tells the user to run a no-op while their session looks blocked.
+//
+// The stale error is removed rather than rewritten in place: transcript block
+// lifecycles are monotonic and a failed block may not become a settled one.
+func downgradeExecutionRecoveryNotice(
+	entries []ChatEntry,
+	unresolved *agent.UnresolvedExecutionError,
+) ([]ChatEntry, bool) {
+	notice := executionRecoveryNotice(unresolved)
+	settled := settledExecutionProjectionNotice(unresolved)
+	if notice == "" || settled == "" {
+		return entries, false
+	}
+	for index := len(entries) - 1; index >= 0; index-- {
+		if entries[index].Kind != "error" || entries[index].Content != notice {
+			continue
+		}
+		entries = append(entries[:index], entries[index+1:]...)
+		return append(entries, ChatEntry{Kind: "system", Content: settled}), true
+	}
+	return entries, false
+}

@@ -464,6 +464,10 @@ func (m *Model) handleAgentDone(msg AgentDoneMsg, cmds []tea.Cmd) []tea.Cmd {
 	// turns may contain cancellation or unknown-outcome receipts that must
 	// survive restart even though they do not count as completed turns.
 	settledPersisted := m.sessionID <= 0 || m.sessionStore == nil
+	// projectionAdvanced records that this same settlement pass proved every
+	// post-cursor hazard is already answered in the transcript, saved that
+	// transcript, and moved the snapshot cursor past it.
+	projectionAdvanced := false
 	if m.sessionID > 0 && m.sessionStore != nil {
 		previousCursor := m.executionCursor
 		var cursorErr error
@@ -485,6 +489,7 @@ func (m *Model) handleAgentDone(msg AgentDoneMsg, cmds []tea.Cmd) []tea.Cmd {
 			m.executionCursor = previousCursor
 		} else if cursorErr == nil {
 			m.agent.SetExecutionSnapshotCursor(m.executionCursor)
+			projectionAdvanced = m.executionCursor > previousCursor
 		}
 		var usageErr error
 		if saveErr == nil && msg.Err == nil {
@@ -514,6 +519,21 @@ func (m *Model) handleAgentDone(msg AgentDoneMsg, cmds []tea.Cmd) []tea.Cmd {
 				cmds = append(cmds, cmd)
 			}
 		}
+	}
+	// A projection-repair notice must not outlive its own repair. Advancing the
+	// cursor here proved the flagged effect is already answered in the saved
+	// transcript — exactly the state for which `sonar session repair` answers
+	// "already current". Withdraw the instruction and release anything latched
+	// on a repair that would be a no-op.
+	if hasUnresolved && projectionAdvanced {
+		m.entries, _ = downgradeExecutionRecoveryNotice(m.entries, unresolved)
+		if state := m.standaloneRecovery; state != nil && !state.loading && !state.applying &&
+			state.target.SessionID == unresolved.SessionID &&
+			state.target.ExecutionID == unresolved.ExecutionID {
+			m.standaloneRecovery = nil
+		}
+		m.invalidateEntryCache()
+		m.refreshTranscript()
 	}
 	if m.goalNeedsEvaluation && !m.shuttingDown {
 		if settledPersisted {
