@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -198,6 +199,410 @@ func TestAnthropicEncodesToolResultsAsToolResultBlocksInUserMessage(t *testing.T
 	}
 	if blocks[0].(map[string]any)["tool_use_id"] != "call_1" || blocks[1].(map[string]any)["tool_use_id"] != "call_2" {
 		t.Fatalf("tool_use_id mismatch: %v", blocks)
+	}
+}
+
+// The outbound half of tool calling: what the host's []ToolDef becomes in the
+// request body. Four catalog providers reach the model through this one
+// function, and nothing exercised it — every existing tool test asserted the
+// inbound direction (tool_use blocks decoding into llm.ToolCall) or the
+// tool_result round-trip, never the schema that makes a model able to call a
+// tool in the first place.
+//
+// Anthropic names the field "input_schema", not OpenAI's
+// "function.parameters", and puts the tool at the top level of the request
+// rather than under a {"type":"function"} wrapper. A regression here does not
+// look like a crash: the request succeeds and the model simply never calls a
+// tool.
+func TestAnthropicConvertsToolsOntoTheWire(t *testing.T) {
+	readFileSchema := map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"path": map[string]any{"type": "string", "description": "workspace-relative path"},
+		},
+		"required":             []any{"path"},
+		"additionalProperties": false,
+	}
+
+	tests := []struct {
+		name  string
+		tools []ToolDef
+		// want is the exact decoded "tools" array. A nil want means the key
+		// must be absent from the request entirely.
+		want []map[string]any
+	}{
+		{
+			name:  "no tools omits the key",
+			tools: nil,
+		},
+		{
+			// omitempty on a nil slice and on an allocated empty slice must
+			// agree: an agent turn with tools disabled sends no tools array,
+			// and Anthropic rejects "tools": [].
+			name:  "an allocated but empty tool set also omits the key",
+			tools: []ToolDef{},
+		},
+		{
+			name: "a full definition maps name, description, and schema",
+			tools: []ToolDef{{
+				Name:        "read_file",
+				Description: "Read a file from the workspace.",
+				Parameters:  readFileSchema,
+			}},
+			want: []map[string]any{{
+				"name":         "read_file",
+				"description":  "Read a file from the workspace.",
+				"input_schema": readFileSchema,
+			}},
+		},
+		{
+			// A tool with no schema at all still needs a schema on the wire:
+			// input_schema has no omitempty, and Anthropic requires an object
+			// schema. This branch, not the caller, supplies it.
+			name:  "a nil schema becomes an empty object schema",
+			tools: []ToolDef{{Name: "list_workspace", Description: "List the workspace."}},
+			want: []map[string]any{{
+				"name":         "list_workspace",
+				"description":  "List the workspace.",
+				"input_schema": map[string]any{"type": "object", "properties": map[string]any{}},
+			}},
+		},
+		{
+			// Empty and nil are different inputs and must stay different
+			// outputs. Only a nil schema is missing; an allocated empty map is
+			// a schema the caller authored, and the dialect forwards a host
+			// schema verbatim rather than rewriting it. convertOpenAITools
+			// splits on exactly the same condition, so an MCP server's schema
+			// reaches both dialects identically.
+			name:  "an empty but non-nil schema is forwarded verbatim",
+			tools: []ToolDef{{Name: "now", Parameters: map[string]any{}}},
+			want: []map[string]any{{
+				"name":         "now",
+				"input_schema": map[string]any{},
+			}},
+		},
+		{
+			name:  "a missing description is omitted rather than sent empty",
+			tools: []ToolDef{{Name: "now", Parameters: map[string]any{"type": "object"}}},
+			want: []map[string]any{{
+				"name":         "now",
+				"input_schema": map[string]any{"type": "object"},
+			}},
+		},
+		{
+			// Tool order is the order the host offered them in; the model's
+			// tool choice and the host's ordered dispatch both read it.
+			name: "several tools keep their order",
+			tools: []ToolDef{
+				{Name: "first", Description: "a", Parameters: map[string]any{"type": "object"}},
+				{Name: "second", Description: "b", Parameters: map[string]any{"type": "object"}},
+				{Name: "third", Description: "c", Parameters: map[string]any{"type": "object"}},
+			},
+			want: []map[string]any{
+				{"name": "first", "description": "a", "input_schema": map[string]any{"type": "object"}},
+				{"name": "second", "description": "b", "input_schema": map[string]any{"type": "object"}},
+				{"name": "third", "description": "c", "input_schema": map[string]any{"type": "object"}},
+			},
+		},
+		{
+			// DisplayName and Behavior are host-only MCP presentation metadata
+			// (llm.ToolDef marks both `json:"-"`). A provider must never see
+			// them: untrusted server annotations have no business shaping a
+			// model's view of a tool.
+			name: "host-only MCP presentation metadata never reaches the provider",
+			tools: []ToolDef{{
+				Name:        "mcp_search",
+				Description: "Search.",
+				Parameters:  map[string]any{"type": "object"},
+				DisplayName: "Search (Acme)",
+				Behavior:    ToolBehavior{Declared: true, ReadOnly: true, OpenWorld: true},
+			}},
+			want: []map[string]any{{
+				"name":         "mcp_search",
+				"description":  "Search.",
+				"input_schema": map[string]any{"type": "object"},
+			}},
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			body, _ := captureAnthropicRequest(t, ChatOptions{
+				Messages: []Message{{Role: "user", Content: "hi"}},
+				Tools:    test.tools,
+			})
+
+			raw, present := body["tools"]
+			if test.want == nil {
+				if present {
+					t.Fatalf("tools = %#v, want the key absent", raw)
+				}
+				return
+			}
+			if !present {
+				t.Fatalf("request carried no tools array: %#v", body)
+			}
+			got, ok := raw.([]any)
+			if !ok {
+				t.Fatalf("tools = %#v, want an array", raw)
+			}
+			if len(got) != len(test.want) {
+				t.Fatalf("tools = %#v, want %d entries", got, len(test.want))
+			}
+			for i, wantTool := range test.want {
+				gotTool, ok := got[i].(map[string]any)
+				if !ok {
+					t.Fatalf("tools[%d] = %#v, want an object", i, got[i])
+				}
+				if !reflect.DeepEqual(gotTool, normalizeJSON(t, wantTool)) {
+					t.Errorf("tools[%d] = %#v, want %#v", i, gotTool, wantTool)
+				}
+			}
+		})
+	}
+}
+
+// normalizeJSON round-trips a wanted value through JSON so it compares equal to
+// a decoded request body (numbers become float64, []any stays []any).
+func normalizeJSON(t *testing.T, value any) map[string]any {
+	t.Helper()
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("encode expectation: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(encoded, &out); err != nil {
+		t.Fatalf("decode expectation: %v", err)
+	}
+	return out
+}
+
+// anthropicPingStub answers the two routes PingContext may touch and records
+// the order it touched them in.
+type anthropicPingStub struct {
+	modelsStatus    int
+	messagesStatus  int
+	routes          []string
+	messagesPayload map[string]any
+	versionHeaders  []string
+}
+
+func (s *anthropicPingStub) handler(t *testing.T) http.HandlerFunc {
+	t.Helper()
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.routes = append(s.routes, r.Method+" "+r.URL.Path)
+		s.versionHeaders = append(s.versionHeaders, r.Header.Get("anthropic-version"))
+		status := s.modelsStatus
+		if r.URL.Path == "/v1/messages" {
+			status = s.messagesStatus
+			if err := json.NewDecoder(r.Body).Decode(&s.messagesPayload); err != nil {
+				t.Errorf("decode ping payload: %v", err)
+			}
+		}
+		if status == 0 {
+			status = http.StatusOK
+		}
+		if status < 200 || status >= 300 {
+			w.WriteHeader(status)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"type":  "error",
+				"error": map[string]any{"type": "authentication_error", "message": "invalid x-api-key"},
+			})
+			return
+		}
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}
+}
+
+// PingContext prefers GET /v1/models and falls back to a minimal Messages
+// request, so an Anthropic-wire proxy that serves no model list (Kimi Coding,
+// MiniMax) still verifies as reachable instead of reading as misconfigured.
+func TestAnthropicPingContextPrefersModelsThenFallsBack(t *testing.T) {
+	tests := []struct {
+		name           string
+		modelsStatus   int
+		messagesStatus int
+		wantRoutes     []string
+		wantErr        bool
+	}{
+		{
+			name:         "a models list settles the ping on its own",
+			modelsStatus: http.StatusOK,
+			wantRoutes:   []string{"GET /v1/models"},
+		},
+		{
+			name:           "a proxy without a models route falls back to messages",
+			modelsStatus:   http.StatusNotFound,
+			messagesStatus: http.StatusOK,
+			wantRoutes:     []string{"GET /v1/models", "POST /v1/messages"},
+		},
+		{
+			// The fallback is unconditional on the models route failing, not
+			// conditional on a 404: a proxy may answer anything at all there.
+			name:           "a server error on the models route still falls back",
+			modelsStatus:   http.StatusInternalServerError,
+			messagesStatus: http.StatusOK,
+			wantRoutes:     []string{"GET /v1/models", "POST /v1/messages"},
+		},
+		{
+			name:           "both routes failing is a ping failure",
+			modelsStatus:   http.StatusUnauthorized,
+			messagesStatus: http.StatusUnauthorized,
+			wantRoutes:     []string{"GET /v1/models", "POST /v1/messages"},
+			wantErr:        true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			stub := &anthropicPingStub{modelsStatus: test.modelsStatus, messagesStatus: test.messagesStatus}
+			server := httptest.NewServer(stub.handler(t))
+			defer server.Close()
+
+			client, err := NewAnthropicClient(AnthropicOptions{
+				BaseURL: server.URL,
+				Model:   "claude-sonnet-5",
+				APIKey:  "test-key",
+			})
+			if err != nil {
+				t.Fatalf("new client: %v", err)
+			}
+
+			pingErr := client.PingContext(context.Background())
+			if test.wantErr {
+				if pingErr == nil {
+					t.Fatal("ping succeeded against a provider that rejected both routes")
+				}
+				// The failure must name the model and carry the provider's own
+				// diagnostic; "ping failed" alone is not actionable.
+				if !strings.Contains(pingErr.Error(), "claude-sonnet-5") {
+					t.Errorf("error does not name the model: %v", pingErr)
+				}
+				if !strings.Contains(pingErr.Error(), "invalid x-api-key") {
+					t.Errorf("provider diagnostic lost: %v", pingErr)
+				}
+				if strings.Contains(pingErr.Error(), server.URL) {
+					t.Errorf("error leaked the base URL: %v", pingErr)
+				}
+				if status, ok := ProviderHTTPStatus(pingErr); !ok || status != http.StatusUnauthorized {
+					t.Errorf("ProviderHTTPStatus = (%d, %v), want (401, true)", status, ok)
+				}
+			} else if pingErr != nil {
+				t.Fatalf("ping: %v", pingErr)
+			}
+
+			if !reflect.DeepEqual(stub.routes, test.wantRoutes) {
+				t.Fatalf("routes = %v, want %v", stub.routes, test.wantRoutes)
+			}
+			for i, version := range stub.versionHeaders {
+				if version != AnthropicAPIVersion {
+					t.Errorf("request %d anthropic-version = %q, want %q", i, version, AnthropicAPIVersion)
+				}
+			}
+		})
+	}
+}
+
+// The fallback must stay the cheapest request that still proves the model is
+// usable: one token, one message, no streaming. It is issued on every provider
+// switch and at startup, and the caller is billed for it.
+func TestAnthropicPingChatFallbackSendsMinimalRequest(t *testing.T) {
+	stub := &anthropicPingStub{modelsStatus: http.StatusNotFound, messagesStatus: http.StatusOK}
+	server := httptest.NewServer(stub.handler(t))
+	defer server.Close()
+
+	client, err := NewAnthropicClient(AnthropicOptions{
+		BaseURL:   server.URL,
+		Model:     "claude-sonnet-5",
+		APIKey:    "test-key",
+		MaxTokens: 64000,
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if err := client.PingContext(context.Background()); err != nil {
+		t.Fatalf("ping: %v", err)
+	}
+
+	payload := stub.messagesPayload
+	if payload == nil {
+		t.Fatal("the fallback sent no messages payload")
+	}
+	if payload["model"] != "claude-sonnet-5" {
+		t.Errorf("model = %v, want the client's model", payload["model"])
+	}
+	// The client's configured max_tokens must not be reused here: a ping that
+	// inherited a 64000-token budget would bill like a real turn.
+	if maxTokens, ok := payload["max_tokens"].(float64); !ok || maxTokens != 1 {
+		t.Errorf("max_tokens = %#v, want 1", payload["max_tokens"])
+	}
+	if stream, present := payload["stream"]; present && stream != false {
+		t.Errorf("stream = %v, want the ping to be non-streaming", stream)
+	}
+	messages, ok := payload["messages"].([]any)
+	if !ok || len(messages) != 1 {
+		t.Fatalf("messages = %#v, want exactly one", payload["messages"])
+	}
+	message, _ := messages[0].(map[string]any)
+	if message["role"] != "user" {
+		t.Errorf("role = %v, want user", message["role"])
+	}
+	blocks, ok := message["content"].([]any)
+	if !ok || len(blocks) != 1 {
+		t.Fatalf("content = %#v, want one block", message["content"])
+	}
+	block, _ := blocks[0].(map[string]any)
+	if block["type"] != "text" || block["text"] != "ping" {
+		t.Errorf("content block = %#v, want a single text block", block)
+	}
+}
+
+// Ping is the context-free wrapper the provider-status surfaces call; it must
+// reach the same routes as PingContext rather than being a separate code path.
+func TestAnthropicPingWrapsPingContext(t *testing.T) {
+	stub := &anthropicPingStub{modelsStatus: http.StatusOK}
+	server := httptest.NewServer(stub.handler(t))
+	defer server.Close()
+
+	client, err := NewAnthropicClient(AnthropicOptions{
+		BaseURL: server.URL,
+		Model:   "claude-sonnet-5",
+		APIKey:  "test-key",
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	if err := client.Ping(); err != nil {
+		t.Fatalf("ping: %v", err)
+	}
+	if !reflect.DeepEqual(stub.routes, []string{"GET /v1/models"}) {
+		t.Fatalf("routes = %v, want the same models-first order as PingContext", stub.routes)
+	}
+}
+
+// A cancelled context must abort the ping rather than fall through to the
+// messages fallback and issue a second doomed request.
+func TestAnthropicPingContextHonorsCancellation(t *testing.T) {
+	stub := &anthropicPingStub{modelsStatus: http.StatusOK}
+	server := httptest.NewServer(stub.handler(t))
+	defer server.Close()
+
+	client, err := NewAnthropicClient(AnthropicOptions{
+		BaseURL: server.URL,
+		Model:   "claude-sonnet-5",
+		APIKey:  "test-key",
+	})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := client.PingContext(ctx); err == nil {
+		t.Fatal("a cancelled ping reported success")
+	}
+	if len(stub.routes) != 0 {
+		t.Fatalf("a cancelled ping still reached the provider: %v", stub.routes)
 	}
 }
 
