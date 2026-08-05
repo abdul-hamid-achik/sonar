@@ -48,8 +48,6 @@ type OllamaModelDescriptor struct {
 	Fit              bool
 	AutoRoutable     bool
 	ManualOnly       bool
-	RequiresConsent  bool
-	ConsentGranted   bool
 	Reason           string
 }
 
@@ -306,8 +304,6 @@ func modelRowState(model OllamaModelDescriptor, legacyCurrent, legacyUnsafe bool
 	switch {
 	case !model.Selectable || !model.Fit || legacyUnsafe:
 		return "unavailable"
-	case model.RequiresConsent && !model.ConsentGranted:
-		return "review"
 	case model.Current || legacyCurrent:
 		return "current"
 	case model.Running:
@@ -322,11 +318,6 @@ func modelRowState(model OllamaModelDescriptor, legacyCurrent, legacyUnsafe bool
 func modelDecisionReason(model OllamaModelDescriptor) string {
 	reason := sanitizeTerminalSingleLine(model.Reason)
 	switch {
-	case model.RequiresConsent && !model.ConsentGranted:
-		if reason != "" {
-			return reason
-		}
-		return "Ollama Cloud confirmation required before use"
 	case !model.Selectable || !model.Fit:
 		if reason != "" {
 			return reason
@@ -363,8 +354,6 @@ func modelSelectionState(model OllamaModelDescriptor) string {
 	switch {
 	case !model.Selectable || !model.Fit:
 		parts = append(parts, "unavailable")
-	case model.RequiresConsent && !model.ConsentGranted:
-		parts = append(parts, "review required")
 	case model.Current:
 		parts = append(parts, "current")
 	case model.Running:
@@ -376,9 +365,6 @@ func modelSelectionState(model OllamaModelDescriptor) string {
 	}
 	if model.Current && model.Running {
 		parts = append(parts, "running")
-	}
-	if model.ConsentGranted {
-		parts = append(parts, "conversation consent")
 	}
 	return strings.Join(parts, " · ")
 }
@@ -403,11 +389,7 @@ func (m *Model) renderModelSelectionDetail(state *ModelPickerState, width int) s
 		lines = append(lines, m.styles.OverlayDim.Render(wrapText(metadata, width)))
 	}
 	if reason := modelDecisionReason(descriptor); reason != "" {
-		label := "Unavailable"
-		if descriptor.RequiresConsent && !descriptor.ConsentGranted {
-			label = "Review"
-		}
-		lines = append(lines, m.styles.OverlayDim.Render(wrapText(label+" · "+reason, width)))
+		lines = append(lines, m.styles.OverlayDim.Render(wrapText("Unavailable · "+reason, width)))
 	}
 	if state.Notice != "" {
 		if notice := sanitizeTerminalSingleLine(state.Notice); notice != "" {
@@ -422,14 +404,10 @@ func (m *Model) renderModelPicker() string {
 	if ps == nil {
 		return ""
 	}
-	selectAction := "select"
-	if descriptor, ok := ps.SelectedDescriptor(); ok && descriptor.RequiresConsent && !descriptor.ConsentGranted {
-		selectAction = "review"
-	}
 	width := pickerListWidth(m.width)
 	footer := m.renderKeyHints(width,
 		keyHint{Key: m.keys.Cancel.Help().Key, Action: m.overlayCloseLabel()},
-		keyHint{Key: m.keys.CompleteSelect.Help().Key, Action: selectAction},
+		keyHint{Key: m.keys.CompleteSelect.Help().Key, Action: "select"},
 		keyHint{Key: "/", Action: "filter"},
 		keyHint{Key: "d", Action: "details"}, keyHint{Key: "a", Action: "add"},
 		keyHint{Key: "r", Action: "refresh"},
@@ -632,8 +610,12 @@ func (m *Model) ollamaModelDescriptor(name string) (OllamaModelDescriptor, bool)
 
 func (m *Model) validateModelAdmission(name string) error {
 	if descriptor, ok := m.ollamaModelDescriptor(name); ok {
-		if descriptor.Source == OllamaModelCloud && m.localOnly && !descriptor.ConsentGranted {
-			return fmt.Errorf("model %q requires Ollama Cloud confirmation for this conversation", name)
+		// privacy.local_only is a standing decision, not a per-conversation
+		// prompt: there is no in-session grant that would make a hosted model
+		// local. Say what has to change instead of implying a confirmation
+		// exists somewhere in the UI.
+		if descriptor.Source == OllamaModelCloud && m.localOnly {
+			return fmt.Errorf("model %q runs on Ollama Cloud, which privacy.local_only forbids; clear that setting to use a hosted model", name)
 		}
 		if descriptor.Selectable && descriptor.Fit {
 			return nil

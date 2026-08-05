@@ -825,7 +825,7 @@ func (m *Model) ensureVisionModel() error {
 		return candidates[i].Name < candidates[j].Name
 	})
 	for _, candidate := range candidates {
-		if candidate.Source != OllamaModelLocal || !candidate.Selectable || !candidate.Fit || !candidate.AutoRoutable || candidate.RequiresConsent ||
+		if candidate.Source != OllamaModelLocal || !candidate.Selectable || !candidate.Fit || !candidate.AutoRoutable ||
 			!hasOllamaCapability(candidate.Capabilities, "vision") {
 			continue
 		}

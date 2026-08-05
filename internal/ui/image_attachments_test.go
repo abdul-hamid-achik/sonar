@@ -933,7 +933,7 @@ func TestManualOnlyCloudVisionModelIsNeverAutoSelected(t *testing.T) {
 	m.model = "text-model"
 	m.ollamaModels = []OllamaModelDescriptor{
 		{Name: "text-model", Source: OllamaModelLocal, Selectable: true, Fit: true, AutoRoutable: true, Capabilities: []string{"completion"}, Current: true},
-		{Name: "vision-cloud", Source: OllamaModelCloud, Selectable: true, Fit: true, AutoRoutable: false, ConsentGranted: true, Capabilities: []string{"completion", "vision"}},
+		{Name: "vision-cloud", Source: OllamaModelCloud, Selectable: true, Fit: true, AutoRoutable: false, Capabilities: []string{"completion", "vision"}},
 	}
 	m.input.SetValue("inspect it")
 
@@ -957,7 +957,7 @@ func TestModelAutoDoesNotKeepManualCloudVisionModel(t *testing.T) {
 	m.modelPinned = false
 	m.ollamaModels = []OllamaModelDescriptor{{
 		Name: "vision-cloud", Source: OllamaModelCloud, Selectable: true, Fit: true,
-		AutoRoutable: false, ConsentGranted: true, Capabilities: []string{"completion", "vision"}, Current: true,
+		AutoRoutable: false, Capabilities: []string{"completion", "vision"}, Current: true,
 	}}
 	m.input.SetValue("inspect it")
 

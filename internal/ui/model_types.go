@@ -27,7 +27,6 @@ const (
 	OverlayHelp
 	OverlayCompletion
 	OverlayModelPicker
-	OverlayCloudConsent
 	OverlayPlanForm
 	OverlayCortexDecision
 	OverlaySessionsPicker

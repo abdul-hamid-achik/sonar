@@ -124,7 +124,7 @@ func TestSessionSwitchTargetMismatchRestoresOriginalDraft(t *testing.T) {
 
 			m.localOnly = true
 			m.ollamaModels = append(m.ollamaModels, OllamaModelDescriptor{
-				Name: "qwen:cloud", Source: OllamaModelCloud, Selectable: true, Fit: true, RequiresConsent: true,
+				Name: "qwen:cloud", Source: OllamaModelCloud, Selectable: true, Fit: true,
 			})
 			m.sessionID = 7
 			m.sessionPublicID = "aaaaaa7"

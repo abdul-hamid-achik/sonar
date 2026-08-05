@@ -15,7 +15,7 @@ func TestCloudModelBoundaryIsVisibleAcrossCoreSurfaces(t *testing.T) {
 	m.modelPinned = true
 	m.ollamaModels = []OllamaModelDescriptor{{
 		Name: "qwen-cloud:latest", DisplayName: "Qwen Cloud", Source: OllamaModelCloud,
-		Current: true, Selectable: true, Fit: true, ConsentGranted: true,
+		Current: true, Selectable: true, Fit: true,
 	}}
 
 	settings := m.settingsItems()[int(settingsModel)].Title()
@@ -59,7 +59,7 @@ func TestCloudModelBoundaryIsNotRepeated(t *testing.T) {
 	m.model = "qwen-cloud:latest"
 	m.ollamaModels = []OllamaModelDescriptor{{
 		Name: "qwen-cloud:latest", Source: OllamaModelCloud,
-		Current: true, Selectable: true, Fit: true, ConsentGranted: true,
+		Current: true, Selectable: true, Fit: true,
 	}}
 	m.entries = []ChatEntry{{Kind: "user", Content: "hello"}}
 	m.recalcViewportHeight()
