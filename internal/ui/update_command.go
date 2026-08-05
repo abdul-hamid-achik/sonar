@@ -308,11 +308,6 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		m.openProviderPicker()
 		return nil
 
-	case command.ActionShowAgents:
-		m.overlayParent = OverlayNone
-		m.openAgentHub()
-		return nil
-
 	case command.ActionDeleteMemory:
 		if m.agent != nil {
 			if store := m.agent.MemoryStore(); store != nil {

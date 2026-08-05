@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -9,18 +8,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 	"github.com/abdul-hamid-achik/sonar/internal/goal"
 	"github.com/charmbracelet/x/ansi"
 )
-
-type runtimeStatusExpertConsultant struct{ profiles int }
-
-func (consultant runtimeStatusExpertConsultant) Consult(context.Context, expertteam.Request) (expertteam.Result, error) {
-	return expertteam.Result{}, nil
-}
-
-func (consultant runtimeStatusExpertConsultant) ProfileCount() int { return consultant.profiles }
 
 func TestRuntimeStatusBoundsFailuresAndScrollsToFinalEntry(t *testing.T) {
 	m := newTestModel(t)
@@ -88,7 +78,7 @@ func TestRuntimeStatusSeparatesLocalToolsFromMCPServers(t *testing.T) {
 	for _, want := range []string{
 		"Workspace", "~/src/project", "Tools", fmt.Sprintf("%d ready", availability.Ready()),
 		fmt.Sprintf("%d local", availability.Local),
-		"MCP", "not configured", "0 servers", "Context route", "not exposed · policy/catalog", "Experts", "disabled in configuration",
+		"MCP", "not configured", "0 servers", "Context route", "not exposed · policy/catalog",
 	} {
 		if !strings.Contains(searchable, want) {
 			t.Fatalf("runtime status missing %q:\n%s", want, content)
@@ -152,35 +142,6 @@ func TestRuntimeStatusProjectsSessionIdentityAfterCreation(t *testing.T) {
 	saved := strings.Join(strings.Fields(ansi.Strip(m.buildRuntimeStatusContent(58))), " ")
 	if !strings.Contains(saved, "Session aaaaaa7 · Polish composer wrapping") {
 		t.Fatalf("Runtime omitted saved session identity:\n%s", saved)
-	}
-}
-
-func TestRuntimeStatusRetainsExpertStartupFailure(t *testing.T) {
-	m := newTestModel(t)
-	m.SetExpertRuntimeSetupFailed()
-	content := m.buildRuntimeStatusContent(58)
-	// Styling is applied independently to wrapped continuation lines. Strip it
-	// before collapsing layout whitespace so this assertion checks the copy,
-	// not whether the terminal emitted an ANSI reset at the wrap boundary.
-	searchable := strings.Join(strings.Fields(ansi.Strip(content)), " ")
-	for _, want := range []string{"Experts", "setup failed", "review experts config/profiles; restart"} {
-		if !strings.Contains(searchable, want) {
-			t.Fatalf("expert startup status omitted %q:\n%s", want, content)
-		}
-	}
-	if strings.Contains(content, "see diagnostics") {
-		t.Fatalf("expert startup status retained non-actionable recovery copy:\n%s", content)
-	}
-}
-
-func TestRuntimeStatusKeepsReadOnlyExpertBoundaryWithProfiles(t *testing.T) {
-	m := newTestModel(t)
-	m.agent.SetExpertConsultant(runtimeStatusExpertConsultant{profiles: 3})
-	content := strings.Join(strings.Fields(ansi.Strip(m.buildRuntimeStatusContent(58))), " ")
-	for _, want := range []string{"Experts", "ready", "3 profiles", "read-only", "adaptive"} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("expert runtime status omitted %q:\n%s", want, content)
-		}
 	}
 }
 

@@ -128,13 +128,6 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 		return workingActivity{label: "Preparing context", detail: "summarizing earlier turns", cancellable: true}, true
 	case m.toolsPending > 0:
 		elapsed := m.runningToolElapsed()
-		if activity, ok := m.runningExpertActivity(); ok {
-			// The footer owns the one live activity indicator. Expert rows and
-			// their transcript receipt advance only on real scheduler events.
-			activity.static = false
-			activity.elapsed = elapsed
-			return activity, true
-		}
 		// Running ToolCards are stable transcript receipts. Keep animation,
 		// elapsed time, and the global cancellation affordance in this one
 		// footer-owned activity row.

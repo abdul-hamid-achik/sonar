@@ -265,13 +265,6 @@ func (m *Model) openApproval(request ToolApprovalMsg) error {
 	if m.overlay == OverlayCortexDecision {
 		m.overlay = OverlayNone
 	}
-	if m.overlay == OverlayAgents {
-		// Approval owns higher input authority. Agent Hub state is ephemeral and
-		// must not remain hidden behind the inline decision or reappear stale
-		// after it settles.
-		m.agentHubState = nil
-		m.overlay = OverlayNone
-	}
 	m.pendingApproval = &request
 	m.approvalState = &ApprovalState{ChoiceIndex: 0}
 	// Permission decisions are part of the active conversation flow. They own

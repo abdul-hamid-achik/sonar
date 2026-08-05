@@ -209,21 +209,14 @@ func TestRunningToolActivityIsScopedToCurrentTurn(t *testing.T) {
 			Status: ToolStatusRunning, StartTime: base.Add(-time.Hour),
 		},
 		{
-			ID: "old-experts", Name: "consult_experts",
-			Status: ToolStatusRunning, StartTime: base.Add(-time.Minute),
-		},
-		{
 			ID: "current-running", Name: "read_file",
 			Status: ToolStatusRunning, StartTime: base,
 		},
 	}
-	m.turnToolStartIndex = 2
+	m.turnToolStartIndex = 1
 
 	if got := m.runningToolElapsed(); got != 10*time.Second {
 		t.Fatalf("current-turn elapsed = %s, want 10s", got)
-	}
-	if activity, ok := m.runningExpertActivity(); ok {
-		t.Fatalf("historical expert escaped the current-turn boundary: %#v", activity)
 	}
 }
 

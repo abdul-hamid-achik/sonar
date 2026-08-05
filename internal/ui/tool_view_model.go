@@ -100,7 +100,6 @@ type ToolPreview struct {
 	Expanded        bool
 	DiffLines       []DiffLine
 	DiffPending     bool
-	ExpertProgress  *ExpertProgressState
 	ansiResultLines [][]ansiRemapSegment
 	ansiHiddenLines int
 }
@@ -242,16 +241,8 @@ func (model ToolRenderModel) Validate() error {
 	if preview.OutputAvailable && preview.OutputDigest == (OutputDetailDigest{}) {
 		return errors.New("tool output availability has no digest")
 	}
-	if isExpertConsultTool(model.ToolName) &&
-		(preview.OutputAvailable || preview.OutputDigest != (OutputDetailDigest{})) {
-		return errors.New("expert output cannot enter the tool preview")
-	}
 	if !reflect.DeepEqual(preview.DiffLines, boundedToolPreviewDiff(preview.DiffLines)) {
 		return errors.New("tool preview diff is unsafe or exceeds its bound")
-	}
-	requireSettled := model.Lifecycle.Terminal()
-	if !reflect.DeepEqual(preview.ExpertProgress, sanitizeExpertProgressState(preview.ExpertProgress, requireSettled)) {
-		return errors.New("tool expert preview is invalid")
 	}
 	if err := validateANSIResultPreview(preview.ansiResultLines, preview.ansiHiddenLines); err != nil {
 		return err
@@ -314,13 +305,8 @@ func ToolRenderModelFromEntry(chat ChatEntry, entry ToolEntry) (ToolRenderModel,
 		Expanded:        !entry.Collapsed,
 		DiffLines:       boundedToolPreviewDiff(entry.DiffLines),
 		DiffPending:     entry.DiffPending,
-		ExpertProgress:  sanitizeExpertProgressState(entry.ExpertProgress, view.Lifecycle.Terminal()),
 		ansiResultLines: ansiLines,
 		ansiHiddenLines: ansiHidden,
-	}
-	if isExpertConsultTool(entry.Name) {
-		preview.OutputDigest = OutputDetailDigest{}
-		preview.OutputAvailable = false
 	}
 	model := ToolRenderModel{ToolViewModel: view, Preview: preview}
 	if err := model.Validate(); err != nil {

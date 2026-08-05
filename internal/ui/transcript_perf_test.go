@@ -114,8 +114,8 @@ func TestActivityClocksDoNotPaintTenThousandEntryTranscript(t *testing.T) {
 		}
 	})
 
-	t.Run("reduced-motion heartbeat is footer-only and expert progress repaints", func(t *testing.T) {
-		m := largeRunningToolTranscript(t, "consult_experts", true)
+	t.Run("reduced-motion heartbeat is footer-only and tool result repaints", func(t *testing.T) {
+		m := largeRunningToolTranscript(t, "read_file", true)
 		beforeTranscript := m.viewport.GetContent()
 		if cmd := m.startActivityCmd(); cmd == nil || !m.activityHeartbeatPending {
 			t.Fatal("reduced-motion tool did not start its informational heartbeat")
@@ -136,17 +136,16 @@ func TestActivityClocksDoNotPaintTenThousandEntryTranscript(t *testing.T) {
 
 		probe = &transcriptRenderProbe{}
 		m.transcriptRenderProbe = probe
-		updated, _ = m.Update(ExpertProgressMsg{
-			CallID: "active-tool",
-			Event:  expertProgressEvent(1, "planned", -1),
+		updated, _ = m.Update(ToolCallResultMsg{
+			ID: "active-tool", Name: "read_file", Result: "ok", Duration: 2 * time.Second,
 		})
 		m = updated.(*Model)
-		assertTranscriptPainted(t, probe, "expert progress")
-		if progress := m.toolEntries[0].ExpertProgress; progress == nil || progress.Sequence != 1 {
-			t.Fatalf("real expert progress was not projected: %#v", progress)
+		assertTranscriptPainted(t, probe, "tool result")
+		if m.toolEntries[0].Status != ToolStatusDone {
+			t.Fatalf("tool result left status %v", m.toolEntries[0].Status)
 		}
 		if after := m.viewport.GetContent(); after == beforeTranscript {
-			t.Fatal("real expert progress did not update transcript content")
+			t.Fatal("real tool result did not update transcript content")
 		}
 	})
 }
@@ -172,14 +171,9 @@ func largeRunningToolTranscript(t *testing.T, toolName string, reducedMotion boo
 			Content:   "history",
 		})
 	}
-	collapsed := toolName != "consult_experts"
-	summary := "internal/ui/model.go"
-	if !collapsed {
-		summary = "awaiting expert plan"
-	}
 	m.toolEntries = []ToolEntry{{
-		ID: "active-tool", Name: toolName, Summary: summary,
-		Status: ToolStatusRunning, StartTime: base, Collapsed: collapsed,
+		ID: "active-tool", Name: toolName, Summary: "internal/ui/model.go",
+		Status: ToolStatusRunning, StartTime: base, Collapsed: true,
 	}}
 	m.entries = append(m.entries, ChatEntry{
 		BlockID:   "active_tool_block",

@@ -18,9 +18,6 @@ func ecosystemToolSummary(name string, args map[string]any) string {
 		return ""
 	}
 	key := remoteToolKey(name)
-	if key == "consult_experts" {
-		return expertConsultationSummary(args)
-	}
 	if key == "mcphub_call_tool" {
 		return gatewayToolSummary(args)
 	}
@@ -29,25 +26,6 @@ func ecosystemToolSummary(name string, args map[string]any) string {
 		return ""
 	}
 	return ecosystemArgumentAnchor(key, args)
-}
-
-func expertConsultationSummary(args map[string]any) string {
-	strategy, _ := args["strategy"].(string)
-	strategy = strings.ToLower(strings.TrimSpace(strategy))
-	if strategy != "team" && strategy != "swarm" && strategy != "moe" {
-		return ""
-	}
-	requested := 0
-	switch experts := args["experts"].(type) {
-	case []any:
-		requested = len(experts)
-	case []string:
-		requested = len(experts)
-	}
-	if requested > 0 && requested <= 99 {
-		return fmt.Sprintf("%s · %d requested", strategy, requested)
-	}
-	return strategy + " · auto-selected"
 }
 
 func gatewayToolSummary(args map[string]any) string {

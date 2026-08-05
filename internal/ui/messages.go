@@ -8,7 +8,6 @@ import (
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
 	"github.com/abdul-hamid-achik/sonar/internal/db"
 	"github.com/abdul-hamid-achik/sonar/internal/ecosystem"
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
 	"github.com/abdul-hamid-achik/sonar/internal/permission"
 )
@@ -48,14 +47,6 @@ type ToolCallResultMsg struct {
 	Duration     time.Duration
 	Projection   ecosystem.ToolProjection
 	OutputDetail OutputDetailReceipt
-}
-
-// ExpertProgressMsg carries one already bounded scheduler event for the exact
-// consult_experts call identified by CallID. It contains no prompt, objective,
-// report, reasoning, provider error prose, or arbitrary metadata.
-type ExpertProgressMsg struct {
-	CallID string
-	Event  expertteam.ProgressEvent
 }
 
 // ErrorMsg reports an error.

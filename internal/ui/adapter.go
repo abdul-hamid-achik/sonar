@@ -10,7 +10,6 @@ import (
 
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
 	"github.com/abdul-hamid-achik/sonar/internal/ecosystem"
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 )
 
 const (
@@ -30,7 +29,6 @@ type Adapter struct {
 }
 
 var _ agent.BobWorkspaceContextOutput = (*Adapter)(nil)
-var _ agent.ExpertProgressOutput = (*Adapter)(nil)
 var _ agent.SemanticToolOutput = (*Adapter)(nil)
 var _ agent.SemanticToolDetailOutput = (*Adapter)(nil)
 
@@ -41,8 +39,8 @@ func NewAdapter(p *tea.Program, workDir ...string) *Adapter {
 
 // NewAdapterWithOutputDetails creates an Adapter that can retain a bounded,
 // terminal-safe, post-redaction prefix of ordinary unstructured tool output
-// for the process-local viewer. Expert reports and parser-private semantic
-// payloads deliberately never cross this boundary.
+// for the process-local viewer. Parser-private semantic payloads deliberately
+// never cross this boundary.
 func NewAdapterWithOutputDetails(p *tea.Program, store *OutputDetailStore, workDir ...string) *Adapter {
 	dir := ""
 	if len(workDir) > 0 {
@@ -92,13 +90,6 @@ func (a *Adapter) ToolCallResult(callID, name string, result string, isError boo
 		"",
 		false,
 	))
-}
-
-// ExpertProgress forwards only the host-owned bounded scheduler event. The
-// expert runtime deliberately keeps objectives, reports, reasoning, and raw
-// provider errors on its transient side of this boundary.
-func (a *Adapter) ExpertProgress(callID string, event expertteam.ProgressEvent) {
-	sendMsg(a.program, ExpertProgressMsg{CallID: callID, Event: event})
 }
 
 // ToolCallSemanticResult carries only the bounded host projection into the UI;
@@ -159,7 +150,7 @@ func (a *Adapter) toolCallResultMsg(
 		ID: callID, Name: name, Result: result, IsError: isError,
 		Duration: duration, Projection: projection,
 	}
-	if a != nil && a.outputDetails != nil && admitDetail && !isExpertConsultTool(name) {
+	if a != nil && a.outputDetails != nil && admitDetail {
 		if receipt, err := a.outputDetails.Admit(outputDetail); err == nil {
 			msg.OutputDetail = receipt
 		}

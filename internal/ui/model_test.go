@@ -401,7 +401,6 @@ func TestAgentDoneCancellationSettlesRunningToolsAsCancelled(t *testing.T) {
 		BeforeContent:           "ephemeral",
 		BeforeSnapshotAvailable: true,
 		DiffLines:               []DiffLine{{Content: "+stale"}},
-		ExpertProgress:          &ExpertProgressState{},
 		Projection:              ecosystem.ProjectToolCall("read_file", nil),
 	}}
 	m.entries = append(m.entries, ChatEntry{Kind: "tool_group", ToolIndex: 0})
@@ -420,7 +419,7 @@ func TestAgentDoneCancellationSettlesRunningToolsAsCancelled(t *testing.T) {
 		t.Fatalf("cancelled tool retained ephemeral input: %#v", entry)
 	}
 	if entry.ResultLanguage != "" || entry.OutputDetail != (OutputDetailReceipt{}) ||
-		len(entry.DiffLines) != 0 || entry.ExpertProgress != nil {
+		len(entry.DiffLines) != 0 {
 		t.Fatalf("cancelled tool retained incompatible output state: %#v", entry)
 	}
 	if m.outputDetails.Available(outputDetail.Ref) {

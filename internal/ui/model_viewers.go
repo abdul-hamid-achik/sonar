@@ -132,15 +132,13 @@ func (m *Model) toolActionRegistryForResolvedChat(
 	}.Resolve(target, true, "")
 
 	outputReason := ""
-	outputEnabled := terminal && !isExpertConsultTool(entry.Name) &&
+	outputEnabled := terminal &&
 		entry.OutputDetail.Digest != (OutputDetailDigest{}) &&
 		entry.OutputDetail.Digest.Valid() &&
 		m.outputDetails.Available(entry.OutputDetail.Ref)
 	switch {
 	case !terminal:
 		outputReason = "Output is still running."
-	case isExpertConsultTool(entry.Name):
-		outputReason = "Expert reports are private to the agent boundary."
 	case entry.OutputDetail.Digest == (OutputDetailDigest{}):
 		outputReason = "No full output was retained."
 	case !entry.OutputDetail.Digest.Valid():

@@ -788,9 +788,6 @@ func (m *Model) toolGroupMemoKey(chat ChatEntry) (string, bool) {
 			fmt.Fprintf(&b, ":%+v", *line.Hunk)
 		}
 	}
-	if model.Preview.ExpertProgress != nil {
-		fmt.Fprintf(&b, "|ep%d", model.Preview.ExpertProgress.Sequence)
-	}
 	for _, line := range model.Preview.ansiResultLines {
 		for _, segment := range line {
 			fmt.Fprintf(&b, "|a%t:%d:%x", segment.bold, segment.fg, fnv64(segment.text))

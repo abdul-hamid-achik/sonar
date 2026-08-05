@@ -67,7 +67,6 @@ func (m *Model) buildHelpContent(innerW int) string {
 		{"~/… or /…", "Review temporary read-only access; MCP tools require separate approval"},
 		{"#skill", "Insert skill mention text"},
 		{"/cmd", "Run slash command"},
-		{"team / swarm / MoE", "Ask naturally for a read-only expert consultation when enabled"},
 		{"enter (running)", "Slash commands run immediately; other drafts queue until the current turn settles"},
 		{"esc (running)", "Clear a queued follow-up first; press again to cancel the turn"},
 	}

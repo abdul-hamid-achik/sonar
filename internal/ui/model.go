@@ -242,7 +242,6 @@ type Model struct {
 	permissionsPanelState    *PermissionsPanelState
 	agentPickerState         *AgentPickerState
 	providerPickerState      *ProviderPickerState
-	agentHubState            *AgentHubState
 	providerSwitchToken      uint64
 	numCtxApplyToken         uint64
 	providerSwitchRunning    bool
@@ -341,7 +340,6 @@ type Model struct {
 	serverCount               int
 	numCtx                    int
 	approvalPosture           ApprovalPosture
-	expertRuntimeSetupFailed  bool
 
 	failedServers []FailedServer
 	mcpServers    []MCPServerStatus
@@ -724,11 +722,6 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 	case ToolCallStartMsg:
 		cmds = m.handleToolCallStart(msg, cmds)
 
-	case ExpertProgressMsg:
-		if cmd := m.handleExpertProgress(msg); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-
 	case PlanFormCompletedMsg:
 		return m, m.submitPlanFormPrompt(msg.Prompt)
 
@@ -1028,8 +1021,6 @@ func (m *Model) updateActiveOverlayMessage(msg tea.Msg) tea.Cmd {
 			m.providerPickerState.List, cmd = m.providerPickerState.List.Update(msg)
 			return cmd
 		}
-	case OverlayAgents:
-		return m.updateAgentHubMessage(msg)
 	case OverlayModePicker:
 		if m.modePickerState != nil {
 			var cmd tea.Cmd

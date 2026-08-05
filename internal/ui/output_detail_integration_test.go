@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-func TestAdapterAdmitsOrdinaryOutputButNotExpertReports(t *testing.T) {
+func TestAdapterAdmitsOrdinaryOutput(t *testing.T) {
 	store := NewOutputDetailStore()
 	adapter := NewAdapterWithOutputDetails(nil, store)
 
@@ -34,20 +34,6 @@ func TestAdapterAdmitsOrdinaryOutputButNotExpertReports(t *testing.T) {
 	}
 	if got := flattenedOutputDetailPageText(page); got != "first\nsecond" {
 		t.Fatalf("retained output = %q", got)
-	}
-
-	expert := adapter.toolCallResultMsg(
-		"call-2",
-		"consult_experts",
-		"private aggregate report",
-		false,
-		time.Second,
-		ecosystemProjectionZero(),
-		"private aggregate report",
-		true,
-	)
-	if expert.OutputDetail.Ref.Valid() || expert.OutputDetail.Digest != (OutputDetailDigest{}) {
-		t.Fatalf("expert output crossed the detail boundary: %#v", expert.OutputDetail)
 	}
 	if got, want := store.Len(), 1; got != want {
 		t.Fatalf("store entries = %d, want %d", got, want)
@@ -222,13 +208,6 @@ func TestPersistedOutputDetailValidationFailsClosed(t *testing.T) {
 	}
 	if err := validatePersistedToolTranscriptState(state); err == nil {
 		t.Fatal("invalid output digest was accepted")
-	}
-
-	valid := OutputDetailDigest{TotalRows: 1, RetainedRows: 1, TotalBytes: 1, RetainedBytes: 1}
-	state.ToolEntries[0].Name = "consult_experts"
-	state.ToolEntries[0].OutputDetail = &valid
-	if err := validatePersistedToolTranscriptState(state); err == nil {
-		t.Fatal("expert output digest was accepted")
 	}
 }
 

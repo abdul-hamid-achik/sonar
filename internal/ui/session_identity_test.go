@@ -327,13 +327,6 @@ func TestSessionV3RejectsAdversarialCancelledToolState(t *testing.T) {
 			},
 		},
 		{
-			name: "expert progress",
-			want: "expert progress",
-			edit: func(tool *persistedToolEntry) {
-				tool.ExpertProgress = &ExpertProgressState{}
-			},
-		},
-		{
 			name: "arbitrary result output",
 			want: "result output",
 			edit: func(tool *persistedToolEntry) {

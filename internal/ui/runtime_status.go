@@ -19,16 +19,6 @@ type RuntimeStatusState struct {
 	Viewport viewport.Model
 }
 
-// SetExpertRuntimeSetupFailed keeps a startup validation failure visible after
-// the alternate-screen TUI opens. The detailed diagnostic remains on stderr;
-// Runtime shows only a fixed host-authored recovery label.
-func (m *Model) SetExpertRuntimeSetupFailed() {
-	if m == nil {
-		return
-	}
-	m.expertRuntimeSetupFailed = true
-}
-
 func (m *Model) openRuntimeStatus() {
 	m.refreshRuntimeStatus(false)
 	m.overlay = OverlayRuntimeStatus
@@ -148,26 +138,10 @@ func (m *Model) buildRuntimeStatusContent(width int) string {
 		lines = append(lines, m.runtimeStatusRow("Session", label, width))
 	}
 	contextRouting := contextRoutingRuntimeLabel(agent.CapabilityRoutingHostUnavailable)
-	experts := "disabled in configuration"
 	if m.agent != nil {
 		contextRouting = contextRoutingRuntimeLabel(m.agent.CapabilityRoutingState())
-		if m.agent.ExpertConsultationAvailable() {
-			experts = "ready · read-only · adaptive"
-			if count := m.agent.ExpertConsultationProfileCount(); count > 0 {
-				profileLabel := "profiles"
-				if count == 1 {
-					profileLabel = "profile"
-				}
-				experts = fmt.Sprintf("ready · read-only · %d %s · adaptive", count, profileLabel)
-			}
-		} else if m.expertRuntimeSetupFailed {
-			experts = "setup failed · review experts config/profiles; restart"
-		}
 	}
-	lines = append(lines,
-		m.runtimeStatusRow("Context route", contextRouting, width),
-		m.runtimeStatusRow("Experts", experts, width),
-	)
+	lines = append(lines, m.runtimeStatusRow("Context route", contextRouting, width))
 	if m.lastCapabilityRoute != nil {
 		route := sanitizeCapabilityRoute(*m.lastCapabilityRoute)
 		if capabilityRouteRenderable(route) {

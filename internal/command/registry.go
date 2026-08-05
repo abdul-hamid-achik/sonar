@@ -199,7 +199,6 @@ const (
 	ActionListImages                    // Show images attached to the pending prompt
 	ActionClearImages                   // Remove every image from the pending prompt
 	ActionForgetImageHistory            // Remove image references from active conversation history; checkpoints remain
-	ActionShowAgents                    // Open the read-only agent activity hub
 	ActionDeleteMemory                  // Delete one persistent memory entry (Data = id)
 	ActionSetNumCtx                     // Apply a new ollama.num_ctx at runtime (Data = tokens; optional Force)
 	ActionSaveNumCtx                    // Persist the active num_ctx into the host config file

@@ -67,16 +67,6 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case key.Matches(msg, m.keys.Quit):
 		return m.beginShutdown(), true
 
-	case key.Matches(msg, m.keys.AgentHub):
-		// Agent activity remains inspectable while a foreground turn is
-		// running, but an unsent draft retains ownership of application
-		// shortcuts so opening a modal never hides text unexpectedly.
-		if m.input.Value() == "" {
-			m.overlayParent = OverlayNone
-			m.openAgentHub()
-		}
-		return nil, true
-
 	case key.Matches(msg, m.keys.Cancel):
 		// A visible queued follow-up owns the first Escape. Clearing the queue
 		// must not also cancel the active run; a later Escape still reaches the

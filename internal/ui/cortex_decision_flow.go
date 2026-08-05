@@ -143,10 +143,7 @@ func (m *Model) activateCortexDecision() {
 	if m.isCompletionActive() {
 		m.dismissCompletion()
 	}
-	// Cortex owns the inline interaction outright. Do not retain a hidden Hub:
-	// its live projection would otherwise continue scanning and accepting
-	// updates after the visible overlay had been replaced.
-	m.agentHubState = nil
+	// Cortex owns the inline interaction outright.
 	m.planFormState = nil
 	m.goalFormState = nil
 	m.overlayParent = OverlayNone

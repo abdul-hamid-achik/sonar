@@ -81,17 +81,9 @@ type ToolCard struct {
 	IsDark          bool
 	ThemeID         string
 	GlyphProfile    GlyphProfile
-	Lifecycle       ToolLifecycle
-	// ExpertProgress is the bounded host projection for the exact built-in
-	// consultation call. The adjacent cache avoids rebuilding its multi-line
-	// live surface on every spinner tick.
-	ExpertProgress              *ExpertProgressState
-	expertProgressCache         string
-	expertProgressCacheWidth    int
-	expertProgressCacheSequence uint64
-	expertProgressCacheProfile  GlyphProfile
-	Projection                  ecosystem.ToolProjection
-	Styles                      ToolCardStyles
+	Lifecycle  ToolLifecycle
+	Projection ecosystem.ToolProjection
+	Styles     ToolCardStyles
 }
 
 // ToolCardStyles holds styles for the tool card.
@@ -194,7 +186,6 @@ func ToolCardFromRenderModel(model ToolRenderModel, isDark bool, themeID string,
 	card.StartTime = model.Preview.StartedAt
 	card.Duration = model.Duration
 	card.Expanded = model.Preview.Expanded
-	card.ExpertProgress = cloneExpertProgressState(model.Preview.ExpertProgress)
 	card.Projection = model.Projection.Normalize()
 	card.Projection.Operation = model.Operation
 	card.resultDisplayLines = cloneANSIResultPreview(model.Preview.ansiResultLines)
@@ -246,9 +237,6 @@ func (c *ToolCard) SetDark(isDark bool, themeID string) {
 	c.IsDark = isDark
 	c.ThemeID = themeID
 	c.Styles = NewToolCardStyles(isDark, themeID)
-	if c.ExpertProgress != nil && c.expertProgressCacheWidth > 0 {
-		c.setExpertProgress(c.ExpertProgress, c.expertProgressCacheWidth)
-	}
 }
 
 // SetSummary stores a bounded, single-line semantic summary for compact and
@@ -376,10 +364,9 @@ func (c ToolCard) ViewWithActivity(width int, activityGlyph string, elapsed time
 	// Leading glyph and trailing timing meta. Running animation is supplied by
 	// the parent so every card can share one Bubbles spinner tick chain.
 	//
-	// Disclosure is calm by default: only expanded completed receipts show ▾
-	// (and ExpertProgress running cards keep their expand affordance). Collapsed
-	// success/error/attention headers stay flat — the full header line remains
-	// the expand hit region.
+	// Disclosure is calm by default: only expanded completed receipts show ▾.
+	// Collapsed success/error/attention headers stay flat — the full header
+	// line remains the expand hit region.
 	//
 	// Duration is tertiary: always available for running elapsed time; for
 	// completed cards it appears when expanded, and for collapsed success only
@@ -389,13 +376,6 @@ func (c ToolCard) ViewWithActivity(width int, activityGlyph string, elapsed time
 		glyph = strings.TrimSpace(activityGlyph)
 		if glyph == "" || lipgloss.Width(glyph) > inner {
 			glyph = titleStyle.Render(c.statusGlyph())
-		}
-		if c.ExpertProgress != nil && inner >= lipgloss.Width(glyph)+2 {
-			disclosure := glyphs.Collapsed
-			if c.Expanded {
-				disclosure = glyphs.Expanded
-			}
-			glyph = c.Styles.Dimmed.Render(disclosure) + " " + glyph
 		}
 		if headerDuration > 0 {
 			meta = c.Styles.Elapsed.Render(formatDuration(headerDuration))
@@ -458,12 +438,6 @@ func (c ToolCard) ViewWithActivity(width int, activityGlyph string, elapsed time
 
 	lines := []string{header}
 	safeResult := boundedToolCardResult(c.Result)
-	if c.Expanded && c.ExpertProgress != nil {
-		if details := c.expertProgressDetails(inner); details != "" {
-			lines = append(lines, strings.Split(details, "\n")...)
-		}
-	}
-
 	if c.Expanded && c.State != ToolCardRunning {
 		if presentation.differsFromRaw() {
 			lines = append(lines, c.Styles.Dimmed.Render(truncate("tool: "+presentation.raw, inner)))

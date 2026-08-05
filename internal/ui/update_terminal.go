@@ -33,7 +33,6 @@ func (m *Model) rebuildThemedSurfaces() {
 	m.syncComposerAuthority()
 	m.scramble.SetDark(m.isDark, m.themeID)
 	m.restylePickerOverlays()
-	m.restyleAgentHub()
 	m.restyleViewerModals()
 	m.restyleTranscriptSearch()
 	if m.goalFormState != nil {
@@ -188,7 +187,6 @@ func (m *Model) handleWindowSize(msg tea.WindowSizeMsg, cmds []tea.Cmd) []tea.Cm
 		m.resizeHelpViewport(true)
 	}
 	m.resizePickerOverlays()
-	m.resizeAgentHub()
 	m.resizeViewerModals()
 	m.resizeTranscriptSearch()
 	if m.pendingApproval != nil && m.approvalState != nil {
@@ -270,8 +268,6 @@ func (m *Model) handleMouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
 			if m.providerPickerState != nil {
 				m.updateProviderPickerWheel(msg)
 			}
-		case OverlayAgents:
-			return m.updateAgentHubWheel(msg)
 		}
 		return nil
 	}
@@ -304,9 +300,6 @@ func (m *Model) handleMouseClickMsg(msg tea.MouseClickMsg) (cmd tea.Cmd, handled
 	// interaction while visible.
 	if m.overlay == OverlayProviderPicker && m.providerPickerState != nil {
 		return m.selectProviderPickerPointer(msg), true
-	}
-	if m.overlay == OverlayAgents {
-		return m.selectAgentHubPointer(msg), true
 	}
 	// Other modal and inline decision surfaces are intentionally keyboard-first.
 	// Until a child explicitly owns pointer interaction, clicks are swallowed

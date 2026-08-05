@@ -40,7 +40,6 @@ const (
 	OverlayGoalRecovery
 	OverlayModelDetails
 	OverlayModelPull
-	OverlayAgents
 	OverlayTranscriptSearch
 	OverlayPermissions
 	OverlayThemePicker
@@ -102,7 +101,6 @@ type ToolEntry struct {
 	DiffPending             bool                     `json:"-"` // post-write read/LCS is running outside Update
 	DiffGeneration          uint64                   `json:"-"` // accepts exactly one matching asynchronous result
 	Projection              ecosystem.ToolProjection // bounded semantic role, route, and outcome
-	ExpertProgress          *ExpertProgressState     // bounded consult_experts lifecycle projection
 }
 
 // ChatEntry is a single item in the chat log.

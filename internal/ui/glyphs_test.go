@@ -154,74 +154,6 @@ func TestASCIIProfilePropagatesAcrossPrimarySemanticSurfaces(t *testing.T) {
 	)
 	surfaces = append(surfaces, diff)
 
-	nodeStyles := NewToolCardStyles(true, defaultThemeID)
-	nodes := []WorkNode{
-		{Status: WorkNodeRunning, Label: "runner", Model: "m", Location: WorkNodeLocationLocal},
-		{Status: WorkNodeWaiting, Label: "waiter", Model: "m", Location: WorkNodeLocationLocal},
-		{Status: WorkNodeCompleted, Label: "done", Model: "m", Location: WorkNodeLocationLocal},
-		{Status: WorkNodeFailed, Label: "failed", Model: "m", Location: WorkNodeLocationLocal},
-		{Status: WorkNodeCancelled, Label: "cancelled", Model: "m", Location: WorkNodeLocationLocal},
-	}
-	for _, node := range nodes {
-		surfaces = append(
-			surfaces,
-			strings.Join(renderExpertProgressNode(node, 72, nodeStyles, GlyphASCII), "\n"),
-		)
-	}
-	narrowNode := WorkNode{
-		ID:       "expert-00",
-		Index:    0,
-		Kind:     WorkNodeKindExpert,
-		Label:    "accessibility-reviewer",
-		Model:    "model-with-a-long-name",
-		Location: WorkNodeLocationLocal,
-		Status:   WorkNodeRunning,
-		Activity: WorkNodeActivityRunning,
-		Elapsed:  1500 * time.Millisecond,
-		Revision: 2,
-	}
-	if !narrowNode.valid(1) {
-		t.Fatalf("narrow ASCII fixture is not a valid work node: %#v", narrowNode)
-	}
-	narrowAgent := strings.Join(
-		renderExpertProgressNode(narrowNode, 38, nodeStyles, GlyphASCII),
-		"\n",
-	)
-	for _, forbidden := range []string{"…", "·"} {
-		if strings.Contains(narrowAgent, forbidden) {
-			t.Fatalf("narrow ASCII agent retained %q:\n%s", forbidden, narrowAgent)
-		}
-	}
-	for _, want := range []string{"* accessibility-reviewer | running", "consulting | 1.5s | model-with"} {
-		if !strings.Contains(narrowAgent, want) {
-			t.Fatalf("narrow ASCII agent omitted %q:\n%s", want, narrowAgent)
-		}
-	}
-	narrowQueue := (&ExpertProgressState{
-		Sequence:    1,
-		Strategy:    "team",
-		Total:       2,
-		Parallelism: 1,
-		Queued:      2,
-		Experts:     make([]ExpertProgressItem, 2),
-	}).renderDetails(24, nodeStyles, GlyphASCII)
-	for _, forbidden := range []string{"…", "·"} {
-		if strings.Contains(narrowQueue, forbidden) {
-			t.Fatalf("narrow ASCII queue retained %q:\n%s", forbidden, narrowQueue)
-		}
-	}
-	if !strings.Contains(narrowQueue, "2 experts queued |") || !strings.Contains(narrowQueue, "~") {
-		t.Fatalf("narrow ASCII queue omitted its separator or truncation receipt:\n%s", narrowQueue)
-	}
-	surfaces = append(surfaces, narrowAgent, narrowQueue)
-	surfaces = append(surfaces, renderAgentViewerBody(AgentGroupProjection{
-		ID:                "ascii_group",
-		Revision:          1,
-		Lifecycle:         BlockLive,
-		ProgressAvailable: true,
-		Nodes:             nodes,
-	}, 72, true, defaultThemeID, GlyphASCII))
-
 	rendered := ansi.Strip(strings.Join(surfaces, "\n"))
 	assertNoUnicodeSemanticGlyphs(t, rendered)
 	for _, want := range []string{
@@ -234,10 +166,6 @@ func TestASCIIProfilePropagatesAcrossPrimarySemanticSurfaces(t *testing.T) {
 		"v x Read failed",
 		"sonar > MCPHub > Cortex",
 		"| > content",
-		"* runner",
-		"+ done",
-		"x failed",
-		"- cancelled",
 	} {
 		if !strings.Contains(rendered, want) {
 			t.Fatalf("ASCII surfaces omitted %q:\n%s", want, rendered)

@@ -93,7 +93,6 @@ type persistedToolEntry struct {
 	Collapsed      bool                     `json:"collapsed,omitempty"`
 	DiffLines      []DiffLine               `json:"diff_lines,omitempty"`
 	Projection     ecosystem.ToolProjection `json:"projection,omitempty"`
-	ExpertProgress *ExpertProgressState     `json:"expert_progress,omitempty"`
 }
 
 const (
@@ -291,15 +290,8 @@ func persistToolEntries(entries []ToolEntry) []persistedToolEntry {
 		args := boundedSessionText(entry.Args, maxPersistedToolArgsBytes)
 		toolResult := boundedSessionText(sanitizeTerminalMultiline(entry.Result), maxPersistedToolResultBytes)
 		resultLanguage := normalizeTrustedResultLanguage(entry.ResultLanguage)
-		progress := sanitizeExpertProgressState(entry.ExpertProgress, entry.Status != ToolStatusRunning)
-		if isExpertConsultTool(entry.Name) {
-			args = ""
-			toolResult = ""
-			resultLanguage = ""
-		}
 		var outputDetail *OutputDetailDigest
-		if !isExpertConsultTool(entry.Name) &&
-			entry.OutputDetail.Digest != (OutputDetailDigest{}) &&
+		if entry.OutputDetail.Digest != (OutputDetailDigest{}) &&
 			entry.OutputDetail.Digest.Valid() {
 			digest := entry.OutputDetail.Digest
 			outputDetail = &digest
@@ -319,7 +311,6 @@ func persistToolEntries(entries []ToolEntry) []persistedToolEntry {
 			Collapsed:      entry.Collapsed,
 			DiffLines:      persistDiffLines(entry.DiffLines),
 			Projection:     entry.Projection.Normalize(),
-			ExpertProgress: progress,
 		}
 	}
 	return result
@@ -328,18 +319,11 @@ func persistToolEntries(entries []ToolEntry) []persistedToolEntry {
 func restoreToolEntries(entries []persistedToolEntry) []ToolEntry {
 	result := make([]ToolEntry, len(entries))
 	for i, entry := range entries {
-		wasRunning := entry.Status == ToolStatusRunning
-		progress := sanitizeExpertProgressState(entry.ExpertProgress, !wasRunning)
 		args := entry.Args
 		toolResult := boundedSessionText(sanitizeTerminalMultiline(entry.Result), maxPersistedToolResultBytes)
 		resultLanguage := normalizeTrustedResultLanguage(entry.ResultLanguage)
-		if isExpertConsultTool(entry.Name) {
-			args = ""
-			toolResult = ""
-			resultLanguage = ""
-		}
 		var outputDetail OutputDetailReceipt
-		if !isExpertConsultTool(entry.Name) && entry.OutputDetail != nil && entry.OutputDetail.Valid() {
+		if entry.OutputDetail != nil && entry.OutputDetail.Valid() {
 			outputDetail.Digest = *entry.OutputDetail
 		}
 		restored := ToolEntry{
@@ -357,19 +341,8 @@ func restoreToolEntries(entries []persistedToolEntry) []ToolEntry {
 			Collapsed:      entry.Collapsed,
 			DiffLines:      persistDiffLines(entry.DiffLines),
 			Projection:     entry.Projection.Normalize(),
-			ExpertProgress: progress,
-		}
-		if isExpertConsultTool(entry.Name) {
-			if progress != nil {
-				restored.Summary = boundedToolCardSummary(progress.summary())
-			} else {
-				restored.Summary = "expert consultation"
-			}
 		}
 		settleInterruptedToolEntry(&restored)
-		if wasRunning {
-			restored.ExpertProgress = nil
-		}
 		result[i] = restored
 	}
 	return result
@@ -904,20 +877,6 @@ func sanitizePersistedToolEntryArgs(entries []persistedToolEntry) []persistedToo
 		// Apply the same exact serialized diff ceiling to decoded and direct
 		// in-memory snapshots, not only snapshots produced by encodeSessionState.
 		result[index].DiffLines = persistDiffLines(result[index].DiffLines)
-		if isExpertConsultTool(result[index].Name) {
-			result[index].Args = ""
-			result[index].Result = ""
-			result[index].ResultLanguage = ""
-			result[index].ExpertProgress = sanitizeExpertProgressState(
-				result[index].ExpertProgress, result[index].Status != ToolStatusRunning,
-			)
-			if result[index].ExpertProgress != nil {
-				result[index].Summary = boundedToolCardSummary(result[index].ExpertProgress.summary())
-			} else {
-				result[index].Summary = "expert consultation"
-			}
-			continue
-		}
 		if !agent.ToolArgumentsRequirePrivacy(result[index].Name) {
 			continue
 		}
@@ -1035,13 +994,8 @@ func validatePersistedToolTranscriptState(state persistedSessionState) error {
 		default:
 			return fmt.Errorf("session tool entry %d has invalid status %d", index, tool.Status)
 		}
-		if tool.OutputDetail != nil {
-			if isExpertConsultTool(tool.Name) {
-				return fmt.Errorf("session expert tool entry %d contains output detail", index)
-			}
-			if !tool.OutputDetail.Valid() {
-				return fmt.Errorf("session tool entry %d has invalid output detail digest", index)
-			}
+		if tool.OutputDetail != nil && !tool.OutputDetail.Valid() {
+			return fmt.Errorf("session tool entry %d has invalid output detail digest", index)
 		}
 	}
 	for index, entry := range state.Entries {
@@ -1083,9 +1037,10 @@ func validatePersistedCancelledToolEntry(tool persistedToolEntry) error {
 		return errors.New("cancelled tool cannot be marked as an error")
 	}
 	expectedResult := cancelledToolResult
-	if isExpertConsultTool(tool.Name) {
-		// Expert prose never crosses the persistence boundary, including the
-		// host-owned cancellation sentence used by the live card.
+	if tool.Name == "consult_experts" {
+		// Older builds shipped a consult_experts tool whose cancelled receipts
+		// were deliberately persisted with an empty result. The tool is gone,
+		// but sessions saved by those builds must still restore.
 		expectedResult = ""
 	}
 	if tool.Result != expectedResult {
@@ -1099,9 +1054,6 @@ func validatePersistedCancelledToolEntry(tool persistedToolEntry) error {
 	}
 	if len(tool.DiffLines) != 0 {
 		return errors.New("cancelled tool cannot retain diff output")
-	}
-	if tool.ExpertProgress != nil {
-		return errors.New("cancelled tool cannot retain expert progress")
 	}
 	if err := validateCanonicalCancelledToolProjection(tool.Projection); err != nil {
 		return err

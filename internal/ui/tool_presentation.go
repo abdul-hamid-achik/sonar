@@ -74,7 +74,6 @@ var toolActionRegistry = map[string]toolActionLabels{
 	"memory_delete":      {running: "Removing memory", success: "Removed memory", failure: "Remove memory failed"},
 	"memory_update":      {running: "Updating memory", success: "Updated memory", failure: "Update memory failed"},
 	"memory_list":        {running: "Listing memories", success: "Listed memories", failure: "List memories failed"},
-	"consult_experts":    {running: "Consulting experts", success: "Consulted experts", attention: "Expert consultation is partial", failure: "Expert consultation failed"},
 	"update_plan":        {running: "Updating plan", success: "Updated plan", failure: "Update plan failed"},
 	"tool_search":        {running: "Loading tools", success: "Loaded tools", failure: "Load tools failed"},
 	"load_skill":         {running: "Loading skill", success: "Loaded skill", failure: "Skill load failed"},

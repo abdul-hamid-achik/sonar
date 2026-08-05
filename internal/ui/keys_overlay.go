@@ -50,11 +50,6 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			m.closeAgentPicker()
 		case OverlayProviderPicker:
 			m.closeProviderPicker()
-		case OverlayAgents:
-			if m.agentHubBack() {
-				return nil, true
-			}
-			m.closeAgentHub()
 		case OverlayModePicker:
 			m.closeModePicker()
 		case OverlayThemePicker:
@@ -121,10 +116,6 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			return tea.ClearScreen, true
 		}
 		return nil, true
-	}
-
-	if m.overlay == OverlayAgents {
-		return m.handleAgentHubKey(msg), true
 	}
 
 	if m.overlay == OverlaySettings && m.settingsPickerState != nil {

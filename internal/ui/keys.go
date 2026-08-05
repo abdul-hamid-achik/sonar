@@ -27,7 +27,6 @@ type KeyMap struct {
 	CycleMode         key.Binding
 	ModelPicker       key.Binding
 	SettingsPicker    key.Binding
-	AgentHub          key.Binding
 	TranscriptSearch  key.Binding
 	HistoryUp         key.Binding
 	HistoryDown       key.Binding
@@ -139,10 +138,6 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("ctrl+p"),
 			key.WithHelp("ctrl+p", "open settings"),
 		),
-		AgentHub: key.NewBinding(
-			key.WithKeys("ctrl+g"),
-			key.WithHelp("ctrl+g", "open agents"),
-		),
 		TranscriptSearch: key.NewBinding(
 			key.WithKeys("ctrl+f"),
 			key.WithHelp("ctrl+f", "search transcript"),
@@ -209,7 +204,7 @@ func (k KeyMap) HelpSections() []KeyHelpSection {
 			k.CompactToggle,
 		}},
 		{"Session", []key.Binding{
-			k.CycleMode, k.ModelPicker, k.SettingsPicker, k.AgentHub, k.NewConvo, k.ClearView, k.Help,
+			k.CycleMode, k.ModelPicker, k.SettingsPicker, k.NewConvo, k.ClearView, k.Help,
 		}},
 		{"Leave", []key.Binding{k.Cancel, k.Quit}},
 	}

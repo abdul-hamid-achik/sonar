@@ -496,20 +496,6 @@ func TestBuiltin_Agent(t *testing.T) {
 	})
 }
 
-func TestBuiltin_Agents(t *testing.T) {
-	r := newTestRegistry()
-
-	result := r.Execute(&Context{}, "agents", nil)
-	if result.Error != "" || result.Action != ActionShowAgents {
-		t.Fatalf("/agents = %#v, want ActionShowAgents", result)
-	}
-
-	result = r.Execute(&Context{}, "agents", []string{"unexpected"})
-	if result.Error != "usage: /agents" || result.Action != ActionNone {
-		t.Fatalf("/agents unexpected = %#v, want usage error with no action", result)
-	}
-}
-
 func TestBuiltin_Load(t *testing.T) {
 	r := newTestRegistry()
 
@@ -737,7 +723,7 @@ func TestBuiltinsRejectUnexpectedArguments(t *testing.T) {
 	r := newTestRegistry()
 	ctx := &Context{}
 	for _, name := range []string{
-		"help", "clear", "agents", "unload", "servers", "ice", "sessions",
+		"help", "clear", "unload", "servers", "ice", "sessions",
 		"artifacts", "changes", "stats", "checkpoints", "exit",
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -891,7 +877,7 @@ func TestBuiltinScopeParsesProcessLocalReadRootActions(t *testing.T) {
 func TestBuiltinRegistrySurfaceIsUniqueAndExecutable(t *testing.T) {
 	r := newTestRegistry()
 	wantNames := []string{
-		"help", "clear", "plan", "goal", "model", "theme", "provider", "recover", "agent", "agents", "load",
+		"help", "clear", "plan", "goal", "model", "theme", "provider", "recover", "agent", "load",
 		"image", "scope", "permissions", "unload", "skill", "servers", "mcp", "tools", "ice", "memory", "sessions", "artifacts",
 		"changes", "commit", "context", "stats", "export", "import", "checkpoint",
 		"checkpoints", "restore", "exit",

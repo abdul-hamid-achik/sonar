@@ -74,26 +74,6 @@ func TestToolSummaryUsesEcosystemProjectionBeforeGenericFallback(t *testing.T) {
 	}
 }
 
-func TestExpertConsultationSummaryShowsStrategyAndCountWithoutObjectiveOrNames(t *testing.T) {
-	args := map[string]any{
-		"strategy":  "SWARM",
-		"objective": "secret incident details",
-		"experts":   []any{"private-security-name", "private-reviewer-name"},
-	}
-	got := ecosystemToolSummary("consult_experts", args)
-	if got != "swarm · 2 requested" {
-		t.Fatalf("expert summary = %q", got)
-	}
-	for _, private := range []string{"secret", "incident", "private-security-name", "private-reviewer-name"} {
-		if strings.Contains(got, private) {
-			t.Fatalf("expert summary exposed %q: %q", private, got)
-		}
-	}
-	if got := ecosystemToolSummary("consult_experts", map[string]any{"strategy": "moe", "objective": "review"}); got != "moe · auto-selected" {
-		t.Fatalf("auto-selected expert summary = %q", got)
-	}
-}
-
 func TestCompactToolFailureExtractsJSONAndOffersRecovery(t *testing.T) {
 	tests := []struct {
 		name   string

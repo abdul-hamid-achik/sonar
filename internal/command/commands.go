@@ -322,18 +322,6 @@ func RegisterBuiltins(r *Registry) {
 	})
 
 	r.Register(&Command{
-		Name:        "agents",
-		Description: "Open the read-only agent and subagent activity hub",
-		Usage:       "/agents",
-		Handler: func(_ *Context, args []string) Result {
-			if err := noArguments(args, "/agents"); err != "" {
-				return Result{Error: err}
-			}
-			return Result{Action: ActionShowAgents}
-		},
-	})
-
-	r.Register(&Command{
 		Name:        "load",
 		Aliases:     []string{"l"},
 		Description: "Load a markdown file as context",

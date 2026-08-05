@@ -117,14 +117,6 @@ func (m *Model) handleToolCallStart(msg ToolCallStartMsg, cmds []tea.Cmd) []tea.
 	rawArgs := agent.SafeToolArgsForPersistence(msg.Name, msg.Args)
 	resultLanguage := trustedResultLanguageForTool(msg.Name, msg.Args)
 	collapsed := m.toolsCollapsed
-	if isExpertConsultTool(msg.Name) {
-		// The consultation objective belongs only to the transient runtime.
-		// Its live UI is populated exclusively by bounded progress events.
-		args = ""
-		rawArgs = nil
-		resultLanguage = ""
-		collapsed = false
-	}
 	te := ToolEntry{
 		ID:             msg.ID,
 		Name:           msg.Name,
@@ -136,11 +128,7 @@ func (m *Model) handleToolCallStart(msg ToolCallStartMsg, cmds []tea.Cmd) []tea.
 		Projection:     projection,
 		ResultLanguage: resultLanguage,
 	}
-	if isExpertConsultTool(msg.Name) {
-		te.Summary = "awaiting expert plan"
-	} else {
-		te.Summary = boundedToolCardSummary(toolSummary(classifyTool(msg.Name), te))
-	}
+	te.Summary = boundedToolCardSummary(toolSummary(classifyTool(msg.Name), te))
 	if classifyTool(msg.Name) == ToolTypeFileWrite {
 		// The Adapter captured this before returning control to the tool
 		// execution path. Update only installs the immutable result.
@@ -162,11 +150,6 @@ func (m *Model) handleToolCallStart(msg ToolCallStartMsg, cmds []tea.Cmd) []tea.
 		ToolIndex: len(m.toolEntries) - 1,
 	})
 	m.refreshTranscript()
-	if isExpertConsultTool(msg.Name) {
-		if cmd := m.refreshAgentHub(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-	}
 	m.gotoBottomIfFollowing()
 	return cmds
 }
@@ -179,16 +162,8 @@ func (m *Model) handleToolCallResult(msg ToolCallResultMsg, cmds []tea.Cmd) []te
 		m.logger.Info("tool call", "name", msg.Name, "duration", msg.Duration, "error", msg.IsError)
 	}
 	matched := false
-	matchedIndex := -1
-	expertResult := isExpertConsultTool(msg.Name)
 	outputDetail := msg.OutputDetail
 	if !outputDetail.Ref.Valid() || !outputDetail.Digest.Valid() {
-		if outputDetail.Ref.Valid() && m.outputDetails != nil {
-			m.outputDetails.Drop(outputDetail.Ref)
-		}
-		outputDetail = OutputDetailReceipt{}
-	}
-	if expertResult {
 		if outputDetail.Ref.Valid() && m.outputDetails != nil {
 			m.outputDetails.Drop(outputDetail.Ref)
 		}
@@ -201,24 +176,15 @@ func (m *Model) handleToolCallResult(msg ToolCallResultMsg, cmds []tea.Cmd) []te
 		// sanitized result above stays the only persisted representation.
 		resultDisplay = boundedToolCardResultDisplay(msg.Result)
 	}
-	if expertResult {
-		// The aggregate report and provider failures stay transient. The
-		// settled card is driven by the bounded per-expert projection.
-		result = ""
-		resultDisplay = ""
-	}
 	// Bob envelopes carry stable conflict/error codes and copy-pasteable
 	// corrective commands; keep that digest visible ahead of the raw JSON.
-	if !expertResult {
-		if digest := bobReceiptDigest(msg.Name, msg.Result); digest != "" {
-			result = boundedToolCardResult(digest + "\n" + msg.Result)
-		}
+	if digest := bobReceiptDigest(msg.Name, msg.Result); digest != "" {
+		result = boundedToolCardResult(digest + "\n" + msg.Result)
 	}
 	var diffCmd tea.Cmd
 	for i := len(m.toolEntries) - 1; i >= 0; i-- {
 		if toolCallMatches(msg.ID, msg.Name, m.toolEntries[i].ID, m.toolEntries[i].Name) && m.toolEntries[i].Status == ToolStatusRunning {
 			matched = true
-			matchedIndex = i
 			projection := msg.Projection.Normalize()
 			if projection.Transport == "" {
 				projection = ecosystem.ProjectToolResult(m.toolEntries[i].Projection, msg.Result, msg.IsError)
@@ -275,16 +241,6 @@ func (m *Model) handleToolCallResult(msg ToolCallResultMsg, cmds []tea.Cmd) []te
 		}
 		return cmds
 	}
-	if expertResult && matchedIndex >= 0 {
-		entry := &m.toolEntries[matchedIndex]
-		entry.ExpertProgress = sanitizeExpertProgressState(entry.ExpertProgress, true)
-		if entry.ExpertProgress != nil {
-			entry.Summary = boundedToolCardSummary(entry.ExpertProgress.summary())
-			entry.Projection = projectionWithExpertProgressOutcome(entry.Projection, entry.ExpertProgress)
-		} else {
-			entry.Summary = "expert progress unavailable"
-		}
-	}
 	var completedProjection ecosystem.ToolProjection
 	for i := len(m.toolEntries) - 1; i >= 0; i-- {
 		if toolCallMatches(msg.ID, msg.Name, m.toolEntries[i].ID, m.toolEntries[i].Name) {
@@ -302,11 +258,6 @@ func (m *Model) handleToolCallResult(msg ToolCallResultMsg, cmds []tea.Cmd) []te
 		cmds = append(cmds, diffCmd)
 	}
 	m.refreshTranscript()
-	if expertResult {
-		if cmd := m.refreshAgentHub(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
-	}
 	m.gotoBottomIfFollowing()
 	return cmds
 }
@@ -624,7 +575,6 @@ func (m *Model) settleCancelledToolEntries() int {
 		entry.DiffLines = nil
 		entry.DiffPending = false
 		entry.DiffGeneration = 0
-		entry.ExpertProgress = nil
 		if !entry.StartTime.IsZero() {
 			entry.Duration = min(now.Sub(entry.StartTime), maxToolViewDuration)
 			if entry.Duration < 0 {

@@ -9,8 +9,6 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
-
-	"github.com/abdul-hamid-achik/sonar/internal/expertteam"
 )
 
 var transcriptPaintMarkerPattern = regexp.MustCompile(`MARK[0-9]{3}`)
@@ -332,62 +330,3 @@ func TestTranscriptPaintAsyncDiffResultPreservesSemanticBlock(t *testing.T) {
 	}
 }
 
-func TestTranscriptPaintExpertProgressPreservesSemanticBlock(t *testing.T) {
-	m := newTestModel(t)
-	m.handleWindowSize(tea.WindowSizeMsg{Width: 80, Height: 14}, nil)
-	m.toolEntries = []ToolEntry{{
-		ID:        "experts-above",
-		Name:      "consult_experts",
-		Summary:   "awaiting expert plan",
-		Status:    ToolStatusRunning,
-		StartTime: testTime,
-		Collapsed: false,
-	}}
-	m.entries = []ChatEntry{{Kind: "tool_group", ToolIndex: 0}}
-	for index := 0; index < 30; index++ {
-		m.entries = append(m.entries, ChatEntry{
-			Kind:    "user",
-			Content: fmt.Sprintf("EXPERT-ANCHOR-%02d %s", index, strings.Repeat("reader ", 8)),
-		})
-	}
-	m.toolsPending = 1
-	m.state = StateStreaming
-	m.invalidateEntryCache()
-	m.refreshTranscript()
-
-	for sequence, progress := range []struct {
-		phase expertteam.ProgressPhase
-		index int
-	}{
-		{phase: expertteam.ProgressPlanned, index: -1},
-		{phase: expertteam.ProgressStarted, index: 0},
-		{phase: expertteam.ProgressCompleted, index: 0},
-	} {
-		updated, _ := m.Update(ExpertProgressMsg{
-			CallID: "experts-above",
-			Event:  expertProgressEvent(uint64(sequence+1), progress.phase, progress.index),
-		})
-		m = updated.(*Model)
-	}
-
-	anchor := m.transcriptLayout.Records[12]
-	m.setTranscriptYOffset(anchor.StartRow)
-	m.pauseFollow()
-	wantScreenRow := transcriptBlockScreenRow(t, m, anchor.BlockID)
-
-	updated, _ := m.Update(ExpertProgressMsg{
-		CallID: "experts-above",
-		Event:  expertProgressEvent(4, expertteam.ProgressStarted, 1),
-	})
-	m = updated.(*Model)
-	if !m.followPaused() {
-		t.Fatal("expert progress resumed follow")
-	}
-	if got := transcriptBlockScreenRow(t, m, anchor.BlockID); got != wantScreenRow {
-		t.Fatalf(
-			"expert progress above viewport moved semantic block from screen row %d to %d",
-			wantScreenRow,
-			got,
-		)
-	}
-}

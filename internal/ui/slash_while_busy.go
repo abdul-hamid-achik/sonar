@@ -40,7 +40,6 @@ func slashSafeWhileBusy(action command.Action) bool {
 		command.ActionShowThemePicker,
 		command.ActionSwitchTheme,
 		command.ActionShowContextDoctor,
-		command.ActionShowAgents,
 		command.ActionPermissionsPanel,
 		command.ActionPermissionsAcceptEdits,
 		command.ActionPermissionsClear,
