@@ -107,7 +107,8 @@ func firstDynamicShellSyntaxToken(command string) (string, bool) {
 	runes := []rune(command)
 	var quote rune
 	escaped := false
-	for index, character := range runes {
+	for index := 0; index < len(runes); index++ {
+		character := runes[index]
 		if escaped {
 			escaped = false
 			continue
@@ -126,7 +127,16 @@ func firstDynamicShellSyntaxToken(command string) (string, bool) {
 			switch character {
 			case '"':
 				quote = 0
-			case '$', '`':
+			case '$':
+				// An inert parameter is admitted, so naming it here would
+				// blame `$?` for a refusal actually caused by a `$(…)` later
+				// in the same command.
+				if inertShellParameter(runes, index) {
+					index++
+					continue
+				}
+				return dynamicShellToken(runes, index), true
+			case '`':
 				return dynamicShellToken(runes, index), true
 			}
 			continue
@@ -134,7 +144,13 @@ func firstDynamicShellSyntaxToken(command string) (string, bool) {
 		switch character {
 		case '\'', '"':
 			quote = character
-		case '$', '`', '(', ')', '{', '}':
+		case '$':
+			if inertShellParameter(runes, index) {
+				index++
+				continue
+			}
+			return dynamicShellToken(runes, index), true
+		case '`', '(', ')', '{', '}':
 			return dynamicShellToken(runes, index), true
 		}
 	}
@@ -333,10 +349,38 @@ func hasShellLineContinuation(command string) bool {
 	return strings.Contains(command, "\\\n") || strings.Contains(command, "\\\r")
 }
 
+// inertShellParameter reports whether the `$` at index introduces a special
+// parameter whose expansion is provably a decimal integer.
+//
+// POSIX fixes the value of each of these: `$?` is the previous exit status,
+// `$$` and `$!` are process IDs, `$#` is a positional-parameter count. None can
+// expand to a command, a path, or a program name, which is the property the
+// dynamic-syntax rule exists to prevent. Everything else after `$` — `(`, `{`,
+// a name, a digit — stays refused, so command substitution and variable reads
+// are untouched.
+//
+// This is the measured case, not a guess. In one AUTO session half the approval
+// prompts were dynamic-syntax refusals, and the commands behind them were
+// ordinary verification runs like `go build ./... 2>&1 | head -30; echo "exit:
+// $?"`. The other half were `$(…)` and remain refused.
+func inertShellParameter(runes []rune, index int) bool {
+	if index+1 >= len(runes) {
+		return false
+	}
+	switch runes[index+1] {
+	case '?', '$', '#', '!':
+		return true
+	default:
+		return false
+	}
+}
+
 func hasDynamicShellSyntax(command string) bool {
+	runes := []rune(command)
 	var quote rune
 	escaped := false
-	for _, character := range command {
+	for index := 0; index < len(runes); index++ {
+		character := runes[index]
 		if escaped {
 			escaped = false
 			continue
@@ -355,7 +399,16 @@ func hasDynamicShellSyntax(command string) bool {
 			switch character {
 			case '"':
 				quote = 0
-			case '$', '`':
+			case '$':
+				if inertShellParameter(runes, index) {
+					// Consume the parameter so its second rune cannot be
+					// rescanned as an opener: `$$` must read as one PID, not
+					// as a `$` introducing whatever follows.
+					index++
+					continue
+				}
+				return true
+			case '`':
 				return true
 			}
 			continue
@@ -363,7 +416,13 @@ func hasDynamicShellSyntax(command string) bool {
 		switch character {
 		case '\'', '"':
 			quote = character
-		case '$', '`', '(', ')', '{', '}':
+		case '$':
+			if inertShellParameter(runes, index) {
+				index++
+				continue
+			}
+			return true
+		case '`', '(', ')', '{', '}':
 			return true
 		}
 	}

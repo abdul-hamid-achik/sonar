@@ -68,11 +68,11 @@ func TestAutoBashApprovalPreviewCarriesTheRuleThatTripped(t *testing.T) {
 		command    string
 		wantReason string
 	}{
-		{name: "dynamic expansion", mode: AuthorityAutoScoped, command: "echo $?", wantReason: "dynamic shell syntax ($?)"},
+		{name: "command substitution", mode: AuthorityAutoScoped, command: "go build $(pwd)", wantReason: "dynamic shell syntax ($)"},
 		{name: "workspace escape", mode: AuthorityAutoScoped, command: "cat " + filepath.Join(workspace, "..", "secret.txt"), wantReason: "operand outside the workspace"},
 		{name: "uncatalogued executable", mode: AuthorityAutoScoped, command: "definitely-not-a-command --flag", wantReason: "executable outside the host catalog"},
 		{name: "admitted command has no reason", mode: AuthorityAutoScoped, command: "go test ./...", wantReason: ""},
-		{name: "normal mode never labels", mode: AuthorityNormal, command: "echo $?", wantReason: ""},
+		{name: "normal mode never labels", mode: AuthorityNormal, command: "go build $(pwd)", wantReason: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

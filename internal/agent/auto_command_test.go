@@ -998,7 +998,7 @@ func TestAutoCommandReasonLabelIsBoundedOperatorFacingText(t *testing.T) {
 	}{
 		{name: "empty", reason: autoCommandReasonEmpty, command: "   ", want: "empty command"},
 		{name: "bounds", reason: autoCommandReasonBounds, command: strings.Repeat("x", maxAutoCommandBytes+1), want: "command exceeds the bounded shell subset"},
-		{name: "dynamic question expansion", reason: autoCommandReasonDynamicSyntax, command: "echo $?", want: "dynamic shell syntax ($?)"},
+		{name: "dynamic command substitution in a pipeline", reason: autoCommandReasonDynamicSyntax, command: "go build $(pwd)", want: "dynamic shell syntax ($)"},
 		{name: "dynamic command substitution", reason: autoCommandReasonDynamicSyntax, command: "go $(date)", want: "dynamic shell syntax ($)"},
 		{name: "dynamic backtick", reason: autoCommandReasonDynamicSyntax, command: "echo `date`", want: "dynamic shell syntax (`)"},
 		{name: "dynamic grouping", reason: autoCommandReasonDynamicSyntax, command: "echo {a,b}", want: "dynamic shell syntax ({)"},
@@ -1029,10 +1029,10 @@ func TestAutoCommandApprovalReasonIsGatedToAUTOAndNonAdmitted(t *testing.T) {
 		command string
 		want    string
 	}{
-		{name: "auto dynamic expansion", mode: AuthorityAutoScoped, command: "echo $?", want: "dynamic shell syntax ($?)"},
+		{name: "auto command substitution", mode: AuthorityAutoScoped, command: "go test $(pwd)", want: "dynamic shell syntax ($)"},
 		{name: "auto admitted command", mode: AuthorityAutoScoped, command: "go test ./...", want: ""},
-		{name: "normal never labels", mode: AuthorityNormal, command: "echo $?", want: ""},
-		{name: "plan never labels", mode: AuthorityPlan, command: "echo $?", want: ""},
+		{name: "normal never labels", mode: AuthorityNormal, command: "go test $(pwd)", want: ""},
+		{name: "plan never labels", mode: AuthorityPlan, command: "go test $(pwd)", want: ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

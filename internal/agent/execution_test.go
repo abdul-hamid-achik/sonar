@@ -435,7 +435,7 @@ func TestAutoBashApprovalRequestedLedgerDetailCarriesTheReason(t *testing.T) {
 	}
 
 	t.Run("AUTO surfaces the rule that tripped", func(t *testing.T) {
-		events, approvalAsked := run(t, AuthorityAutoScoped, "echo $?")
+		events, approvalAsked := run(t, AuthorityAutoScoped, "go build $(pwd)")
 		if !approvalAsked {
 			t.Fatal("non-admitted AUTO bash command bypassed interactive authorization")
 		}
@@ -443,13 +443,13 @@ func TestAutoBashApprovalRequestedLedgerDetailCarriesTheReason(t *testing.T) {
 		if got := executionEventTypes(events); !reflect.DeepEqual(got, want) {
 			t.Fatalf("events = %v, want %v", got, want)
 		}
-		if got := events[1].Detail; got != "interactive approval requested: dynamic shell syntax ($?)" {
+		if got := events[1].Detail; got != "interactive approval requested: dynamic shell syntax ($)" {
 			t.Fatalf("approval requested detail = %q", got)
 		}
 	})
 
 	t.Run("NORMAL keeps the bare request", func(t *testing.T) {
-		events, approvalAsked := run(t, AuthorityNormal, "echo $?")
+		events, approvalAsked := run(t, AuthorityNormal, "go build $(pwd)")
 		if !approvalAsked {
 			t.Fatal("NORMAL bash command bypassed interactive authorization")
 		}
