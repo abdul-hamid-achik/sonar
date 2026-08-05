@@ -379,11 +379,11 @@ func TestCompletedToolFlashAdvertisesInspectableReceipt(t *testing.T) {
 	m.lastTurnToolIndex = 0
 
 	status := ansi.Strip(m.renderStatusLine())
-	if !strings.Contains(status, "Done") || !strings.Contains(status, "ctrl+r inspect receipt") {
+	if !strings.Contains(status, "Done") || !strings.Contains(status, "ctrl+t inspect receipt") {
 		t.Fatalf("completed tool footer does not expose receipt inspection: %q", status)
 	}
 	m.toolEntries[0].Collapsed = false
-	if status = ansi.Strip(m.renderStatusLine()); !strings.Contains(status, "ctrl+r hide receipt") {
+	if status = ansi.Strip(m.renderStatusLine()); !strings.Contains(status, "ctrl+t hide receipt") {
 		t.Fatalf("expanded tool footer does not expose receipt collapse: %q", status)
 	}
 

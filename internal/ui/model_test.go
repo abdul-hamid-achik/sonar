@@ -123,11 +123,11 @@ func TestToggleToolsChordOnlyWhenIdleAndEmpty(t *testing.T) {
 		m.state = StateIdle
 		before := m.toolsCollapsed
 
-		updated, _ := m.Update(ctrlKey('b'))
+		updated, _ := m.Update(altKey('t'))
 		m = updated.(*Model)
 
 		if m.toolsCollapsed == before {
-			t.Error("Ctrl+B with idle+empty should toggle toolsCollapsed")
+			t.Error("Alt+T with idle+empty should toggle toolsCollapsed")
 		}
 	})
 
@@ -137,11 +137,11 @@ func TestToggleToolsChordOnlyWhenIdleAndEmpty(t *testing.T) {
 		m.input.SetValue("hello")
 		before := m.toolsCollapsed
 
-		updated, _ := m.Update(ctrlKey('b'))
+		updated, _ := m.Update(altKey('t'))
 		m = updated.(*Model)
 
 		if m.toolsCollapsed != before {
-			t.Error("Ctrl+B with non-empty input should not toggle tools")
+			t.Error("Alt+T with non-empty input should not toggle tools")
 		}
 	})
 }

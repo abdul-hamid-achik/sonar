@@ -49,10 +49,10 @@ func installDiffViewerTool(m *Model) {
 
 func openOutputViewerForTest(t *testing.T, m *Model) (*Model, outputViewerPageResultMsg) {
 	t.Helper()
-	updated, _ := m.Update(ctrlKey('r'))
+	updated, _ := m.Update(ctrlKey('t'))
 	m = updated.(*Model)
 	if !m.receiptInspectActive || m.toolEntries[0].Collapsed {
-		t.Fatal("Ctrl+R did not activate the typed receipt action")
+		t.Fatal("Ctrl+T did not activate the typed receipt action")
 	}
 	updated, command := m.Update(altKey('o'))
 	m = updated.(*Model)
@@ -153,7 +153,7 @@ func TestViewerGeometryUsesOneRectAcrossSupportedScreens(t *testing.T) {
 func TestDiffViewerModelFlowAndTypedCopy(t *testing.T) {
 	m := newTestModel(t)
 	installDiffViewerTool(m)
-	updated, _ := m.Update(ctrlKey('r'))
+	updated, _ := m.Update(ctrlKey('t'))
 	m = updated.(*Model)
 	updated, _ = m.Update(altKey('d'))
 	m = updated.(*Model)
@@ -189,7 +189,7 @@ func TestDiffViewerModelFlowAndTypedCopy(t *testing.T) {
 func TestViewerPointerRoutesToTopModalWithoutTranscriptLeak(t *testing.T) {
 	m := newTestModel(t)
 	installDiffViewerTool(m)
-	updated, _ := m.Update(ctrlKey('r'))
+	updated, _ := m.Update(ctrlKey('t'))
 	m = updated.(*Model)
 	updated, _ = m.Update(altKey('d'))
 	m = updated.(*Model)
@@ -226,7 +226,7 @@ func TestExpandedReceiptDoesNotStealComposerFirstCharacter(t *testing.T) {
 			// Batch expansion deliberately leaves the receipt visible without
 			// giving it exclusive keyboard ownership. Plain letters must still
 			// start a composer draft.
-			updated, _ := m.Update(ctrlKey('b'))
+			updated, _ := m.Update(altKey('t'))
 			m = updated.(*Model)
 			if m.toolEntries[0].Collapsed || m.receiptInspectActive {
 				t.Fatalf("precondition: expanded=%v inspected=%v",
@@ -263,11 +263,11 @@ func TestToolToggleMouseAndKeyboardUseSameActionSemantics(t *testing.T) {
 		t.Fatal("keyboard ToolCard has no action registry")
 	}
 	toggle, ok := registry.Action(toolToggleActionID)
-	if !ok || toggle.Shortcut.Help().Key != "ctrl+r" {
+	if !ok || toggle.Shortcut.Help().Key != "ctrl+t" {
 		t.Fatalf("toggle shortcut = %#v, want ctrl+r", toggle.Shortcut.Help())
 	}
 
-	updated, _ := keyboard.Update(ctrlKey('r'))
+	updated, _ := keyboard.Update(ctrlKey('t'))
 	keyboard = updated.(*Model)
 	region := pointer.toolHitRegions[0]
 	updated, _ = pointer.Update(tea.MouseClickMsg{

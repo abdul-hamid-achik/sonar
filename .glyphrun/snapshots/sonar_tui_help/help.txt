@@ -19,17 +19,17 @@
                      │   ctrl+f            Search transcript                                      │
                      │                                                                            │
                      │   Inspect                                                                  │
-                     │   ctrl+b            Toggle all tools (empty input)                         │
-                     │   ctrl+r            Toggle last tool (empty input)                         │
-                     │   ctrl+t            Toggle all thoughts (empty draft)                      │
+                     │   alt+t             Toggle all tools (empty input)                         │
+                     │   ctrl+t            Toggle focused tool (empty input)                      │
+                     │   alt+r             Toggle all reasoning (empty draft)                     │
                      │   ctrl+y            Copy last response (empty input)                       │
                      │   alt+m             Mouse capture off/on — turn off to select and copy     │
                      │                     with the mouse                                         │
-                     │   ctrl+k            Toggle compact mode                                    │
+                     │   alt+c             Toggle compact mode                                    │
                      │                                                                            │
                      │   Session                                                                  │
                      │   shift+tab         Cycle mode (NORMAL/PLAN/AUTO)                          │
-                     │   ctrl+o            Open Ollama models                                     │
+                     │   ctrl+o            Open model picker                                      │
                      │   ctrl+p            Open settings                                          │
                      │ esc/q close · pgdn more · g/shift+g ends                                   │
                      ╰────────────────────────────────────────────────────────────────────────────╯

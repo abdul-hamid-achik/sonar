@@ -84,13 +84,20 @@ steps:
             contains: "Recovery blocked: write_file has a durable dispatch marker"
         timeoutMs: 3000
     - snapshot: compact_receipts
-    - press: "ctrl+b"
+    # alt+t expands every receipt. See the alt+r note below: the runner cannot
+    # press alt+<letter>, so the spec sends the bytes a terminal would.
+    - send:
+        bytes: "\et"
     - wait:
         screen:
             contains: "package ui"
         timeoutMs: 2000
     - snapshot: expanded_receipts
-    - press: "ctrl+t"
+    # alt+r collapses all reasoning. The runner rejects alt+<letter> as an
+    # unsupported key, but the chord is just ESC then the letter, so the raw
+    # bytes reach the target exactly as a terminal would send them.
+    - send:
+        bytes: "\er"
     - wait:
         screen:
             notContains: "one successful read and one failed test command"

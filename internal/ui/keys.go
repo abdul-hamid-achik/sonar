@@ -73,8 +73,17 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("f1", "show help (empty input)"),
 		),
 		ToggleTools: key.NewBinding(
-			key.WithKeys("ctrl+b"),
-			key.WithHelp("ctrl+b", "toggle all tools (empty input)"),
+			// t is the tool; alt is "all of them". ctrl+t toggles the one in
+			// focus. These were ctrl+b and ctrl+r — the same operation at two
+			// scopes, with two letters that named neither the operation nor
+			// each other.
+			//
+			// The Glyphrun runner rejects alt+<letter> as an unsupported key, so
+			// the specs send the raw ESC-prefixed bytes instead. That is what a
+			// terminal actually transmits for this chord, which makes the
+			// coverage stronger than a press alias would have been.
+			key.WithKeys("alt+t"),
+			key.WithHelp("alt+t", "toggle all tools (empty input)"),
 		),
 		PageUp: key.NewBinding(
 			key.WithKeys("pgup"),
@@ -132,7 +141,7 @@ func DefaultKeyMap() KeyMap {
 			// Ctrl+M is carriage return in ordinary terminals and therefore
 			// indistinguishable from Enter without an enhanced keyboard protocol.
 			key.WithKeys("ctrl+o"),
-			key.WithHelp("ctrl+o", "open Ollama models"),
+			key.WithHelp("ctrl+o", "open model picker"),
 		),
 		SettingsPicker: key.NewBinding(
 			key.WithKeys("ctrl+p"),
@@ -151,16 +160,22 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("↓", "next input (history active)"),
 		),
 		ToggleFocusedTool: key.NewBinding(
-			key.WithKeys("ctrl+r"),
-			key.WithHelp("ctrl+r", "toggle last tool (empty input)"),
+			// Freeing ctrl+r matters on its own: it is reverse-history-search in
+			// every shell, so binding it here fought muscle memory every day.
+			key.WithKeys("ctrl+t"),
+			key.WithHelp("ctrl+t", "toggle focused tool (empty input)"),
 		),
 		ToggleThinking: key.NewBinding(
-			key.WithKeys("ctrl+t"),
-			key.WithHelp("ctrl+t", "toggle all thoughts (empty draft)"),
+			// r for reasoning, alt because it is the batch operation. There is no
+			// single-receipt counterpart yet; ctrl+r stays free rather than being
+			// spent on one.
+			key.WithKeys("alt+r"),
+			key.WithHelp("alt+r", "toggle all reasoning (empty draft)"),
 		),
 		CompactToggle: key.NewBinding(
-			key.WithKeys("ctrl+k"),
-			key.WithHelp("ctrl+k", "toggle compact mode"),
+			// c for compact. ctrl+k is kill-line in readline, and k named nothing.
+			key.WithKeys("alt+c"),
+			key.WithHelp("alt+c", "toggle compact mode"),
 		),
 		ExternalEditor: key.NewBinding(
 			key.WithKeys("ctrl+e"),

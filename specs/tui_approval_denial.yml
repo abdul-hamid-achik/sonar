@@ -1,5 +1,5 @@
 version: 1
-contractHash: sha256:6dcdbff7ccfdad9504088fba49d9a4ffe723c2dc025af160fe007342b0e7ec43
+contractHash: sha256:b525abec0ae6eac7a68c10e25580716888b27785dfb76c15cff41dfed989bfee
 name: sonar_tui_approval_denial
 # Runner note (2026-07-16): a restricted sandbox can deny the wrapper's
 # 127.0.0.1:0 listener before sonar starts. Glyphrun currently reports
@@ -132,7 +132,7 @@ steps:
             notContains: "✓ Done"
         timeoutMs: 4000
     - snapshot: denied_receipt
-    - press: "ctrl+r"
+    - press: "ctrl+t"
     - wait:
         screen:
             contains: "tool: write"
@@ -175,7 +175,7 @@ outcomes:
             name: denied_receipt
             mode: text
     - id: denied_receipt_is_keyboard_inspectable
-      description: ctrl+r expands the denied receipt to show safe tool identity, redacted arguments, and transport/domain/evidence state
+      description: ctrl+t expands the denied receipt to show safe tool identity, redacted arguments, and transport/domain/evidence state
       verify:
         snapshot:
             name: denied_receipt_expanded

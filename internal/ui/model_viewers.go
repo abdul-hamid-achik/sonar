@@ -125,9 +125,13 @@ func (m *Model) toolActionRegistryForResolvedChat(
 	}
 	toggle := UIActionSpec{
 		ID: toolToggleActionID, Label: toggleLabel,
+		// Read the chord from the registry rather than restating it. This
+		// literal said ctrl+r while keys.go said something else after a
+		// remap, so the action hint advertised a key that no longer toggled
+		// anything — the failure mode a second copy of a binding always has.
 		Shortcut: key.NewBinding(
-			key.WithKeys("ctrl+r"),
-			key.WithHelp("ctrl+r", "expand/collapse receipt"),
+			key.WithKeys(m.keys.ToggleFocusedTool.Keys()...),
+			key.WithHelp(m.keys.ToggleFocusedTool.Help().Key, "expand/collapse receipt"),
 		),
 	}.Resolve(target, true, "")
 

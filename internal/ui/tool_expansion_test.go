@@ -114,10 +114,10 @@ func TestCtrlRTogglesLastToolThroughBubbleTeaKeyName(t *testing.T) {
 	m := newTestModel(t)
 	m.toolEntries = []ToolEntry{{Name: "write", Status: ToolStatusError, Collapsed: true}}
 
-	updated, _ := m.Update(ctrlKey('r'))
+	updated, _ := m.Update(ctrlKey('t'))
 	m = updated.(*Model)
 	if m.toolEntries[0].Collapsed {
-		t.Fatal("Ctrl+R did not expand the advertised last ToolCard")
+		t.Fatal("Ctrl+T did not expand the advertised last ToolCard")
 	}
 	if m.input.Value() != "" {
 		t.Fatalf("ToolCard chord leaked into the composer: %q", m.input.Value())
@@ -149,7 +149,7 @@ func TestCtrlRInspectionRevealsOffscreenReceiptAndRestoresFollow(t *testing.T) {
 		t.Fatalf("test receipt was not offscreen: row=%d offset=%d", toolRow, m.transcriptYOffset())
 	}
 
-	updated, _ = m.Update(ctrlKey('r'))
+	updated, _ = m.Update(ctrlKey('t'))
 	m = updated.(*Model)
 	if m.toolEntries[0].Collapsed || !m.followPaused() {
 		t.Fatalf("inspection did not expand and pause at receipt: collapsed=%v paused=%v", m.toolEntries[0].Collapsed, m.followPaused())
@@ -158,7 +158,7 @@ func TestCtrlRInspectionRevealsOffscreenReceiptAndRestoresFollow(t *testing.T) {
 		t.Fatalf("expanded receipt header remains offscreen: row=%d offset=%d height=%d", toolRow, m.transcriptYOffset(), m.viewport.Height())
 	}
 
-	updated, _ = m.Update(ctrlKey('r'))
+	updated, _ = m.Update(ctrlKey('t'))
 	m = updated.(*Model)
 	if !m.toolEntries[0].Collapsed || m.followPaused() || !m.transcriptAtBottom() {
 		t.Fatalf("hiding receipt did not restore latest-follow: collapsed=%v paused=%v bottom=%v", m.toolEntries[0].Collapsed, m.followPaused(), m.transcriptAtBottom())
@@ -180,7 +180,7 @@ func TestReceiptInspectionSettlesBeforeResizeOrBatchToggle(t *testing.T) {
 		{
 			name: "batch toggle",
 			act: func(m *Model) *Model {
-				updated, _ := m.Update(ctrlKey('b'))
+				updated, _ := m.Update(altKey('t'))
 				return updated.(*Model)
 			},
 		},
@@ -218,7 +218,7 @@ func TestReceiptInspectionSettlesBeforeResizeOrBatchToggle(t *testing.T) {
 			m.refreshTranscript()
 			m.markFollowingLatest()
 			m.transcriptGotoBottom()
-			updated, _ := m.Update(ctrlKey('r'))
+			updated, _ := m.Update(ctrlKey('t'))
 			m = updated.(*Model)
 			if !m.receiptInspectActive || !m.followPaused() {
 				t.Fatal("precondition: keyboard receipt inspection did not activate")
@@ -242,7 +242,7 @@ func TestReceiptInspectionSurvivesHeightOnlyResize(t *testing.T) {
 	m.lastTurnToolIndex = 0
 	m.invalidateEntryCache()
 	m.refreshTranscript()
-	updated, _ := m.Update(ctrlKey('r'))
+	updated, _ := m.Update(ctrlKey('t'))
 	m = updated.(*Model)
 	if !m.receiptInspectActive {
 		t.Fatal("precondition: receipt inspection did not activate")

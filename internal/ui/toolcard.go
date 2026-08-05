@@ -81,9 +81,9 @@ type ToolCard struct {
 	IsDark          bool
 	ThemeID         string
 	GlyphProfile    GlyphProfile
-	Lifecycle  ToolLifecycle
-	Projection ecosystem.ToolProjection
-	Styles     ToolCardStyles
+	Lifecycle       ToolLifecycle
+	Projection      ecosystem.ToolProjection
+	Styles          ToolCardStyles
 }
 
 // ToolCardStyles holds styles for the tool card.

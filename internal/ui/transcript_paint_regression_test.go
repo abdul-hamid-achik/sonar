@@ -329,4 +329,3 @@ func TestTranscriptPaintAsyncDiffResultPreservesSemanticBlock(t *testing.T) {
 		)
 	}
 }
-

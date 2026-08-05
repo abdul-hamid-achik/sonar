@@ -396,8 +396,6 @@ func (m *Model) renderModelPicker() string {
 		keyHint{Key: m.keys.Cancel.Help().Key, Action: m.overlayCloseLabel()},
 		keyHint{Key: m.keys.CompleteSelect.Help().Key, Action: "select"},
 		keyHint{Key: "/", Action: "filter"},
-		keyHint{Key: "d", Action: "details"}, keyHint{Key: "a", Action: "add"},
-		keyHint{Key: "r", Action: "refresh"},
 	)
 	content := strings.TrimRight(ps.List.View(), "\n")
 	if detail := m.renderModelSelectionDetail(ps, width); detail != "" {

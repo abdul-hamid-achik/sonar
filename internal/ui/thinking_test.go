@@ -405,7 +405,7 @@ func TestToggleThinkingAppliesToEveryVisibleDisclosure(t *testing.T) {
 		{Kind: "assistant", Content: "second", ThinkingContent: "second reasoning", ThinkingCollapsed: true},
 	}
 
-	updated, _ := m.Update(ctrlKey('t'))
+	updated, _ := m.Update(altKey('r'))
 	m = updated.(*Model)
 	for i, entry := range m.entries {
 		if entry.ThinkingCollapsed {
@@ -413,7 +413,7 @@ func TestToggleThinkingAppliesToEveryVisibleDisclosure(t *testing.T) {
 		}
 	}
 
-	updated, _ = m.Update(ctrlKey('t'))
+	updated, _ = m.Update(altKey('r'))
 	m = updated.(*Model)
 	for i, entry := range m.entries {
 		if !entry.ThinkingCollapsed {
@@ -534,7 +534,7 @@ func TestThoughtClickPreservesPausedScrollAnchorAtNarrowWidth(t *testing.T) {
 	}
 }
 
-func TestCtrlTTogglesSettledThoughtsDuringActiveTurnButLeavesDraftOwned(t *testing.T) {
+func TestAltRTogglesSettledThoughtsDuringActiveTurnButLeavesDraftOwned(t *testing.T) {
 	m := newTestModel(t)
 	m.entries = []ChatEntry{{
 		Kind: "assistant", Content: "earlier answer", ThinkingContent: "settled reasoning", ThinkingCollapsed: true,
@@ -542,23 +542,23 @@ func TestCtrlTTogglesSettledThoughtsDuringActiveTurnButLeavesDraftOwned(t *testi
 	m.state = StateStreaming
 	m.thinkBuf.WriteString("current live reasoning")
 
-	updated, _ := m.Update(ctrlKey('t'))
+	updated, _ := m.Update(altKey('r'))
 	m = updated.(*Model)
 	if m.entries[0].ThinkingCollapsed {
-		t.Fatal("Ctrl+T did not inspect settled reasoning during active turn")
+		t.Fatal("Alt+R did not inspect settled reasoning during active turn")
 	}
 	if got := m.thinkBuf.String(); got != "current live reasoning" {
-		t.Fatalf("Ctrl+T changed live reasoning: %q", got)
+		t.Fatalf("Alt+R changed live reasoning: %q", got)
 	}
 
 	m.entries[0].ThinkingCollapsed = true
 	m.input.SetValue("draft stays owned")
-	updated, _ = m.Update(ctrlKey('t'))
+	updated, _ = m.Update(altKey('r'))
 	m = updated.(*Model)
 	if !m.entries[0].ThinkingCollapsed {
-		t.Fatal("Ctrl+T stole a non-empty composer draft")
+		t.Fatal("Alt+R stole a non-empty composer draft")
 	}
 	if got := m.input.Value(); got != "draft stays owned" {
-		t.Fatalf("Ctrl+T changed draft: %q", got)
+		t.Fatalf("Alt+R changed draft: %q", got)
 	}
 }
