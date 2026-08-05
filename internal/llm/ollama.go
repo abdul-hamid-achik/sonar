@@ -44,9 +44,18 @@ var streamIdleTimeout = 5 * time.Minute
 var ErrStreamIdle = errors.New("provider stream produced no data within the idle timeout")
 
 // IsRetryableTransport reports whether err looks like a transient provider
-// transport failure (connection loss, truncated stream, server-side 5xx, or
-// an idle-stream watchdog) that a caller may retry with the same request.
-// Deliberate cancellation and admission deadlines are never retryable.
+// transport failure (connection loss, truncated stream, server-side 5xx, a
+// request timeout, or an idle-stream watchdog) that a caller may retry
+// immediately with the same request. Deliberate cancellation and admission
+// deadlines are never retryable.
+//
+// A 429 (rate limit / quota exhaustion) is deliberately NOT included here,
+// even though it is sometimes eventually retryable: unlike a 5xx or a
+// dropped connection, resending immediately will not resolve it and only
+// burns another billable request against an already-exhausted quota. Callers
+// that want to retry a 429 must do so through IsRetryableProviderError, which
+// forces them to consider ProviderRetryAfter (or their own backoff) instead
+// of treating it the same as an ordinary transport hiccup.
 func IsRetryableTransport(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
@@ -54,15 +63,8 @@ func IsRetryableTransport(err error) bool {
 	if errors.Is(err, ErrStreamIdle) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, io.EOF) {
 		return true
 	}
-	var httpErr *ollamaHTTPError
-	if errors.As(err, &httpErr) {
-		return httpErr.StatusCode >= http.StatusInternalServerError ||
-			httpErr.StatusCode == http.StatusTooManyRequests
-	}
-	var openAIErr *openAIHTTPError
-	if errors.As(err, &openAIErr) {
-		return openAIErr.StatusCode >= http.StatusInternalServerError ||
-			openAIErr.StatusCode == http.StatusTooManyRequests
+	if status, ok := ProviderHTTPStatus(err); ok {
+		return status >= http.StatusInternalServerError || status == http.StatusRequestTimeout
 	}
 	var netErr net.Error
 	return errors.As(err, &netErr)
@@ -163,6 +165,10 @@ type ollamaHTTPError struct {
 	StatusCode int
 	Status     string
 	Message    string
+	// RetryAfter is the provider's Retry-After response header, parsed to a
+	// duration. See openAIHTTPError.RetryAfter for the exact zero-value
+	// contract.
+	RetryAfter time.Duration
 }
 
 func (e *ollamaHTTPError) Error() string {
@@ -597,10 +603,12 @@ func ollamaStatusError(response *http.Response, body []byte) error {
 	if json.Unmarshal(body, &envelope) == nil && envelope.Error != "" {
 		message = envelope.Error
 	}
+	retryAfter, _ := parseRetryAfter(response.Header.Get("Retry-After"), time.Now())
 	return &ollamaHTTPError{
 		StatusCode: response.StatusCode,
 		Status:     response.Status,
 		Message:    message,
+		RetryAfter: retryAfter,
 	}
 }
 

@@ -565,10 +565,21 @@ type openAIHTTPError struct {
 	StatusCode int
 	Status     string
 	Message    string
+	// RetryAfter is the provider's Retry-After response header, parsed to a
+	// positive duration. Zero covers three cases that all mean "no extra
+	// wait is mandated by the header": no header was sent, the header asked
+	// for zero seconds, or an HTTP-date header had already elapsed. See
+	// IsRetryableProviderError and ProviderRetryAfter — zero is never a
+	// license to retry a 429 immediately on its own; it only means this
+	// particular signal supplied no additional delay.
+	RetryAfter time.Duration
 }
 
 // ProviderHTTPStatus reports the HTTP status a provider returned, when the
-// error carries one.
+// error carries one. It recognizes both HTTP-error shapes this package
+// produces: the OpenAI/Anthropic-dialect openAIHTTPError and Ollama's own
+// ollamaHTTPError, so callers get one status lookup regardless of which
+// client dispatched the request.
 //
 // The status code alone is a bounded, host-safe fact: unlike the response body
 // it cannot contain provider prose, an endpoint, or a credential. That makes it
@@ -578,6 +589,10 @@ func ProviderHTTPStatus(err error) (int, bool) {
 	var httpErr *openAIHTTPError
 	if errors.As(err, &httpErr) && httpErr.StatusCode > 0 {
 		return httpErr.StatusCode, true
+	}
+	var ollamaErr *ollamaHTTPError
+	if errors.As(err, &ollamaErr) && ollamaErr.StatusCode > 0 {
+		return ollamaErr.StatusCode, true
 	}
 	return 0, false
 }
@@ -593,7 +608,7 @@ func ProviderStatusHint(status int) string {
 	case status == 404:
 		return "the model or endpoint does not exist for this provider"
 	case status == 429:
-		return "rate limited"
+		return "rate limited or the account's quota is exhausted"
 	case status >= 500:
 		return "the provider is failing on its side"
 	default:
@@ -616,10 +631,12 @@ func openAIStatusError(resp *http.Response, body []byte) error {
 	if json.Unmarshal(body, &envelope) == nil && envelope.Error.Message != "" {
 		message = envelope.Error.Message
 	}
+	retryAfter, _ := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 	return &openAIHTTPError{
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Message:    message,
+		RetryAfter: retryAfter,
 	}
 }
 

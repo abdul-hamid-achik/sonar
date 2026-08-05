@@ -710,10 +710,12 @@ func anthropicStatusError(resp *http.Response, body []byte) error {
 	if json.Unmarshal(body, &envelope) == nil && envelope.Error.Message != "" {
 		message = envelope.Error.Message
 	}
+	retryAfter, _ := parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 	return &openAIHTTPError{
 		StatusCode: resp.StatusCode,
 		Status:     resp.Status,
 		Message:    message,
+		RetryAfter: retryAfter,
 	}
 }
 

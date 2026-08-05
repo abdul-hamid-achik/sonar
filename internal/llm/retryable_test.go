@@ -28,8 +28,16 @@ func TestIsRetryableTransportClassification(t *testing.T) {
 		{"eof", io.EOF, true},
 		{"server 500", &ollamaHTTPError{StatusCode: http.StatusInternalServerError, Status: "500"}, true},
 		{"server 503", &ollamaHTTPError{StatusCode: http.StatusServiceUnavailable, Status: "503"}, true},
-		{"throttled 429", &ollamaHTTPError{StatusCode: http.StatusTooManyRequests, Status: "429"}, true},
+		{"request timeout 408", &ollamaHTTPError{StatusCode: http.StatusRequestTimeout, Status: "408"}, true},
+		// A 429 is deliberately NOT an immediate-retry transport hiccup: see
+		// IsRetryableProviderError and the classification tests in
+		// provider_status_test.go. Resending a rate-limited/quota-exhausted
+		// request immediately cannot succeed and wastes another request.
+		{"throttled 429", &ollamaHTTPError{StatusCode: http.StatusTooManyRequests, Status: "429"}, false},
+		{"throttled 429 openai dialect", &openAIHTTPError{StatusCode: http.StatusTooManyRequests, Status: "429"}, false},
 		{"client 404", &ollamaHTTPError{StatusCode: http.StatusNotFound, Status: "404"}, false},
+		{"client 401", &ollamaHTTPError{StatusCode: http.StatusUnauthorized, Status: "401"}, false},
+		{"client 403", &ollamaHTTPError{StatusCode: http.StatusForbidden, Status: "403"}, false},
 		{"client 400", &ollamaHTTPError{StatusCode: http.StatusBadRequest, Status: "400"}, false},
 		{"net op error", &net.OpError{Op: "read", Err: errors.New("connection reset by peer")}, true},
 		{"plain provider error", errors.New("model requires more system memory"), false},
