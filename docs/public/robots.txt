@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://local-agent.dev/sitemap.xml

@@ -93,5 +93,4 @@ Two providers complete real tool-call turns end to end, not just unit tests:
 
 - Only the OpenAI-compatible dialect exists. That covers 27 of the catalog's 40 providers; **anthropic (4), google, azure, bedrock, and vertex will not work** until their dialects land.
 - The Ollama adapter and inventory are still compiled into `internal/llm` and reachable via an explicit `provider: {type: ollama}`. 23 non-test UI files still reference them, down from 49.
-- `docs/` still carries prose inherited from local-agent and has not been rewritten.
 - The catalog is a pinned snapshot; `sonar providers refresh` does not exist yet.

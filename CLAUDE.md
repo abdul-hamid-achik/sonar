@@ -2,13 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-sonar is an open-source harness. There is no public website yet; `docs/` is
-reference prose still largely inherited from the `local-agent` upstream and not
-rewritten for sonar.
+sonar is an open-source harness. It has no website and no `docs/` tree: the
+`README.md` and `config.example.yaml` are the documentation, and they are
+sonar's own. A `docs/` inherited from the `local-agent` upstream lived here
+until it was removed — every page described a different product and told the
+reader to install it. Wrong documentation is worse than none, so if a doc tree
+returns, it gets written for sonar or it does not ship.
 
-Because it is public: no maintainer-specific paths, usernames, host names, or
-private tool inventories in tracked files. Examples use neutral defaults such
-as `~/.config/sonar/env`.
+Because it is meant to be public: no maintainer-specific paths, usernames, host
+names, or private tool inventories in tracked files. Examples use neutral
+defaults such as `~/.config/sonar/env`. Store ADRs in
+`~/notes/projects/sonar/adrs/`, never in this repository.
 
 ## Provider Boundary
 
@@ -120,7 +124,7 @@ The first matching file wins; files are not merged:
 5. `$HOME/.config/sonar/config.yaml`
 6. `$HOME/.config/sonar/config.yml`
 
-Environment overrides apply afterward. Shared profiles live under `~/.agents/agents/<name>/agent.yaml`; shared skills live under `~/.agents/skills/<name>/SKILL.md`. See `config.example.yaml` and `docs/configuration.md` before changing precedence or paths.
+Environment overrides apply afterward. Shared profiles live under `~/.agents/agents/<name>/agent.yaml`; shared skills live under `~/.agents/skills/<name>/SKILL.md`. See `config.example.yaml` before changing precedence or paths.
 
 ## TUI Development Rules
 
