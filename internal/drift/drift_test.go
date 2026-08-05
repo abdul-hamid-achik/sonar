@@ -33,10 +33,16 @@ import (
 // syncedPackages are byte-identical today, module path aside, and are expected
 // to stay that way. Removing a package from this list is a decision to let the
 // two harnesses diverge there — make it deliberately, with a reason.
+//
+// expertselector was removed from this list when sonar deleted expert
+// consultation outright: the feature selected several distinct models from a
+// LOCAL multi-model Ollama inventory, and sonar's hosted providers serve one
+// model per profile with no inventory to select from. local-agent keeps the
+// package because it keeps the local inventory; sonar no longer has the
+// package at all, which is divergence by decision, not drift.
 var syncedPackages = []string{
 	"controlplane",
 	"execution",
-	"expertselector",
 	"imageasset",
 	"initcmd",
 	"netpolicy",

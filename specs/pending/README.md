@@ -15,19 +15,23 @@ spec name rather than path, so a spec moves back with a single `git mv`.
 ## `tui_agents.yml`
 
 Drives an expert consultation — several models reviewed in parallel and
-reported in the Agent Hub. `cmd/sonar/main.go` gates that feature on
-`!provider.IsRemote()`, and every provider is remote now, so it is off in every
-configuration sonar supports.
+reported in the Agent Hub. The feature consulted a **multi-model local
+inventory**: it picked distinct models off `/api/tags` and ran them side by
+side. A hosted provider serves one model per profile and exposes no inventory
+to choose from, so the feature as built had nothing to stand on once every
+provider became remote.
 
-That is not an oversight in the gate. The runtime consults a **multi-model
-local inventory**: it picks distinct models off `/api/tags` and runs them side
-by side. A hosted provider serves one model per profile and exposes no
-inventory to choose from, so the feature as built has nothing to stand on.
+This parking is now **permanent, not deferred**: the expert machinery itself
+has been deleted — the Agent Hub and expert UI, the agent-side
+`consult_experts` dispatch, and the `internal/expertteam` /
+`internal/expertselector` packages are gone, and `internal/tools` (drift-
+synced, so it still defines `consult_experts`) is filtered so the definition
+never reaches the model. There is no longer a gate to flip.
 
 This is the part of the Ollama decision that cost something real. Moving to
 cloud-only Ollama did not just delete a daemon; it removed the only surface
 that could satisfy the expert team.
 
-**Moves back when:** expert consultation is rebuilt on multiple hosted provider
-profiles instead of a local inventory. **Delete it when:** the expert-team
-runtime is removed with the rest of the local machinery.
+The spec stays as the behavioural record of what was removed. **Moves back
+when:** expert consultation is rebuilt from history on multiple hosted
+provider profiles instead of a local inventory — a rebuild, not a revert.
