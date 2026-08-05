@@ -12,6 +12,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/log"
 	"github.com/google/jsonschema-go/jsonschema"
 
 	"github.com/abdul-hamid-achik/sonar/internal/ecosystem"
@@ -236,7 +237,11 @@ func (a *Agent) RequireExecutionLedger(required bool) {
 }
 
 type executionRuntime struct {
-	ledger         ExecutionLedger
+	ledger ExecutionLedger
+	// logger carries the session log through to appendExecutionEvent, which is
+	// a free function and so cannot reach the Agent. See trace.go for why the
+	// trace hangs off that seam rather than off dispatch.
+	logger         *log.Logger
 	sessionID      int64
 	workspaceID    string
 	runID          string
@@ -263,6 +268,7 @@ func (a *Agent) executionRuntime(ctx context.Context) (executionRuntime, error) 
 	a.mu.RLock()
 	runtime := executionRuntime{
 		ledger:         a.executionLedger,
+		logger:         a.logger,
 		sessionID:      a.executionSessionID,
 		runID:          a.executionRunID,
 		snapshotCursor: a.executionCursor,
@@ -360,19 +366,27 @@ func (a *Agent) latchUnresolvedExecution(err *UnresolvedExecutionError) {
 
 func appendExecutionEvent(ctx context.Context, runtime executionRuntime, event executionpkg.Event) error {
 	if runtime.ledger == nil {
+		// An embedding without a ledger still ran the tool, and its trace is
+		// the only record there will be.
+		traceExecutionEvent(runtime.logger, event, nil)
 		return nil
 	}
 	if event.OccurredAt.IsZero() {
 		event.OccurredAt = time.Now().UTC()
 	}
 	if err := event.Validate(); err != nil {
-		return fmt.Errorf("validate %s execution event: %w", event.Type, err)
+		err = fmt.Errorf("validate %s execution event: %w", event.Type, err)
+		traceExecutionEvent(runtime.logger, event, err)
+		return err
 	}
 	durableCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), executionLedgerTimeout)
 	defer cancel()
 	if _, _, err := runtime.ledger.AppendExecutionEvent(durableCtx, event); err != nil {
-		return fmt.Errorf("append %s execution event: %w", event.Type, err)
+		err = fmt.Errorf("append %s execution event: %w", event.Type, err)
+		traceExecutionEvent(runtime.logger, event, err)
+		return err
 	}
+	traceExecutionEvent(runtime.logger, event, nil)
 	return nil
 }
 

@@ -576,7 +576,18 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 		}
 
 		if t.lg != nil {
-			t.lg.Debug("tool", "name", tc.Name, "kind", kind, "ms", duration.Milliseconds(), "error", isErr)
+			// Correlate with the lifecycle trace in trace.go. This line used to
+			// carry name/kind/ms/error and nothing else, so a failure could be
+			// seen but never attributed: no execution to join on, and no reason.
+			t.lg.Debug("tool dispatched",
+				"execution", tracked.identity.ExecutionID,
+				"name", tc.Name,
+				"kind", kind,
+				"effect", tracked.identity.EffectClass,
+				"iter", i,
+				"ms", duration.Milliseconds(),
+				"error", isErr,
+			)
 		}
 		emitSemanticToolResult(
 			t.out, tc.ID, tc.Name, durableResult, structured, isErr, transportErr, duration, projection,
