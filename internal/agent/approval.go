@@ -131,9 +131,17 @@ func (a *Agent) buildApprovalPreview(ctx context.Context, tc llm.ToolCall, argum
 		}
 		preview.Diff, preview.DiffTruncated, preview.DiffOmittedReason = approvalDiff(ctx, before, content)
 	case "edit":
+		preview.Path = pathArg("path", false)
+		// A string-replacement edit carries no patch body to display, so its
+		// preview diff is derived from the exact replacement instead. The
+		// preview kind, path resolution and hashes are identical to the patch
+		// mode: the approval contract does not depend on which mode was used.
+		if edit, replacementMode := parseReplacementEdit(tc.Arguments); replacementMode {
+			a.replacementEditPreview(ctx, &preview, edit)
+			break
+		}
 		preview.Kind = permissionpkg.PreviewFilePatch
 		preview.Consequence = "Changes the target file according to the proposed patch."
-		preview.Path = pathArg("path", false)
 		patch, _ := tc.Arguments["patch"].(string)
 		preview.Diff = patch
 		if len(preview.Diff) > maxApprovalDiffBytes {

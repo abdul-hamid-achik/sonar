@@ -771,7 +771,7 @@ func (a *Agent) preflightToolCall(kind executionpkg.Kind, tc llm.ToolCall) error
 			if err := preflightRequiredString(tc.Arguments, "path", false); err != nil {
 				return err
 			}
-			return preflightRequiredString(tc.Arguments, "patch", false)
+			return preflightEditArguments(tc.Arguments)
 		case "copy", "move":
 			if err := preflightRequiredString(tc.Arguments, "source", false); err != nil {
 				return err

@@ -184,7 +184,7 @@ func DiffToolDef() llm.ToolDef {
 func EditToolDef() llm.ToolDef {
 	return llm.ToolDef{
 		Name:        "edit",
-		Description: "Atomically apply a complete unified-diff patch to one file. Use this for targeted edits without overwriting the entire file. Submit all related hunks together—do not split a coherent patch merely to fit an approval display. Format: @@ -start,count +new_start,new_count @@ followed by - (remove), + (add), or space (context) lines.",
+		Description: "Atomically edit one file in place by replacing exact text. Pass old_string (the text to replace, copied verbatim from the current file) and new_string (what it becomes). No line numbers, no @@ headers, no leading +/-/space markers—just the two literal strings. old_string must appear exactly once: a target that matches nothing or several places is refused, so include enough surrounding lines to make it unique, or pass replace_all to change every occurrence. Read the file first and copy the target text exactly, including indentation. Submit all related changes together—do not split a coherent edit merely to fit an approval display. A complete unified diff may instead be supplied in patch, but it must carry exact line numbers and byte-exact context, so old_string/new_string is the reliable choice.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -192,12 +192,24 @@ func EditToolDef() llm.ToolDef {
 					"type":        "string",
 					"description": "Path to the file to edit.",
 				},
+				"old_string": map[string]any{
+					"type":        "string",
+					"description": "Exact text to replace, copied verbatim from the current file including whitespace and indentation. Matched literally—regex and glob syntax have no special meaning. Must match exactly once unless replace_all is true.",
+				},
+				"new_string": map[string]any{
+					"type":        "string",
+					"description": "Text that replaces old_string. Use an empty string to delete the matched text.",
+				},
+				"replace_all": map[string]any{
+					"type":        "boolean",
+					"description": "Replace every occurrence of old_string instead of refusing an ambiguous match (default: false). Only use this when changing all occurrences is intended, such as renaming a symbol.",
+				},
 				"patch": map[string]any{
 					"type":        "string",
-					"description": "Unified diff patch to apply. Format: @@ -start,count +new_start,new_count @@ followed by -line (remove), +line (add), or context line.",
+					"description": "Alternative to old_string/new_string: a complete unified diff. Format: @@ -start,count +new_start,new_count @@ followed by -line (remove), +line (add), or context line. Line numbers must reflect the file as it is right now, including edits already applied this session. Prefer old_string/new_string; never send both.",
 				},
 			},
-			"required": []string{"path", "patch"},
+			"required": []string{"path"},
 		},
 	}
 }
