@@ -988,3 +988,57 @@ func addAutoCommandReadGrant(t *testing.T, ag *Agent, path string) {
 		t.Fatalf("add read grant: %v", err)
 	}
 }
+
+func TestAutoCommandReasonLabelIsBoundedOperatorFacingText(t *testing.T) {
+	tests := []struct {
+		name    string
+		reason  autoCommandReason
+		command string
+		want    string
+	}{
+		{name: "empty", reason: autoCommandReasonEmpty, command: "   ", want: "empty command"},
+		{name: "bounds", reason: autoCommandReasonBounds, command: strings.Repeat("x", maxAutoCommandBytes+1), want: "command exceeds the bounded shell subset"},
+		{name: "dynamic question expansion", reason: autoCommandReasonDynamicSyntax, command: "echo $?", want: "dynamic shell syntax ($?)"},
+		{name: "dynamic command substitution", reason: autoCommandReasonDynamicSyntax, command: "go $(date)", want: "dynamic shell syntax ($)"},
+		{name: "dynamic backtick", reason: autoCommandReasonDynamicSyntax, command: "echo `date`", want: "dynamic shell syntax (`)"},
+		{name: "dynamic grouping", reason: autoCommandReasonDynamicSyntax, command: "echo {a,b}", want: "dynamic shell syntax ({)"},
+		{name: "dynamic syntax without a command", reason: autoCommandReasonDynamicSyntax, command: "", want: "dynamic shell syntax"},
+		{name: "ambiguous composition", reason: autoCommandReasonAmbiguousComposition, command: "cd /tmp && ls", want: "ambiguous command composition"},
+		{name: "executable", reason: autoCommandReasonExecutable, command: "custom-tool", want: "executable outside the host catalog"},
+		{name: "arguments", reason: autoCommandReasonArguments, command: "go build -ldflags x", want: "arguments outside the host catalog"},
+		{name: "path authority", reason: autoCommandReasonPathAuthority, command: "cat ../secret.txt", want: "operand outside the workspace"},
+		{name: "allowed", reason: autoCommandReasonAllowed, command: "go test ./...", want: "admitted by the scoped shell policy"},
+		{name: "unknown reason fails closed", reason: autoCommandReason(255), command: "", want: "outside the scoped shell policy"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := autoCommandReasonLabel(tt.reason, tt.command); got != tt.want {
+				t.Fatalf("reason label = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestAutoCommandApprovalReasonIsGatedToAUTOAndNonAdmitted(t *testing.T) {
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+
+	tests := []struct {
+		name    string
+		mode    AuthorityMode
+		command string
+		want    string
+	}{
+		{name: "auto dynamic expansion", mode: AuthorityAutoScoped, command: "echo $?", want: "dynamic shell syntax ($?)"},
+		{name: "auto admitted command", mode: AuthorityAutoScoped, command: "go test ./...", want: ""},
+		{name: "normal never labels", mode: AuthorityNormal, command: "echo $?", want: ""},
+		{name: "plan never labels", mode: AuthorityPlan, command: "echo $?", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ag.autoCommandApprovalReason(tt.mode, tt.command); got != tt.want {
+				t.Fatalf("approval reason = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

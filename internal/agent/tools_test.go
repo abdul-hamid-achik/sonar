@@ -403,7 +403,7 @@ func TestMoveApprovalPreviewPreservesFinalSymlinkEntry(t *testing.T) {
 
 	ag := New(nil, nil, 0)
 	ag.SetWorkDir(workspace)
-	preview := ag.buildApprovalPreview(context.Background(), llm.ToolCall{
+	preview := ag.buildApprovalPreview(context.Background(), AuthorityNormal, llm.ToolCall{
 		Name: "move",
 		Arguments: map[string]any{
 			"source":      source,

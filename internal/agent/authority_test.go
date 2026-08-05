@@ -620,7 +620,7 @@ func TestAutoScopedTrustedMCPHonorsExplicitDeny(t *testing.T) {
 		if ag.authorityAutoApproves(AuthorityAutoScoped, call, executionpkg.KindMCP) {
 			t.Fatalf("explicit MCP deny was bypassed by %q", call.Name)
 		}
-		decision, err := ag.decideToolAuthorization(context.Background(), call, nil)
+		decision, err := ag.decideToolAuthorization(context.Background(), AuthorityAutoScoped, call, nil)
 		if err != nil || decision.allowed || decision.decision != permission.DecisionUserDeny {
 			t.Fatalf("canonical deny for %q = %#v, %v", call.Name, decision, err)
 		}
@@ -656,7 +656,7 @@ func TestGatewayPinnedDenyBlocksUncataloguedLazyAlias(t *testing.T) {
 			if got := ag.permissionCheckResult(checker, lazy); got != permission.CheckDeny {
 				t.Fatalf("lazy alias policy = %v, want deny", got)
 			}
-			decision, err := ag.decideToolAuthorization(context.Background(), lazy, nil)
+			decision, err := ag.decideToolAuthorization(context.Background(), AuthorityAutoScoped, lazy, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

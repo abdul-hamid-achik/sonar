@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,7 +44,7 @@ func TestCortexStartTaskApprovalConsequenceIsConservative(t *testing.T) {
 
 func TestBashApprovalExplainsWhyTheCommandStillNeedsADecision(t *testing.T) {
 	ag := New(nil, nil, 0)
-	preview := ag.buildApprovalPreview(context.Background(), llm.ToolCall{
+	preview := ag.buildApprovalPreview(context.Background(), AuthorityNormal, llm.ToolCall{
 		Name: "bash", Arguments: map[string]any{"command": "rm -rf build"},
 	}, "command-hash")
 	if preview.Kind != permission.PreviewCommand || preview.Command != "rm -rf build" {
@@ -53,6 +54,35 @@ func TestBashApprovalExplainsWhyTheCommandStillNeedsADecision(t *testing.T) {
 		if !strings.Contains(preview.Consequence, want) {
 			t.Fatalf("bash consequence omitted %q: %q", want, preview.Consequence)
 		}
+	}
+}
+
+func TestAutoBashApprovalPreviewCarriesTheRuleThatTripped(t *testing.T) {
+	workspace := t.TempDir()
+	ag := New(nil, nil, 0)
+	ag.SetWorkDir(workspace)
+
+	tests := []struct {
+		name       string
+		mode       AuthorityMode
+		command    string
+		wantReason string
+	}{
+		{name: "dynamic expansion", mode: AuthorityAutoScoped, command: "echo $?", wantReason: "dynamic shell syntax ($?)"},
+		{name: "workspace escape", mode: AuthorityAutoScoped, command: "cat " + filepath.Join(workspace, "..", "secret.txt"), wantReason: "operand outside the workspace"},
+		{name: "uncatalogued executable", mode: AuthorityAutoScoped, command: "definitely-not-a-command --flag", wantReason: "executable outside the host catalog"},
+		{name: "admitted command has no reason", mode: AuthorityAutoScoped, command: "go test ./...", wantReason: ""},
+		{name: "normal mode never labels", mode: AuthorityNormal, command: "echo $?", wantReason: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			preview := ag.buildApprovalPreview(context.Background(), tt.mode, llm.ToolCall{
+				Name: "bash", Arguments: map[string]any{"command": tt.command},
+			}, "request-hash")
+			if preview.Reason != tt.wantReason {
+				t.Fatalf("bash approval reason = %q, want %q (preview %#v)", preview.Reason, tt.wantReason, preview)
+			}
+		})
 	}
 }
 
@@ -99,7 +129,7 @@ func TestBuiltinApprovalPreviewsUseExactFilesystemVerbsAndConsequences(t *testin
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			preview := ag.buildApprovalPreview(context.Background(), llm.ToolCall{
+			preview := ag.buildApprovalPreview(context.Background(), AuthorityNormal, llm.ToolCall{
 				Name: tt.tool, Arguments: tt.args,
 			}, "request-hash")
 			if preview.Kind != permission.PreviewFilesystem || preview.ActionLabel != tt.wantAction {

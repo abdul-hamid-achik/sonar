@@ -875,7 +875,7 @@ func staleApprovalAuthorization(err error) toolAuthorization {
 	}
 }
 
-func (a *Agent) decideToolAuthorization(ctx context.Context, tc llm.ToolCall, beforeAsk func() error) (toolAuthorization, error) {
+func (a *Agent) decideToolAuthorization(ctx context.Context, mode AuthorityMode, tc llm.ToolCall, beforeAsk func() error) (toolAuthorization, error) {
 	if err := ctx.Err(); err != nil {
 		return toolAuthorization{cancelled: true, reason: err.Error()}, nil
 	}
@@ -918,7 +918,7 @@ func (a *Agent) decideToolAuthorization(ctx context.Context, tc llm.ToolCall, be
 				reason:      fmt.Sprintf("tool arguments cannot be bound for approval: %v", err),
 			}, nil
 		}
-		request := a.newApprovalRequest(ctx, tc, argumentsHash)
+		request := a.newApprovalRequest(ctx, mode, tc, argumentsHash)
 		if a.hasSessionApproval(request) {
 			if err := a.revalidateInteractiveApproval(state, tc); err != nil {
 				return staleApprovalAuthorization(err), nil
@@ -955,7 +955,7 @@ func (a *Agent) decideToolAuthorization(ctx context.Context, tc llm.ToolCall, be
 			if err := a.revalidateInteractiveApproval(state, tc); err != nil {
 				return staleApprovalAuthorization(err), nil
 			}
-			if err := a.revalidateApprovalPreview(ctx, tc, request); err != nil {
+			if err := a.revalidateApprovalPreview(ctx, mode, tc, request); err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
 					return toolAuthorization{cancelled: true, approval: executionpkg.ApprovalCancelled, decision: permissionPkg.DecisionCancelled, reason: ctxErr.Error()}, nil
 				}
@@ -966,7 +966,7 @@ func (a *Agent) decideToolAuthorization(ctx context.Context, tc llm.ToolCall, be
 			if err := a.revalidateInteractiveApproval(state, tc); err != nil {
 				return staleApprovalAuthorization(err), nil
 			}
-			if err := a.revalidateApprovalPreview(ctx, tc, request); err != nil {
+			if err := a.revalidateApprovalPreview(ctx, mode, tc, request); err != nil {
 				if ctxErr := ctx.Err(); ctxErr != nil {
 					return toolAuthorization{cancelled: true, approval: executionpkg.ApprovalCancelled, decision: permissionPkg.DecisionCancelled, reason: ctxErr.Error()}, nil
 				}

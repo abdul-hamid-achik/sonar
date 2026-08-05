@@ -60,7 +60,7 @@ func TestInteractiveApprovalFailsClosedWhenFilesystemStateChanges(t *testing.T) 
 		request.Response <- permissionpkg.AllowOnce()
 	})
 
-	authorization, err := ag.decideToolAuthorization(context.Background(), llm.ToolCall{
+	authorization, err := ag.decideToolAuthorization(context.Background(), AuthorityNormal, llm.ToolCall{
 		ID:   "approval-filesystem-change",
 		Name: "write",
 		Arguments: map[string]any{
@@ -90,7 +90,7 @@ func TestInteractiveApprovalKeepsPinnedTurnFilesystem(t *testing.T) {
 		request.Response <- permissionpkg.AllowOnce()
 	})
 
-	authorization, err := ag.decideToolAuthorization(context.Background(), llm.ToolCall{
+	authorization, err := ag.decideToolAuthorization(context.Background(), AuthorityNormal, llm.ToolCall{
 		ID:   "approval-pinned-filesystem",
 		Name: "write",
 		Arguments: map[string]any{
@@ -129,7 +129,7 @@ func TestInteractiveApprovalFailsClosedWhenPermissionChanges(t *testing.T) {
 		request.Response <- permissionpkg.AllowOnce()
 	})
 
-	authorization, err := ag.decideToolAuthorization(context.Background(), llm.ToolCall{
+	authorization, err := ag.decideToolAuthorization(context.Background(), AuthorityNormal, llm.ToolCall{
 		ID:   "approval-policy-change",
 		Name: "write",
 		Arguments: map[string]any{
@@ -154,7 +154,7 @@ func TestInteractiveApprovalFailsClosedWhenCallbackChanges(t *testing.T) {
 		request.Response <- permissionpkg.AllowOnce()
 	})
 
-	authorization, err := ag.decideToolAuthorization(context.Background(), llm.ToolCall{
+	authorization, err := ag.decideToolAuthorization(context.Background(), AuthorityNormal, llm.ToolCall{
 		ID:   "approval-callback-change",
 		Name: "write",
 		Arguments: map[string]any{
@@ -223,7 +223,7 @@ func TestInteractiveApprovalRejectsChangedTargetPreview(t *testing.T) {
 				request.Response <- permissionpkg.AllowOnce()
 			})
 
-			authorization, err := ag.decideToolAuthorization(context.Background(), llm.ToolCall{
+			authorization, err := ag.decideToolAuthorization(context.Background(), AuthorityNormal, llm.ToolCall{
 				ID:        "approval-target-change",
 				Name:      test.tool,
 				Arguments: test.arguments(target),

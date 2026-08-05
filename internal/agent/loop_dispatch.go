@@ -216,8 +216,19 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 		}
 		if requiresApproval {
 			var authorizationErr error
-			authorization, authorizationErr = t.a.decideToolAuthorization(ctx, tc, func() error {
-				return appendExecutionEvent(ctx, t.execRuntime, executionEvent(*tracked, executionPkg.EventApprovalRequested, executionPkg.ApprovalRequested, "", "interactive approval requested"))
+			authorization, authorizationErr = t.a.decideToolAuthorization(ctx, t.authorityMode, tc, func() error {
+				// AUTO surfacing: name the scoped-shell rule this exact bash
+				// request tripped, so the operator sees why it was not admitted
+				// instead of a bare approval request.
+				detail := "interactive approval requested"
+				if tc.Name == "bash" {
+					if command, ok := tc.Arguments["command"].(string); ok {
+						if reason := t.a.autoCommandApprovalReason(t.authorityMode, command); reason != "" {
+							detail += ": " + reason
+						}
+					}
+				}
+				return appendExecutionEvent(ctx, t.execRuntime, executionEvent(*tracked, executionPkg.EventApprovalRequested, executionPkg.ApprovalRequested, "", detail))
 			})
 			if authorizationErr != nil {
 				return dispatchOutcome{}, t.a.stopBeforeDispatchAfterLedgerError(toolCalls[toolIndex:], t.out, authorizationErr)

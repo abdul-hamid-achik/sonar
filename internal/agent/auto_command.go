@@ -68,6 +68,107 @@ func (assessment autoCommandAssessment) admitted() bool {
 	return assessment.disposition == autoCommandAdmitted
 }
 
+// autoCommandReasonLabel renders one AUTO admission denial as operator-facing
+// text. It is a bounded host projection: no raw command text, arguments, or
+// filesystem operands flow through it, so private values cannot leak into an
+// approval surface or the durable ledger. The command is consulted only to
+// name the exact expansion token a DynamicSyntax rejection tripped on.
+func autoCommandReasonLabel(reason autoCommandReason, command string) string {
+	switch reason {
+	case autoCommandReasonEmpty:
+		return "empty command"
+	case autoCommandReasonBounds:
+		return "command exceeds the bounded shell subset"
+	case autoCommandReasonDynamicSyntax:
+		if token, ok := firstDynamicShellSyntaxToken(command); ok {
+			return "dynamic shell syntax (" + token + ")"
+		}
+		return "dynamic shell syntax"
+	case autoCommandReasonAmbiguousComposition:
+		return "ambiguous command composition"
+	case autoCommandReasonExecutable:
+		return "executable outside the host catalog"
+	case autoCommandReasonArguments:
+		return "arguments outside the host catalog"
+	case autoCommandReasonPathAuthority:
+		return "operand outside the workspace"
+	case autoCommandReasonAllowed:
+		return "admitted by the scoped shell policy"
+	default:
+		return "outside the scoped shell policy"
+	}
+}
+
+// firstDynamicShellSyntaxToken mirrors hasDynamicShellSyntax and reports the
+// first expansion, grouping, or substitution token the bounded scanner
+// refuses, so the operator sees exactly what tripped the rule instead of a
+// bare rejection.
+func firstDynamicShellSyntaxToken(command string) (string, bool) {
+	runes := []rune(command)
+	var quote rune
+	escaped := false
+	for index, character := range runes {
+		if escaped {
+			escaped = false
+			continue
+		}
+		if character == '\\' && quote != '\'' {
+			escaped = true
+			continue
+		}
+		if quote == '\'' {
+			if character == quote {
+				quote = 0
+			}
+			continue
+		}
+		if quote == '"' {
+			switch character {
+			case '"':
+				quote = 0
+			case '$', '`':
+				return dynamicShellToken(runes, index), true
+			}
+			continue
+		}
+		switch character {
+		case '\'', '"':
+			quote = character
+		case '$', '`', '(', ')', '{', '}':
+			return dynamicShellToken(runes, index), true
+		}
+	}
+	return "", false
+}
+
+// dynamicShellToken names the offending expansion. The common `$?`, `$[`, and
+// `$#` forms stay visible as a pair; every other trigger reports its single
+// rune (so `$(` reads as `$` rather than an unbalanced pair).
+func dynamicShellToken(runes []rune, index int) string {
+	if runes[index] == '$' && index+1 < len(runes) {
+		switch runes[index+1] {
+		case '?', '[', '#', '*', '@', '!':
+			return string(runes[index : index+2])
+		}
+	}
+	return string(runes[index])
+}
+
+// autoCommandApprovalReason renders the host-owned reason a bash request was
+// not admitted by the scoped AUTO shell policy, or "" when that policy is not
+// in effect or the request would have been admitted. Callers pass the turn's
+// captured authority mode so a mid-turn UI mode change cannot relabel a prompt.
+func (a *Agent) autoCommandApprovalReason(mode AuthorityMode, command string) string {
+	if mode != AuthorityAutoScoped {
+		return ""
+	}
+	assessment := a.assessAutoScopedCommand(command)
+	if assessment.admitted() {
+		return ""
+	}
+	return autoCommandReasonLabel(assessment.reason, command)
+}
+
 type autoSimpleCommandAssessment struct {
 	allowed             bool
 	effect              autoCommandEffect

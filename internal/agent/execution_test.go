@@ -216,7 +216,7 @@ func TestMCPAuthorizationPreservesConfiguredPolicyAndSkippedApprovalAuditReasons
 			ag := New(nil, nil, 4096)
 			ag.SetPermissionChecker(tt.checker)
 			ag.SetApprovalCallback(tt.callback)
-			decision, err := ag.decideToolAuthorization(context.Background(), llm.ToolCall{
+			decision, err := ag.decideToolAuthorization(context.Background(), AuthorityNormal, llm.ToolCall{
 				ID: "call-cortex-status", Name: "cortex__status", Arguments: map[string]any{"taskId": "task-1"},
 			}, nil)
 			if err != nil {
@@ -408,6 +408,70 @@ func TestExecutionLedgerRecordsInteractiveApprovalAndDenial(t *testing.T) {
 		}
 		if _, err := os.Stat(filepath.Join(workDir, "no")); !os.IsNotExist(err) {
 			t.Fatalf("denied write reached backend: %v", err)
+		}
+	})
+}
+
+func TestAutoBashApprovalRequestedLedgerDetailCarriesTheReason(t *testing.T) {
+	run := func(t *testing.T, mode AuthorityMode, command string) ([]executionpkg.Event, bool) {
+		t.Helper()
+		client := &scriptedClient{responses: [][]llm.StreamChunk{
+			{{ToolCalls: []llm.ToolCall{{ID: "bash", Name: "bash", Arguments: map[string]any{"command": command}}}, Done: true}},
+			{{Text: "done", Done: true}},
+		}}
+		ledger := &fakeExecutionLedger{}
+		ag, _ := newLedgerAgent(t, client, nil, ledger)
+		ag.SetAuthorityMode(mode)
+		ag.SetPermissionChecker(permission.NewChecker(nil, false))
+		approvalAsked := false
+		ag.SetApprovalCallback(func(req permission.ApprovalRequest) {
+			approvalAsked = true
+			req.Response <- permission.ApprovalResponse{Allowed: false}
+		})
+		if err := ag.Run(context.Background(), &outputRecorder{}); err != nil {
+			t.Fatal(err)
+		}
+		return ledger.snapshot(), approvalAsked
+	}
+
+	t.Run("AUTO surfaces the rule that tripped", func(t *testing.T) {
+		events, approvalAsked := run(t, AuthorityAutoScoped, "echo $?")
+		if !approvalAsked {
+			t.Fatal("non-admitted AUTO bash command bypassed interactive authorization")
+		}
+		want := []executionpkg.EventType{executionpkg.EventRequested, executionpkg.EventApprovalRequested, executionpkg.EventDenied}
+		if got := executionEventTypes(events); !reflect.DeepEqual(got, want) {
+			t.Fatalf("events = %v, want %v", got, want)
+		}
+		if got := events[1].Detail; got != "interactive approval requested: dynamic shell syntax ($?)" {
+			t.Fatalf("approval requested detail = %q", got)
+		}
+	})
+
+	t.Run("NORMAL keeps the bare request", func(t *testing.T) {
+		events, approvalAsked := run(t, AuthorityNormal, "echo $?")
+		if !approvalAsked {
+			t.Fatal("NORMAL bash command bypassed interactive authorization")
+		}
+		if got := events[1].Detail; got != "interactive approval requested" {
+			t.Fatalf("approval requested detail = %q", got)
+		}
+	})
+
+	t.Run("AUTO admitted command skips approval", func(t *testing.T) {
+		events, approvalAsked := run(t, AuthorityAutoScoped, "true")
+		if approvalAsked {
+			t.Fatal("admitted AUTO bash command opened an approval modal")
+		}
+		want := []executionpkg.EventType{
+			executionpkg.EventRequested, executionpkg.EventApproved,
+			executionpkg.EventStarted, executionpkg.EventCompleted,
+		}
+		if got := executionEventTypes(events); !reflect.DeepEqual(got, want) {
+			t.Fatalf("events = %v, want %v", got, want)
+		}
+		if events[1].Approval != executionpkg.ApprovalPolicy {
+			t.Fatalf("AUTO approval audit = %q, want policy", events[1].Approval)
 		}
 	})
 }

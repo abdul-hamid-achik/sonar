@@ -12,7 +12,7 @@ import (
 // and MCP operation. The CLI always installs a checker; nil remains an
 // explicit embedding opt-out for package users and unit tests.
 func (a *Agent) authorizeToolCall(ctx context.Context, tc llm.ToolCall, out Output) bool {
-	decision, err := a.decideToolAuthorization(ctx, tc, nil)
+	decision, err := a.decideToolAuthorization(ctx, a.AuthorityMode(), tc, nil)
 	if err != nil || decision.cancelled {
 		return false
 	}

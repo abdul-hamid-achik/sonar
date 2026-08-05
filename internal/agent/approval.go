@@ -21,7 +21,7 @@ const (
 	maxApprovalDiffBytes      = 256 * 1024
 )
 
-func (a *Agent) newApprovalRequest(ctx context.Context, tc llm.ToolCall, argumentsHash string) permissionpkg.ApprovalRequest {
+func (a *Agent) newApprovalRequest(ctx context.Context, mode AuthorityMode, tc llm.ToolCall, argumentsHash string) permissionpkg.ApprovalRequest {
 	workspace := a.filesystemContext().workDir
 	if workspace == "" {
 		workspace, _ = os.Getwd()
@@ -40,7 +40,7 @@ func (a *Agent) newApprovalRequest(ctx context.Context, tc llm.ToolCall, argumen
 			Resource:  argumentsHash,
 		},
 	}
-	request.Preview = a.buildApprovalPreview(ctx, tc, argumentsHash)
+	request.Preview = a.buildApprovalPreview(ctx, mode, tc, argumentsHash)
 	return request
 }
 
@@ -72,7 +72,7 @@ func cloneApprovalValue(value any) any {
 	}
 }
 
-func (a *Agent) buildApprovalPreview(ctx context.Context, tc llm.ToolCall, argumentsHash string) permissionpkg.ApprovalPreview {
+func (a *Agent) buildApprovalPreview(ctx context.Context, mode AuthorityMode, tc llm.ToolCall, argumentsHash string) permissionpkg.ApprovalPreview {
 	preview := permissionpkg.ApprovalPreview{
 		Kind:            permissionpkg.PreviewGeneric,
 		ArgumentsSHA256: argumentsHash,
@@ -166,6 +166,7 @@ func (a *Agent) buildApprovalPreview(ctx context.Context, tc llm.ToolCall, argum
 		preview.Kind = permissionpkg.PreviewCommand
 		preview.Command, _ = tc.Arguments["command"].(string)
 		preview.Consequence = "Host policy did not pre-authorize this command for the current turn. Shell commands can change files, start processes, or contact external systems; inspect the exact command before allowing it."
+		preview.Reason = a.autoCommandApprovalReason(mode, preview.Command)
 	case "copy":
 		preview.Kind = permissionpkg.PreviewFilesystem
 		preview.ActionLabel = "Copy file"
@@ -207,11 +208,11 @@ func (a *Agent) buildApprovalPreview(ctx context.Context, tc llm.ToolCall, argum
 // approved. It never substitutes a newly built preview: any changed path,
 // existence/content hash, diff, command, or bounded metadata fails closed and
 // requires a fresh modal.
-func (a *Agent) revalidateApprovalPreview(ctx context.Context, tc llm.ToolCall, request permissionpkg.ApprovalRequest) error {
+func (a *Agent) revalidateApprovalPreview(ctx context.Context, mode AuthorityMode, tc llm.ToolCall, request permissionpkg.ApprovalRequest) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	current := a.buildApprovalPreview(ctx, tc, request.ArgumentsSHA256)
+	current := a.buildApprovalPreview(ctx, mode, tc, request.ArgumentsSHA256)
 	if err := ctx.Err(); err != nil {
 		return err
 	}

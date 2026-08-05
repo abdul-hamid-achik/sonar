@@ -560,7 +560,7 @@ func TestReplacementEditApprovalPreviewIsDerivedAndStable(t *testing.T) {
 		},
 	}
 
-	preview := ag.buildApprovalPreview(context.Background(), call, "args-hash")
+	preview := ag.buildApprovalPreview(context.Background(), AuthorityNormal, call, "args-hash")
 	if preview.Kind != permissionpkg.PreviewFilePatch {
 		t.Fatalf("preview kind = %q, want %q", preview.Kind, permissionpkg.PreviewFilePatch)
 	}
@@ -576,7 +576,7 @@ func TestReplacementEditApprovalPreviewIsDerivedAndStable(t *testing.T) {
 	if want := int64(len("package main\n\nconst mode = \"execution\"\n")); preview.ByteSize != want {
 		t.Fatalf("preview byte size = %d, want %d", preview.ByteSize, want)
 	}
-	if again := ag.buildApprovalPreview(context.Background(), call, "args-hash"); again != preview {
+	if again := ag.buildApprovalPreview(context.Background(), AuthorityNormal, call, "args-hash"); again != preview {
 		t.Fatal("preview is not stable across rebuilds; revalidation would reject an unchanged request")
 	}
 }
@@ -586,7 +586,7 @@ func TestReplacementEditApprovalPreviewIsDerivedAndStable(t *testing.T) {
 // empty diff as if nothing would change.
 func TestReplacementEditApprovalPreviewReportsUnappliableEdit(t *testing.T) {
 	ag, _ := newEditWorkspace(t, "preview.go", "package main\n")
-	preview := ag.buildApprovalPreview(context.Background(), llm.ToolCall{
+	preview := ag.buildApprovalPreview(context.Background(), AuthorityNormal, llm.ToolCall{
 		ID:        "edit-2",
 		Name:      "edit",
 		Arguments: map[string]any{"path": "preview.go", "old_string": "absent", "new_string": "present"},
