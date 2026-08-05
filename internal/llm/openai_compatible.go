@@ -257,7 +257,10 @@ func (c *OpenAICompatibleClient) ChatStream(ctx context.Context, opts ChatOption
 		Model:    c.Model(),
 		Messages: messages,
 		Stream:   true,
-		Tools:    convertOpenAITools(opts.Tools),
+		// Only meaningful on a streaming request, and every request here is
+		// one. Without it a spec-strict provider sends no usage at all.
+		StreamOptions: &openAIStreamOptions{IncludeUsage: true},
+		Tools:         convertOpenAITools(opts.Tools),
 	}
 	if opts.MaxEvalTokens > 0 {
 		payload.MaxTokens = opts.MaxEvalTokens
@@ -318,6 +321,25 @@ func (c *OpenAICompatibleClient) consumeSSE(ctx context.Context, body io.ReadClo
 	toolAccum := map[int]*toolCallBuilder{}
 	sawDone := false
 
+	// ProviderTiming documents itself as "provider-reported request timings
+	// plus the client-measured time to first streamed token", and this dialect
+	// reported none at all — so the --json receipt's timing block was empty for
+	// every hosted provider, including DeepSeek, the default. Only the
+	// inherited Ollama client filled it, which is why a spec driving a fake
+	// local daemon was the one place it looked like it worked.
+	//
+	// Time-to-first-token and total duration need no provider cooperation.
+	// LoadDuration and the per-phase durations do, so they stay zero, which the
+	// contract already defines as "not reported" rather than "instant".
+	streamStart := time.Now()
+	var firstToken time.Duration
+	timing := func() *ProviderTiming {
+		return &ProviderTiming{
+			TimeToFirstToken: firstToken,
+			TotalDuration:    time.Since(streamStart),
+		}
+	}
+
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
@@ -327,7 +349,7 @@ func (c *OpenAICompatibleClient) consumeSSE(ctx context.Context, body io.ReadClo
 			if errors.Is(err, io.EOF) {
 				if !sawDone {
 					// Some servers close without a terminal chunk after the last delta.
-					chunk := StreamChunk{Done: true, ToolCalls: finalizeToolCalls(toolAccum)}
+					chunk := StreamChunk{Done: true, ToolCalls: finalizeToolCalls(toolAccum), Timing: timing()}
 					if err := fn(chunk); err != nil {
 						return err
 					}
@@ -346,7 +368,7 @@ func (c *OpenAICompatibleClient) consumeSSE(ctx context.Context, body io.ReadClo
 		}
 		data := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 		if data == "[DONE]" {
-			chunk := StreamChunk{Done: true, ToolCalls: finalizeToolCalls(toolAccum)}
+			chunk := StreamChunk{Done: true, ToolCalls: finalizeToolCalls(toolAccum), Timing: timing()}
 			return fn(chunk)
 		}
 		if len(data) > maxOpenAIStreamRecordBytes {
@@ -364,6 +386,9 @@ func (c *OpenAICompatibleClient) consumeSSE(ctx context.Context, body io.ReadClo
 		}
 		choice := event.Choices[0]
 		delta := choice.Delta
+		if firstToken == 0 && (delta.Content != "" || delta.ReasoningContent != "" || delta.Reasoning != "") {
+			firstToken = time.Since(streamStart)
+		}
 		chunk := StreamChunk{
 			Text:      delta.Content,
 			Reasoning: firstNonEmpty(delta.ReasoningContent, delta.Reasoning),
@@ -391,6 +416,7 @@ func (c *OpenAICompatibleClient) consumeSSE(ctx context.Context, body io.ReadClo
 			chunk.FinishReason = finish
 			chunk.ToolCalls = finalizeToolCalls(toolAccum)
 			sawDone = true
+			chunk.Timing = timing()
 			if event.Usage != nil {
 				chunk.EvalCount = event.Usage.CompletionTokens
 				chunk.PromptEvalCount = event.Usage.PromptTokens
@@ -461,17 +487,31 @@ func firstNonEmpty(values ...string) string {
 func floatPtr(v float64) *float64 { return &v }
 
 type openAIChatRequest struct {
-	Model           string          `json:"model"`
-	Messages        []openAIMessage `json:"messages"`
-	Stream          bool            `json:"stream"`
-	Tools           []openAITool    `json:"tools,omitempty"`
-	MaxTokens       int             `json:"max_tokens,omitempty"`
-	Temperature     *float64        `json:"temperature,omitempty"`
-	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	Model    string          `json:"model"`
+	Messages []openAIMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+	// StreamOptions asks for the terminal usage receipt. The OpenAI streaming
+	// contract omits usage unless include_usage is set, and sonar's budgets are
+	// not advisory: a turn that ends without a trustworthy receipt charges its
+	// reservation fail-closed, so a provider that follows the spec strictly
+	// would exhaust a goal's budget on its first turn.
+	//
+	// DeepSeek sends usage regardless, which is why this went unnoticed until
+	// Ollama Cloud — which does not — became a supported provider.
+	StreamOptions   *openAIStreamOptions `json:"stream_options,omitempty"`
+	Tools           []openAITool         `json:"tools,omitempty"`
+	MaxTokens       int                  `json:"max_tokens,omitempty"`
+	Temperature     *float64             `json:"temperature,omitempty"`
+	ReasoningEffort string               `json:"reasoning_effort,omitempty"`
 	// Thinking is DeepSeek's explicit chain-of-thought toggle. It is a distinct
 	// control from ReasoningEffort, which only grades effort once thinking is
 	// on; reasoning_effort alone cannot switch thinking off.
 	Thinking *thinkingConfig `json:"thinking,omitempty"`
+}
+
+// openAIStreamOptions carries the one streaming option sonar needs.
+type openAIStreamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 // thinkingConfig is DeepSeek's `{"thinking": {"type": "enabled"|"disabled"}}`.

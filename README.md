@@ -4,7 +4,7 @@ A terminal coding agent for hosted models, over the API, with an API key. No loc
 
 MIT licensed. Built on [Charm](https://charm.land) and the [Catwalk](https://github.com/charmbracelet/catwalk) provider catalog.
 
-**DeepSeek V4 Flash is the default, not the boundary.** Provider metadata comes from an embedded [Catwalk](https://github.com/charmbracelet/catwalk) snapshot — 40 providers, 1403 models — so selecting `groq`, `cerebras`, or `moonshot` needs a provider name and a key, not code.
+**DeepSeek V4 Flash is the default, not the boundary.** Provider metadata comes from an embedded [Catwalk](https://github.com/charmbracelet/catwalk) snapshot — 40 providers, 1403 models — so selecting `groq`, `cerebras`, or `moonshot` needs a provider name and a key, not code. `ollama` is in that list too and means **Ollama Cloud** (`https://ollama.com/v1`, `OLLAMA_API_KEY`), not a daemon on your machine.
 
 Forked from [`local-agent`](https://github.com/abdul-hamid-achik/local-agent) and cut down. The agent loop, tool dispatch, permission model, durable goals, session store, and MCP surface came across intact; the local-first inference machinery did not.
 
@@ -160,6 +160,12 @@ Two providers complete real tool-call turns end to end, not just unit tests:
 | --- | --- | --- |
 | `deepseek` | `deepseek-v4-flash` | tool call → second iteration with `reasoning_content` echoed → receipt settled |
 | `opencode-zen` | `deepseek-v4-flash-free` | tool call → receipt settled |
+| `ollama` | `deepseek-v4-flash` | live turn against Ollama Cloud → receipt settled |
+
+Ollama Cloud reports **no token usage**, even when the request asks for it with
+`stream_options.include_usage`. Text, tool calls, and stop reasons all work;
+the context meter and cost figures read zero, and a budget denominated in eval
+tokens cannot bound a run there. Turn and wall-time budgets still can.
 
 ## Known gaps
 
@@ -167,13 +173,14 @@ Two providers complete real tool-call turns end to end, not just unit tests:
   27 catalog providers on the plain OpenAI-compatible dialect work. **Google
   and the cloud-credential families (azure, bedrock, vertex) do not**, and need
   their own dialects.
-- **Inherited Ollama code is half-removed.** The adapter and inventory are
-  still compiled into `internal/llm` and reachable via an explicit
-  `provider: {type: ollama}`, and 23 non-test UI files reference it — but the
-  UI can no longer classify an Ollama Cloud model, so the picker badges one
-  `LOCAL`. No file exists *only* for Ollama, so finishing the removal is an
-  untangling rather than a deletion. Undecided whether it goes or is rewired;
-  `specs/pending/` holds the spec that covers it.
+- **No expert consultation.** It consulted several models from a local Ollama
+  inventory, and there is no local inventory. Rebuilding it on multiple hosted
+  profiles is possible but not done; `specs/pending/tui_agents.yml` holds the
+  coverage.
+- **Local-runtime code is still compiled in.** The native Ollama client and
+  inventory remain in `internal/llm`, and UI files still reference them, but
+  nothing reaches them: every provider is hosted. Removing them is an
+  untangling rather than a deletion, because no file exists *only* for Ollama.
 - **The catalog is a pinned snapshot.** `sonar providers refresh` does not
   exist yet.
 - **No published binaries yet.** The release pipeline is wired

@@ -50,10 +50,15 @@
 # credentials:
 #   env_file: ~/.config/sonar/env
 
+# `provider: {type: ollama}` means Ollama Cloud (https://ollama.com/v1) with
+# OLLAMA_API_KEY — an ordinary hosted OpenAI-compatible provider, like groq or
+# cerebras. sonar has no local runtime and does not talk to a daemon on this
+# machine.
+#
+# The block below is NOT that. It configures a local Ollama daemon for the ICE
+# embeddings backend only, which is off by default because no hosted provider
+# sonar supports serves an embeddings endpoint. It has no effect on chat.
 ollama:
-  # Ollama is NOT used for chat. These keys only matter if you re-enable ICE
-  # retrieval below, which needs an embeddings endpoint that DeepSeek's API does
-  # not provide.
   model: "qwen3.5:2b"
   base_url: "http://localhost:11434"
   num_ctx: 16384

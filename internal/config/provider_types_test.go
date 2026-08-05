@@ -24,8 +24,21 @@ func TestEveryCatalogProviderIsRemoteAndSelectable(t *testing.T) {
 		}
 	}
 
-	if (ProviderProfile{Type: ProviderTypeOllama}).IsRemote() {
-		t.Error("the local runtime reported as remote")
+	// `ollama` now names Ollama Cloud, an ordinary hosted OpenAI-compatible
+	// provider, so it reads as remote like the rest. There is no local runtime
+	// left for it to mean. Its facts come from builtinProviderDefaults rather
+	// than the catalog, which does not carry Ollama.
+	ollama := ProviderProfile{Type: ProviderTypeOllama}
+	if !ollama.IsRemote() {
+		t.Error("ollama is not remote; it names ollama.com, not a daemon on this machine")
+	}
+	if !IsKnownProviderType(ProviderTypeOllama) {
+		t.Error("ollama is not selectable")
+	}
+	if resolved := ollama.Resolve(); resolved.BaseURL != OllamaCloudDefaultAPIEndpoint ||
+		resolved.APIKeyEnv != "OLLAMA_API_KEY" || strings.TrimSpace(resolved.Model) == "" {
+		t.Errorf("ollama resolved to base=%q key=%q model=%q, want the cloud endpoint, a credential, and a default model",
+			resolved.BaseURL, resolved.APIKeyEnv, resolved.Model)
 	}
 	if IsKnownProviderType("not-a-provider") {
 		t.Error("an unknown provider reported as selectable")

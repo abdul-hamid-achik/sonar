@@ -11,11 +11,15 @@ import (
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 )
 
+// Switching between two providers must work in both directions. This used to
+// switch to xai and back to a local Ollama runtime; `ollama` now names Ollama
+// Cloud, so both directions are hosted. A switch that dropped to a local path
+// would be the bug here, not the expectation.
 func TestSwitchProviderRemoteAndBack(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/models" {
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"data":[{"id":"grok-4.5"}]}`))
+			_, _ = w.Write([]byte(`{"data":[{"id":"grok-4.5"},{"id":"deepseek-v4-flash"}]}`))
 			return
 		}
 		http.NotFound(w, r)
@@ -23,13 +27,21 @@ func TestSwitchProviderRemoteAndBack(t *testing.T) {
 	defer server.Close()
 
 	t.Setenv("XAI_API_KEY", "test-key")
+	t.Setenv("OLLAMA_API_KEY", "test-key")
 
 	manager := NewModelManager("http://127.0.0.1:9", 4096)
 	defer manager.Close()
 	manager.ConfigureProviderCatalog(config.ProviderConfig{
 		Active: "ollama",
 		Profiles: map[string]config.ProviderProfile{
-			"ollama": {Type: config.ProviderTypeOllama},
+			// Pointed at the loopback fake rather than left to resolve: the
+			// ollama default is now ollama.com, and a unit test must not reach
+			// a metered endpoint.
+			"ollama": {
+				Type:    config.ProviderTypeOllama,
+				BaseURL: server.URL + "/v1",
+				Model:   "deepseek-v4-flash",
+			},
 			"xai": {
 				Type:    config.ProviderTypeXAI,
 				BaseURL: server.URL + "/v1",
@@ -51,11 +63,14 @@ func TestSwitchProviderRemoteAndBack(t *testing.T) {
 	if err := manager.SwitchProvider("ollama"); err != nil {
 		t.Fatal(err)
 	}
-	if manager.RemoteProvider() {
-		t.Fatal("expected ollama path")
+	if !manager.RemoteProvider() {
+		t.Fatal("switching to ollama dropped to a local path; it names ollama.com now")
 	}
-	if manager.Model() != "qwen3.5:2b" {
-		t.Fatalf("restored model = %q", manager.Model())
+	if manager.Model() != "deepseek-v4-flash" {
+		t.Fatalf("switched model = %q, want the ollama profile's model", manager.Model())
+	}
+	if manager.ActiveProviderName() != "ollama" {
+		t.Fatalf("active = %q", manager.ActiveProviderName())
 	}
 }
 

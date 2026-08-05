@@ -116,12 +116,19 @@ func (c ProviderConfig) IsRemote() bool {
 
 // IsRemote reports whether this profile dispatches to a network endpoint.
 //
-// Everything except the local Ollama runtime does. Enumerating remote types
-// instead is what silently demoted a valid catalog provider to the local path
-// and produced "no compatible local chat model is installed" for a hosted
-// model that was configured correctly.
+// Every profile does. sonar has no local runtime: `ollama` now means Ollama
+// Cloud at https://ollama.com/v1, which is an ordinary hosted OpenAI-compatible
+// provider reached with an API key, not a daemon on this machine.
+//
+// The constant is deliberate rather than an oversight. This predicate used to
+// enumerate the one local type, and enumerating provider types is what silently
+// demoted a valid catalog provider to the local path and produced "no
+// compatible local chat model is installed" for a hosted model that was
+// configured correctly. It stays as a named boundary — callers ask a question
+// with a meaning instead of assuming — and it is the seam to reopen if a local
+// runtime ever comes back.
 func (p ProviderProfile) IsRemote() bool {
-	return NormalizedProviderType(p.Type) != ProviderTypeOllama
+	return true
 }
 
 func (c ProviderConfig) asProfile() ProviderProfile {
@@ -143,8 +150,23 @@ func (c ProviderConfig) Resolve() ProviderConfig {
 func (p ProviderProfile) Resolve() ProviderProfile {
 	out := p
 	out.Type = NormalizedProviderType(out.Type)
-	if out.Type == ProviderTypeOllama {
-		// Local runtime: leave the model empty so ollama.model applies later.
+	// A provider the Catwalk snapshot does not carry. Ollama is the only one:
+	// the snapshot indexes hosted API vendors and Ollama reached that list late,
+	// so its facts live here until a refresh brings them in. The catalog stays
+	// the authority for everything it does know.
+	if defaults, ok := builtinProviderDefaults[out.Type]; ok {
+		if strings.TrimSpace(out.BaseURL) == "" {
+			out.BaseURL = defaults.BaseURL
+		}
+		if strings.TrimSpace(out.APIKeyEnv) == "" {
+			out.APIKeyEnv = defaults.APIKeyEnv
+		}
+		if strings.TrimSpace(out.Model) == "" {
+			out.Model = defaults.Model
+		}
+		if out.ContextSize <= 0 {
+			out.ContextSize = defaults.ContextSize
+		}
 		return out
 	}
 	// Every other type names a provider in the embedded catalog, which is the
@@ -192,7 +214,34 @@ const (
 	// OpenAIDefaultAPIEndpoint is the public OpenAI chat-completions host, which
 	// the generic OpenAI-compatible dialect already speaks.
 	OpenAIDefaultAPIEndpoint = "https://api.openai.com/v1"
+
+	// OllamaCloudDefaultAPIEndpoint is Ollama Cloud's OpenAI-compatible surface.
+	// Verified rather than assumed: /v1/chat/completions answers 401 without a
+	// credential and /v1/models answers 200, so the route exists and requires
+	// auth. This is NOT the daemon on localhost:11434 — sonar reaches hosted
+	// models only, and `ollama` names ollama.com the same way `groq` names Groq.
+	OllamaCloudDefaultAPIEndpoint = "https://ollama.com/v1"
 )
+
+// builtinProviderDefaults carries the providers the embedded Catwalk snapshot
+// does not list. It is a defaults table, not an allowlist: IsKnownProviderType
+// remains the only answer to whether a provider is selectable.
+//
+// Ollama Cloud speaks the plain OpenAI-compatible dialect, so it needs no
+// adapter of its own — only an endpoint, a credential variable, and a default
+// model. Its native /api protocol, the one that needs a bespoke client, is the
+// local daemon's, and sonar does not talk to local daemons.
+var builtinProviderDefaults = map[string]providerDefaults{
+	ProviderTypeOllama: {
+		BaseURL:   OllamaCloudDefaultAPIEndpoint,
+		APIKeyEnv: "OLLAMA_API_KEY",
+		// One of the 18 models ollama.com serves, and the same family sonar
+		// defaults to elsewhere, so a provider switch does not also change the
+		// class of model answering.
+		Model:       "deepseek-v4-flash",
+		ContextSize: 128000,
+	},
+}
 
 // providerEndpointFallbacks answers one question: what URL does a provider use
 // when its catalog endpoint template resolves to nothing. It is a defaults
@@ -574,7 +623,10 @@ func validateProviderProfile(name string, profile ProviderProfile) error {
 	providerType := NormalizedProviderType(profile.Type)
 	switch providerType {
 	case ProviderTypeOllama:
-		return nil
+		// Was `return nil` — no validation at all, because an unauthenticated
+		// daemon on localhost had nothing to check. Ollama Cloud is a hosted
+		// provider with a credential, so it validates like every other one and
+		// falls through to the shared checks below.
 	case ProviderTypeOpenAICompatible:
 		// A private gateway the catalog does not list. Its base_url, model, and
 		// api_key_env must all be spelled out below.

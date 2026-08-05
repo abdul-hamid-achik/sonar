@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/abdul-hamid-achik/sonar/specs/fixtures/openaiwire"
 )
 
 func TestConfiguredExpertDelay(t *testing.T) {
@@ -29,9 +31,9 @@ func TestFixturePerformsOneConsultationProtocol(t *testing.T) {
 	server := httptest.NewServer(fixtureHandler(state, 0))
 	defer server.Close()
 
-	parent := chatRequest{
+	parent := openaiwire.ChatRequest{
 		Model: fixtureModel,
-		Tools: []chatTool{{Function: struct {
+		Tools: []openaiwire.Tool{{Function: struct {
 			Name string `json:"name"`
 		}{Name: "consult_experts"}}},
 	}
@@ -39,26 +41,25 @@ func TestFixturePerformsOneConsultationProtocol(t *testing.T) {
 	if !strings.Contains(first, expertCallID) || !strings.Contains(first, "consult_experts") {
 		t.Fatalf("parent response = %q", first)
 	}
-
-	disabled := false
-	expert := chatRequest{
+	expert := openaiwire.ChatRequest{
 		Model: fixtureModel,
-		Messages: []chatMessage{
+		Messages: []openaiwire.Message{
 			{Role: "system", Content: "You are one member of a " + expertContractProbe + "."},
 			{Role: "user", Content: "Review the Agent Hub interaction contract."},
 		},
-		Think: &disabled,
+		// The plain OpenAI dialect switches thinking off with reasoning_effort.
+		ReasoningEffort: "none",
 	}
 	second := postChat(t, server.URL, expert)
 	if !strings.Contains(second, "Advisory report") {
 		t.Fatalf("expert response = %q", second)
 	}
 
-	followup := chatRequest{
+	followup := openaiwire.ChatRequest{
 		Model: fixtureModel,
-		Messages: []chatMessage{{
+		Messages: []openaiwire.Message{{
 			Role: "tool", Content: "safe bounded result",
-			ToolCallID: expertCallID, ToolName: "consult_experts",
+			ToolCallID: expertCallID, Name: "consult_experts",
 		}},
 	}
 	third := postChat(t, server.URL, followup)
@@ -76,13 +77,13 @@ func TestFixturePerformsOneConsultationProtocol(t *testing.T) {
 	}
 }
 
-func postChat(t *testing.T, baseURL string, request chatRequest) string {
+func postChat(t *testing.T, baseURL string, request openaiwire.ChatRequest) string {
 	t.Helper()
 	payload, err := json.Marshal(request)
 	if err != nil {
 		t.Fatal(err)
 	}
-	response, err := http.Post(baseURL+"/api/chat", "application/json", bytes.NewReader(payload))
+	response, err := http.Post(baseURL+"/v1/chat/completions", "application/json", bytes.NewReader(payload))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -92,7 +93,7 @@ func postChat(t *testing.T, baseURL string, request chatRequest) string {
 		t.Fatal(err)
 	}
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("POST /api/chat = %d: %s", response.StatusCode, body.String())
+		t.Fatalf("POST /v1/chat/completions = %d: %s", response.StatusCode, body.String())
 	}
 	return body.String()
 }

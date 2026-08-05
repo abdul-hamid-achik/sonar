@@ -20,6 +20,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/abdul-hamid-achik/sonar/specs/fixtures/openaiwire"
 )
 
 const fixtureModel = "qwen3.5:0.8b"
@@ -84,17 +86,6 @@ func (s *fixtureState) writeReceipt(path string, durable durableAutoState) error
 	return os.WriteFile(path, []byte(content), 0o600)
 }
 
-type chatMessage struct {
-	Role       string `json:"role"`
-	Content    string `json:"content"`
-	ToolName   string `json:"tool_name"`
-	ToolCallID string `json:"tool_call_id"`
-}
-
-type chatRequest struct {
-	Messages []chatMessage `json:"messages"`
-}
-
 func main() {
 	os.Exit(run())
 }
@@ -120,10 +111,15 @@ func run() int {
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
-	// The fixture fakes Ollama, so it says so. Relying on the default
-	// provider made the spec depend on whether a hosted credential
-	// happened to be exported in the ambient shell.
-	commandEnv := replaceEnv(hermeticEnv(), "OLLAMA_HOST", "http://"+listener.Addr().String())
+	// `ollama` is a hosted OpenAI-compatible provider now, so the fixture
+	// serves that wire shape on loopback and points the provider profile at
+	// itself. It used to fake the native /api protocol against OLLAMA_HOST,
+	// which no longer reaches anything. Declaring the provider explicitly also
+	// keeps the spec off whatever credential the ambient shell exports.
+	commandEnv := replaceEnv(hermeticEnv(), "SONAR_PROVIDER_BASE_URL", "http://"+listener.Addr().String()+"/v1")
+	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER_MODEL", fixtureModel)
+	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER_API_KEY_ENV", "FAKE_OLLAMA_API_KEY")
+	commandEnv = replaceEnv(commandEnv, "FAKE_OLLAMA_API_KEY", "fixture-key-never-leaves-loopback")
 	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER", "ollama")
 	command.Env = commandEnv
 	childErr := command.Run()
@@ -214,38 +210,17 @@ func requestLooksLikeSessionTitle(raw []byte) bool {
 		(strings.Contains(s, "Session title:") && strings.Contains(s, "User request:"))
 }
 
-func writeSessionTitleReply(w http.ResponseWriter) {
-	writeNDJSON(w, map[string]any{
-		"message": map[string]any{"role": "assistant", "content": "Fixture session"},
-		"done":    true, "done_reason": "stop", "eval_count": 2, "prompt_eval_count": 2,
-		"total_duration": 200000000, "load_duration": 10000000, "prompt_eval_duration": 40000000, "eval_duration": 150000000,
-	})
-}
-
 func fixtureHandler(state *fixtureState) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		writeJSON(w, map[string]any{"models": []map[string]any{{
-			"name": fixtureModel, "model": fixtureModel, "size": 1 << 20,
-		}}})
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
+		openaiwire.WriteModels(w, fixtureModel)
 	})
-	mux.HandleFunc("/api/show", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		writeJSON(w, map[string]any{})
-	})
-	mux.HandleFunc("/api/chat", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		var request chatRequest
+		var request openaiwire.ChatRequest
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
 			state.fail("read chat request: %v", err)
@@ -253,7 +228,7 @@ func fixtureHandler(state *fixtureState) http.Handler {
 			return
 		}
 		if requestLooksLikeSessionTitle(body) {
-			writeSessionTitleReply(w)
+			openaiwire.WriteSessionTitle(w)
 			return
 		}
 		if err := json.Unmarshal(body, &request); err != nil {
@@ -264,93 +239,34 @@ func fixtureHandler(state *fixtureState) http.Handler {
 
 		switch call := state.nextChat(); call {
 		case 1:
-			writeBashCall(w, "auto-safe-1", "go test ./...")
+			openaiwire.WriteBashCall(w, "auto-safe-1", "go test ./...")
 		case 2:
-			if !hasSuccessfulToolReceipt(request, "auto-safe-1", "bash") {
+			if !openaiwire.HasSuccessfulToolReceipt(request, "auto-safe-1", "bash") {
 				state.fail("first follow-up omitted a successful tool receipt")
 			} else {
 				state.recordToolReceipt()
 			}
-			writeBashCall(w, "auto-safe-2", "./bin/minerva stack check")
+			openaiwire.WriteBashCall(w, "auto-safe-2", "./bin/minerva stack check")
 		case 3:
-			if !hasSuccessfulToolReceipt(request, "auto-safe-2", "bash") {
+			if !openaiwire.HasSuccessfulToolReceipt(request, "auto-safe-2", "bash") {
 				state.fail("second follow-up omitted a successful tool receipt")
 			} else {
 				state.recordToolReceipt()
 			}
-			writeBashCall(w, "auto-safe-3", "./bin/minerva skill list 2>&1 | grep test-skill")
+			openaiwire.WriteBashCall(w, "auto-safe-3", "./bin/minerva skill list 2>&1 | grep test-skill")
 		case 4:
-			if !hasSuccessfulToolReceipt(request, "auto-safe-3", "bash") {
+			if !openaiwire.HasSuccessfulToolReceipt(request, "auto-safe-3", "bash") {
 				state.fail("third follow-up omitted a successful tool receipt")
 			} else {
 				state.recordToolReceipt()
 			}
-			writeNDJSON(w, map[string]any{
-				"message": map[string]any{
-					"role": "assistant", "content": "AUTO completed the safe local check and both exact Minerva queries without interruption.",
-				},
-				"done": true, "done_reason": "stop", "eval_count": 5, "prompt_eval_count": 8,
-				"total_duration": 200000000, "load_duration": 10000000, "prompt_eval_duration": 40000000, "eval_duration": 150000000,
-			})
+			openaiwire.WriteText(w, "AUTO completed the safe local check and both exact Minerva queries without interruption.")
 		default:
 			state.fail("unexpected chat request %d", call)
-			writeNDJSON(w, map[string]any{"error": "unexpected chat request", "done": true})
+			openaiwire.WriteError(w, "unexpected chat request")
 		}
 	})
 	return mux
-}
-
-func writeBashCall(w http.ResponseWriter, id, command string) {
-	writeNDJSON(w, map[string]any{
-		"message": map[string]any{
-			"role": "assistant",
-			"tool_calls": []map[string]any{{
-				"id": id,
-				"function": map[string]any{
-					"index": 0, "name": "bash",
-					"arguments": map[string]any{"command": command},
-				},
-			}},
-		},
-		"done": true, "done_reason": "stop", "eval_count": 5, "prompt_eval_count": 7,
-		"total_duration": 200000000, "load_duration": 10000000, "prompt_eval_duration": 40000000, "eval_duration": 150000000,
-	})
-}
-
-func hasSuccessfulToolReceipt(request chatRequest, expectedID, expectedName string) bool {
-	lastToolMessage := -1
-	matched := -1
-	for _, message := range request.Messages {
-		if message.Role != "tool" || message.Content == "" {
-			continue
-		}
-		lastToolMessage++
-		if message.ToolCallID != expectedID || message.ToolName != expectedName {
-			continue
-		}
-		lower := strings.ToLower(message.Content)
-		if !strings.Contains(lower, "denied") && !strings.Contains(lower, "error") &&
-			!strings.Contains(lower, "exit status") {
-			matched = lastToolMessage
-		}
-	}
-	// Ollama sends the complete conversation on every request. Requiring the
-	// expected identity to be the final tool message prevents an earlier receipt
-	// from satisfying a later follow-up.
-	return lastToolMessage >= 0 && matched == lastToolMessage
-}
-
-func writeJSON(w http.ResponseWriter, value any) {
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(value)
-}
-
-func writeNDJSON(w http.ResponseWriter, value any) {
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	_ = json.NewEncoder(w).Encode(value)
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
-	}
 }
 
 // hermeticEnv strips every provider credential and provider override the

@@ -107,8 +107,20 @@ through it, so the two cannot disagree.
 | --- | --- |
 | DeepSeek | `deepseek` |
 | Anthropic Messages | the four anthropic-family providers |
-| OpenAI-compatible | 27 of the catalog's 40 |
+| OpenAI-compatible | 27 of the catalog's 40, plus `ollama` |
 | — | google and the cloud-credential families still need dialects |
+
+`ollama` means **Ollama Cloud**, not a local daemon. It is not in the Catwalk
+snapshot, so its endpoint (`https://ollama.com/v1`), credential
+(`OLLAMA_API_KEY`) and default model come from `builtinProviderDefaults` in
+`internal/config/provider.go`. It needs no adapter: the native `/api` protocol
+that would need one is the local daemon's.
+
+`ProviderProfile.IsRemote()` is therefore constant `true`. It stays as a named
+boundary rather than being deleted — it is the seam to reopen if a local
+runtime ever returns — but two things hang off it that are now permanently
+inert: the RAM-fit model guard (nothing loads weights here) and expert
+consultation (it needs a multi-model local inventory).
 
 ### The DeepSeek contract
 

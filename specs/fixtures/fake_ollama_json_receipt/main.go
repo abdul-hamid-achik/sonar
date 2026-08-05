@@ -45,25 +45,31 @@ func run() int {
 	}
 	var chatCalls int
 	mux := http.NewServeMux()
-	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprintf(w, `{"models":[{"name":%q,"size":42,"digest":%q,"details":{"family":"qwen3"}}]}`,
-			fixtureModel, fixtureDigest)
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = fmt.Fprintf(w, `{"data":[{"id":%q}]}`, fixtureModel)
 	})
-	mux.HandleFunc("/api/show", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprint(w, `{"capabilities":["completion","tools"],"details":{"family":"qwen3"},"model_info":{"qwen3.context_length":32768}}`)
-	})
-	mux.HandleFunc("/api/ps", func(w http.ResponseWriter, _ *http.Request) {
-		_, _ = fmt.Fprintf(w, `{"models":[{"name":%q,"model":%q,"size":42,"digest":%q,"size_vram":42,"context_length":32768}]}`,
-			fixtureModel, fixtureModel, fixtureDigest)
-	})
-	mux.HandleFunc("/api/chat", func(w http.ResponseWriter, _ *http.Request) {
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, _ *http.Request) {
 		chatCalls++
+		w.Header().Set("Content-Type", "text/event-stream")
 		if chatCalls > 1 {
-			_, _ = fmt.Fprintln(w, `{"error":"unexpected extra chat request","done":true}`)
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = fmt.Fprint(w, `{"error":{"message":"unexpected extra chat request"}}`)
 			return
 		}
-		_, _ = fmt.Fprintf(w, `{"message":{"role":"assistant","content":%q},"done":true,"done_reason":"stop","eval_count":5,"prompt_eval_count":7,"total_duration":3810000000,"load_duration":50000000,"prompt_eval_duration":220000000,"eval_duration":3180000000}`+"\n",
-			fixtureAnswer)
+		// Flush the headers, then pause before the first token. Both halves
+		// matter: the client starts its clock when response headers arrive, so
+		// sleeping before the flush would delay the clock too and leave
+		// time-to-first-token at zero. This models a real provider — headers
+		// immediately, first token later — and on loopback it is the only way
+		// the assertion can tell a real measurement from an unset field.
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+		time.Sleep(15 * time.Millisecond)
+		_, _ = fmt.Fprintf(w, "data: {\"choices\":[{\"delta\":{\"content\":%q}}]}\n\n", fixtureAnswer)
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":7,\"completion_tokens\":5}}\n\n")
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
 	})
 	server := &http.Server{Handler: mux, ReadHeaderTimeout: 2 * time.Second}
 	serveDone := make(chan error, 1)
@@ -74,11 +80,15 @@ func run() int {
 	command.Stdin = os.Stdin
 	command.Stdout = io.MultiWriter(&childStdout, os.Stdout)
 	command.Stderr = os.Stderr
-	// The fixture fakes Ollama, so it says so. Relying on the default
-	// provider made the spec depend on whether a hosted credential
-	// happened to be exported in the ambient shell.
-	commandEnv := replaceEnv(hermeticEnv(), "OLLAMA_HOST", "http://"+listener.Addr().String())
-	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER", "ollama")
+	// `ollama` is a hosted OpenAI-compatible provider now, so the fixture
+	// serves that wire shape on loopback and points the provider profile at
+	// itself. It used to fake the native /api protocol against OLLAMA_HOST,
+	// which no longer reaches anything.
+	commandEnv := replaceEnv(hermeticEnv(), "SONAR_PROVIDER", "ollama")
+	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER_BASE_URL", "http://"+listener.Addr().String()+"/v1")
+	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER_MODEL", fixtureModel)
+	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER_API_KEY_ENV", "FAKE_OLLAMA_API_KEY")
+	commandEnv = replaceEnv(commandEnv, "FAKE_OLLAMA_API_KEY", "fixture-key-never-leaves-loopback")
 	command.Env = commandEnv
 	childErr := command.Run()
 
@@ -136,6 +146,7 @@ func validateReceipt(stdout string) []string {
 			EvalTokens   int64 `json:"eval_tokens"`
 		} `json:"usage"`
 		Timing *struct {
+			TTFTMS  int64 `json:"ttft_ms"`
 			EvalMS  int64 `json:"eval_ms"`
 			TotalMS int64 `json:"total_ms"`
 		} `json:"timing"`
@@ -161,14 +172,23 @@ func validateReceipt(stdout string) []string {
 	check(receipt.Text == fixtureAnswer, "text = %q", receipt.Text)
 	check(receipt.Usage.EvalTokens == 5 && receipt.Usage.PromptTokens == 7,
 		"usage = %d/%d, want 5/7", receipt.Usage.EvalTokens, receipt.Usage.PromptTokens)
+	// A hosted provider reports no per-phase durations, so eval_ms stays zero
+	// by contract ("not reported", never "instant"). Time-to-first-token and
+	// total are client-measured and must be present and positive — they were
+	// absent from every hosted turn until the OpenAI-compatible dialect started
+	// measuring them, which made this the one field the local-daemon fixture
+	// alone could satisfy.
 	if receipt.Timing == nil {
 		failures = append(failures, "timing block is missing")
 	} else {
-		check(receipt.Timing.EvalMS == 3180, "eval_ms = %d", receipt.Timing.EvalMS)
-		check(receipt.Timing.TotalMS == 3810, "total_ms = %d", receipt.Timing.TotalMS)
+		check(receipt.Timing.TTFTMS > 0, "ttft_ms = %d, want a client-measured value", receipt.Timing.TTFTMS)
+		check(receipt.Timing.TotalMS > 0, "total_ms = %d, want a client-measured value", receipt.Timing.TotalMS)
+		check(receipt.Timing.TotalMS >= receipt.Timing.TTFTMS,
+			"total_ms %d is shorter than ttft_ms %d", receipt.Timing.TotalMS, receipt.Timing.TTFTMS)
 	}
 	check(receipt.Model.Name == fixtureModel, "model.name = %q", receipt.Model.Name)
-	check(receipt.Model.Digest == fixtureDigest, "model.digest = %q", receipt.Model.Digest)
+	// No model.digest: a weight digest is a fact about locally installed
+	// weights, and sonar reaches hosted models only.
 	check(receipt.Model.NumCtx > 0, "model.num_ctx = %d", receipt.Model.NumCtx)
 	check(receipt.Session != nil && receipt.Session.Workspace != "", "session workspace is missing")
 	check(receipt.ToolCalls != nil, "tool_calls must serialize as an array")

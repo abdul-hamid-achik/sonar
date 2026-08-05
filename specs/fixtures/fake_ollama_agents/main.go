@@ -19,6 +19,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/abdul-hamid-achik/sonar/specs/fixtures/openaiwire"
 )
 
 const (
@@ -80,26 +82,6 @@ func (s *fixtureState) writeReceipt(path string) error {
 	return os.WriteFile(path, []byte(content), 0o600)
 }
 
-type chatMessage struct {
-	Role       string `json:"role"`
-	Content    string `json:"content"`
-	ToolName   string `json:"tool_name"`
-	ToolCallID string `json:"tool_call_id"`
-}
-
-type chatTool struct {
-	Function struct {
-		Name string `json:"name"`
-	} `json:"function"`
-}
-
-type chatRequest struct {
-	Model    string        `json:"model"`
-	Messages []chatMessage `json:"messages"`
-	Tools    []chatTool    `json:"tools"`
-	Think    *bool         `json:"think"`
-}
-
 func main() {
 	os.Exit(run())
 }
@@ -133,10 +115,15 @@ func run() int {
 	command.Stdin = os.Stdin
 	command.Stdout = os.Stdout
 	command.Stderr = os.Stderr
-	// The fixture fakes Ollama, so it says so. Relying on the default
-	// provider made the spec depend on whether a hosted credential
-	// happened to be exported in the ambient shell.
-	commandEnv := replaceEnv(hermeticEnv(), "OLLAMA_HOST", "http://"+listener.Addr().String())
+	// `ollama` is a hosted OpenAI-compatible provider now, so the fixture
+	// serves that wire shape on loopback and points the provider profile at
+	// itself. It used to fake the native /api protocol against OLLAMA_HOST,
+	// which no longer reaches anything. Declaring the provider explicitly also
+	// keeps the spec off whatever credential the ambient shell exports.
+	commandEnv := replaceEnv(hermeticEnv(), "SONAR_PROVIDER_BASE_URL", "http://"+listener.Addr().String()+"/v1")
+	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER_MODEL", fixtureModel)
+	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER_API_KEY_ENV", "FAKE_OLLAMA_API_KEY")
+	commandEnv = replaceEnv(commandEnv, "FAKE_OLLAMA_API_KEY", "fixture-key-never-leaves-loopback")
 	commandEnv = replaceEnv(commandEnv, "SONAR_PROVIDER", "ollama")
 	command.Env = commandEnv
 	if err := command.Start(); err != nil {
@@ -204,49 +191,10 @@ func requestLooksLikeSessionTitle(raw []byte) bool {
 		(strings.Contains(s, "Session title:") && strings.Contains(s, "User request:"))
 }
 
-func writeSessionTitleReply(w http.ResponseWriter) {
-	writeNDJSON(w, map[string]any{
-		"message": map[string]any{"role": "assistant", "content": "Fixture session"},
-		"done":    true, "done_reason": "stop", "eval_count": 2, "prompt_eval_count": 2,
-		"total_duration": 200000000, "load_duration": 10000000, "prompt_eval_duration": 40000000, "eval_duration": 150000000,
-	})
-}
-
 func fixtureHandler(state *fixtureState, expertDelay time.Duration) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/version", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, map[string]any{"version": "0.31.2-test"})
-	})
-	mux.HandleFunc("/api/tags", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		writeJSON(w, map[string]any{"models": []map[string]any{{
-			"name": fixtureModel, "model": fixtureModel, "size": 1 << 20,
-			"capabilities": []string{"completion", "tools"},
-			"details":      map[string]any{"context_length": 16384},
-		}}})
-	})
-	mux.HandleFunc("/api/show", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		writeJSON(w, map[string]any{
-			"capabilities": []string{"completion", "tools"},
-			"model_info":   map[string]any{"fixture.context_length": 16384},
-		})
-	})
-	mux.HandleFunc("/api/ps", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		writeJSON(w, map[string]any{"models": []map[string]any{{
-			"name": fixtureModel, "model": fixtureModel,
-			"size": 1 << 20, "size_vram": 1 << 20, "context_length": 16384,
-		}}})
 	})
 	mux.HandleFunc("/api/generate", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -255,12 +203,15 @@ func fixtureHandler(state *fixtureState, expertDelay time.Duration) http.Handler
 		}
 		writeJSON(w, map[string]any{"done": true})
 	})
-	mux.HandleFunc("/api/chat", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/v1/models", func(w http.ResponseWriter, _ *http.Request) {
+		openaiwire.WriteModels(w, fixtureModel)
+	})
+	mux.HandleFunc("/v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		var request chatRequest
+		var request openaiwire.ChatRequest
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
 			state.fail("read chat request: %v", err)
@@ -268,7 +219,7 @@ func fixtureHandler(state *fixtureState, expertDelay time.Duration) http.Handler
 			return
 		}
 		if requestLooksLikeSessionTitle(body) {
-			writeSessionTitleReply(w)
+			openaiwire.WriteSessionTitle(w)
 			return
 		}
 		if err := json.Unmarshal(body, &request); err != nil {
@@ -278,19 +229,19 @@ func fixtureHandler(state *fixtureState, expertDelay time.Duration) http.Handler
 		}
 		if request.Model != fixtureModel {
 			state.fail("unexpected model %q", request.Model)
-			writeNDJSON(w, map[string]any{"error": "unexpected model", "done": true})
+			openaiwire.WriteError(w, "unexpected model")
 			return
 		}
 
 		kind := classifyRequest(request)
 		if kind == "" {
 			state.fail("could not classify chat request")
-			writeNDJSON(w, map[string]any{"error": "unexpected chat request", "done": true})
+			openaiwire.WriteError(w, "unexpected chat request")
 			return
 		}
 		if count := state.record(kind); count != 1 {
 			state.fail("duplicate %s request %d", kind, count)
-			writeNDJSON(w, map[string]any{"error": "duplicate chat request", "done": true})
+			openaiwire.WriteError(w, "duplicate chat request")
 			return
 		}
 
@@ -298,7 +249,7 @@ func fixtureHandler(state *fixtureState, expertDelay time.Duration) http.Handler
 		case requestParentInitial:
 			writeExpertToolCall(w)
 		case requestExpert:
-			if request.Think == nil || *request.Think {
+			if !request.ReasoningDisabled() {
 				state.fail("expert request did not disable provider reasoning")
 			}
 			timer := time.NewTimer(expertDelay)
@@ -308,36 +259,22 @@ func fixtureHandler(state *fixtureState, expertDelay time.Duration) http.Handler
 			case <-r.Context().Done():
 				return
 			}
-			writeNDJSON(w, map[string]any{
-				"message": map[string]any{
-					"role":    "assistant",
-					"content": "Advisory report: keep the Agent Hub bounded, causal, and honest about unavailable child events.",
-				},
-				"done": true, "done_reason": "stop", "eval_count": 11, "prompt_eval_count": 17,
-				"total_duration": 200000000, "load_duration": 10000000, "prompt_eval_duration": 40000000, "eval_duration": 150000000,
-			})
+			openaiwire.WriteText(w, "Advisory report: keep the Agent Hub bounded, causal, and honest about unavailable child events.")
 		case requestParentFollowup:
-			writeNDJSON(w, map[string]any{
-				"message": map[string]any{
-					"role":    "assistant",
-					"content": "The bounded expert consultation completed and remains available in the Agent Hub.",
-				},
-				"done": true, "done_reason": "stop", "eval_count": 9, "prompt_eval_count": 19,
-				"total_duration": 200000000, "load_duration": 10000000, "prompt_eval_duration": 40000000, "eval_duration": 150000000,
-			})
+			openaiwire.WriteText(w, "The bounded expert consultation completed and remains available in the Agent Hub.")
 		}
 	})
 	return mux
 }
 
-func classifyRequest(request chatRequest) requestKind {
+func classifyRequest(request openaiwire.ChatRequest) requestKind {
 	for _, message := range request.Messages {
 		if message.Role == "system" && strings.Contains(message.Content, expertContractProbe) {
 			return requestExpert
 		}
 	}
 	for _, message := range request.Messages {
-		if message.Role == "tool" && message.ToolCallID == expertCallID && message.ToolName == "consult_experts" {
+		if message.Role == "tool" && message.ToolCallID == expertCallID && message.ToolName() == "consult_experts" {
 			return requestParentFollowup
 		}
 	}
@@ -350,38 +287,16 @@ func classifyRequest(request chatRequest) requestKind {
 }
 
 func writeExpertToolCall(w http.ResponseWriter) {
-	writeNDJSON(w, map[string]any{
-		"message": map[string]any{
-			"role": "assistant",
-			"tool_calls": []map[string]any{{
-				"id": expertCallID,
-				"function": map[string]any{
-					"index": 0,
-					"name":  "consult_experts",
-					"arguments": map[string]any{
-						"strategy":  "team",
-						"objective": "Review the Agent Hub interaction contract.",
-						"experts":   []string{"generalist"},
-					},
-				},
-			}},
-		},
-		"done": true, "done_reason": "stop", "eval_count": 5, "prompt_eval_count": 7,
-		"total_duration": 200000000, "load_duration": 10000000, "prompt_eval_duration": 40000000, "eval_duration": 150000000,
+	openaiwire.WriteToolCall(w, expertCallID, "consult_experts", map[string]any{
+		"strategy":  "team",
+		"objective": "Review the Agent Hub interaction contract.",
+		"experts":   []string{"generalist"},
 	})
 }
 
 func writeJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(value)
-}
-
-func writeNDJSON(w http.ResponseWriter, value any) {
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	_ = json.NewEncoder(w).Encode(value)
-	if flusher, ok := w.(http.Flusher); ok {
-		flusher.Flush()
-	}
 }
 
 // hermeticEnv strips every provider credential and provider override the

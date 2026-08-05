@@ -106,8 +106,11 @@ func TestProviderMultiProfileCatalog(t *testing.T) {
 	if name != "xai" || profile.APIKeyEnv != "XAI_API_KEY" {
 		t.Fatalf("active = %q %#v", name, profile)
 	}
+	// Three, not two: the ollama profile now carries OLLAMA_API_KEY, because
+	// `ollama` names Ollama Cloud rather than an unauthenticated local daemon.
+	// Every configured profile contributes a credential.
 	envs := cfg.Provider.AllAPIKeyEnvs()
-	if len(envs) != 2 {
+	if len(envs) != 3 {
 		t.Fatalf("api key envs = %#v", envs)
 	}
 	names := cfg.Provider.ProfileNames()
@@ -506,9 +509,10 @@ func TestValidate(t *testing.T) {
 		t.Fatalf("retired skills_dir error = %v", err)
 	}
 
-	// ollama.model is only required when an Ollama profile is actually
-	// selected. Under the default DeepSeek provider it is unused, so an empty
-	// value must not fail validation.
+	// ollama.model no longer selects a chat model under any provider. `ollama`
+	// names Ollama Cloud and resolves its own default from
+	// builtinProviderDefaults, so an empty ollama.model is unused either way —
+	// it survives only for the embeddings backend ICE would need.
 	c = base()
 	c.Ollama.Model = ""
 	if err := c.Validate(); err != nil {
@@ -518,8 +522,8 @@ func TestValidate(t *testing.T) {
 	c = base()
 	c.Ollama.Model = ""
 	c.Provider = ProviderConfig{Type: ProviderTypeOllama}
-	if err := c.Validate(); err == nil {
-		t.Error("empty model should fail validation when an ollama profile is active")
+	if err := c.Validate(); err != nil {
+		t.Errorf("an ollama profile must validate without ollama.model now that it resolves a hosted default: %v", err)
 	}
 
 	c = base()
@@ -628,19 +632,19 @@ func TestMemoryRiskyModelGuard(t *testing.T) {
 		}
 	}
 
-	// Validate must reject a risky model unless the override env is set.
+	// The memory guard asks whether a model's weights fit in this machine's RAM.
+	// No sonar provider loads weights here any more — `ollama` means Ollama
+	// Cloud — so the guard must stay inert for every profile, including that
+	// one. It previously fired on an ollama profile, which would now refuse a
+	// hosted model for the memory of a machine that never runs it.
 	c := defaults()
 	c.Ollama.Model = "gemma4:e4b"
 	if err := c.Validate(); err != nil {
 		t.Errorf("local memory guard must stay inert for a remote provider: %v", err)
 	}
 	c.Provider = ProviderConfig{Type: ProviderTypeOllama}
-	if err := c.Validate(); err == nil {
-		t.Error("Validate should reject gemma4:e4b on a 16GB profile")
-	}
-	t.Setenv("SONAR_ALLOW_LARGE_MODELS", "1")
 	if err := c.Validate(); err != nil {
-		t.Errorf("override env should allow large model, got: %v", err)
+		t.Errorf("local memory guard fired for Ollama Cloud, which loads no weights here: %v", err)
 	}
 	c.Ollama.Model = "qwen3.5:cloud"
 	if err := c.Validate(); err != nil {

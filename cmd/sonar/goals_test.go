@@ -500,31 +500,43 @@ func TestGoalRunExecutesAndSettlesDurableTurn(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	t.Chdir(workspace)
 
+	// An OpenAI-compatible stub. It used to speak Ollama's native /api/chat,
+	// which stopped being reachable when `ollama` became a hosted provider —
+	// and that protocol was never what this test cared about. The first turn
+	// settles with a terminal usage receipt; the second fails at the provider,
+	// which is the fail-closed accounting path asserted further down.
 	var chatCalls atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		switch request.URL.Path {
-		case "/api/tags":
-			_, _ = fmt.Fprint(writer, `{"models":[{"name":"qwen3.5:2b","size":42,"details":{"family":"qwen3"}}]}`)
-		case "/api/show":
-			_, _ = fmt.Fprint(writer, `{"capabilities":["completion","tools"],"details":{"family":"qwen3"},"model_info":{"qwen3.context_length":32768}}`)
-		case "/api/chat":
-			if chatCalls.Add(1) == 1 {
-				_, _ = fmt.Fprintln(writer, `{"message":{"role":"assistant","content":"durable turn complete"},"done":true,"eval_count":7,"prompt_eval_count":11}`)
-			} else {
-				_, _ = fmt.Fprintln(writer, `{"error":"known provider failure","done":true}`)
+		case "/v1/models":
+			_, _ = fmt.Fprint(writer, `{"data":[{"id":"deepseek-v4-flash"}]}`)
+		case "/v1/chat/completions":
+			if chatCalls.Add(1) != 1 {
+				// A provider-side failure, the OpenAI-shaped equivalent of the
+				// native stub's {"error":...} frame. The turn dies with no
+				// trustworthy terminal usage receipt, which is the fail-closed
+				// reservation path asserted further down.
+				writer.WriteHeader(http.StatusInternalServerError)
+				_, _ = fmt.Fprint(writer, `{"error":{"message":"known provider failure","type":"server_error"}}`)
+				return
 			}
+			writer.Header().Set("Content-Type", "text/event-stream")
+			_, _ = fmt.Fprint(writer, "data: {\"choices\":[{\"delta\":{\"content\":\"durable turn complete\"}}]}\n\n")
+			_, _ = fmt.Fprint(writer, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":11,\"completion_tokens\":7}}\n\n")
+			_, _ = fmt.Fprint(writer, "data: [DONE]\n\n")
 		default:
 			http.NotFound(writer, request)
 		}
 	}))
 	defer server.Close()
-	t.Setenv("OLLAMA_HOST", server.URL)
-	t.Setenv("SONAR_MODEL", "qwen3.5:2b")
-	t.Setenv("SONAR_LOCAL_ONLY", "true")
 	// This case exercises durable goal settlement, not provider selection, so
 	// it pins the stub-backed provider explicitly. Riding the default would
-	// dispatch the turn at the real DeepSeek API.
+	// dispatch the turn at a real metered API.
 	t.Setenv("SONAR_PROVIDER", "ollama")
+	t.Setenv("SONAR_PROVIDER_BASE_URL", server.URL+"/v1")
+	t.Setenv("SONAR_PROVIDER_MODEL", "deepseek-v4-flash")
+	t.Setenv("SONAR_PROVIDER_API_KEY_ENV", "GOALS_TEST_API_KEY")
+	t.Setenv("GOALS_TEST_API_KEY", "stub-key-never-leaves-loopback")
 
 	store, err := db.Open()
 	if err != nil {

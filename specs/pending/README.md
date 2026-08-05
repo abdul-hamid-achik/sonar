@@ -12,19 +12,22 @@ listed below with what would have to be true for it to move back.
 Their committed snapshots stay in `.glyphrun/snapshots/<spec-name>/`, keyed by
 spec name rather than path, so a spec moves back with a single `git mv`.
 
-## `tui_ollama_inventory.yml`
+## `tui_agents.yml`
 
-Asserts that the model picker badges an Ollama Cloud model `CLOUD · kimi-code:cloud`.
-sonar renders `LOCAL · kimi-code:cloud`, because `internal/ui/ollama_inventory.go` —
-the file that sets `descriptor.Source = OllamaModelCloud` — does not exist here.
-It was removed along with the rest of the local-first inference machinery. Both
-sites that build a descriptor now hardcode `OllamaModelLocal`.
+Drives an expert consultation — several models reviewed in parallel and
+reported in the Agent Hub. `cmd/sonar/main.go` gates that feature on
+`!provider.IsRemote()`, and every provider is remote now, so it is off in every
+configuration sonar supports.
 
-So the spec is not failing; it is describing `local-agent`, where it still runs
-and still passes. Making it pass in sonar would mean restoring cloud-model
-classification to a harness whose own documentation calls the Ollama path
-inherited dead weight and not supported.
+That is not an oversight in the gate. The runtime consults a **multi-model
+local inventory**: it picks distinct models off `/api/tags` and runs them side
+by side. A hosted provider serves one model per profile and exposes no
+inventory to choose from, so the feature as built has nothing to stand on.
 
-**Moves back when:** `provider: {type: ollama}` is confirmed as a supported
-path and the inventory UI is rewired. **Delete it when:** that provider type is
-removed instead.
+This is the part of the Ollama decision that cost something real. Moving to
+cloud-only Ollama did not just delete a daemon; it removed the only surface
+that could satisfy the expert team.
+
+**Moves back when:** expert consultation is rebuilt on multiple hosted provider
+profiles instead of a local inventory. **Delete it when:** the expert-team
+runtime is removed with the rest of the local machinery.
