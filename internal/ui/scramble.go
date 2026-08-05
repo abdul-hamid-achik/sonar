@@ -36,30 +36,33 @@ type ScrambleModel struct {
 }
 
 // NewScrambleModel creates a new scramble animation with theme-appropriate colors.
-func NewScrambleModel(isDark bool) ScrambleModel {
+func NewScrambleModel(isDark bool, themeID string) ScrambleModel {
 	s := ScrambleModel{
 		id:    1,
 		chars: make([]rune, scrambleWidth),
 		rng:   rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
-	s.SetDark(isDark)
+	s.SetDark(isDark, themeID)
 	s.randomizeChars()
 	return s
 }
 
-// SetDark updates the gradient colors for the current theme.
-func (s *ScrambleModel) SetDark(isDark bool) {
-	ld := lipgloss.LightDark(isDark)
-	// Select adaptive endpoints once, then interpolate the active theme's
-	// colors for each animation frame.
-	s.colorFrom, _ = colorful.MakeColor(ld(
-		lipgloss.Color("#0088bb"),
-		lipgloss.Color("#88c0d0"),
-	))
-	s.colorTo, _ = colorful.MakeColor(ld(
-		lipgloss.Color("#6644aa"),
-		lipgloss.Color("#b48ead"),
-	))
+// SetDark repoints the gradient at the active scheme.
+//
+// The endpoints used to be four literal hexes, and the dark pair was Nord's
+// Accent and a purple close to its Accent2 — so the wait animation painted
+// Nord on every scheme. Switching to Catppuccin or Gruvbox left this one
+// surface behind, which is the whole failure the theme registry exists to
+// prevent, and the comment here already claimed to interpolate "the active
+// theme's colors".
+//
+// Accent → Accent2 is the correct pair by meaning, not by resemblance: the
+// gradient reads as one signal travelling out and coming back, which is the
+// two-accent relationship every scheme already answers.
+func (s *ScrambleModel) SetDark(isDark bool, themeID string) {
+	palette := newSemanticPalette(isDark, themeID)
+	s.colorFrom, _ = colorful.MakeColor(palette.Accent)
+	s.colorTo, _ = colorful.MakeColor(palette.Accent2)
 }
 
 // Reset resets the animation (new ID + zero visible). Call when agent starts.

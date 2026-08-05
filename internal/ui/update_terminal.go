@@ -31,7 +31,7 @@ func (m *Model) rebuildThemedSurfaces() {
 	// owns the activity-rail lead (see renderWorkingLine).
 	m.spin.Style = m.styles.StatusDot.UnsetPaddingLeft()
 	m.syncComposerAuthority()
-	m.scramble.SetDark(m.isDark)
+	m.scramble.SetDark(m.isDark, m.themeID)
 	m.restylePickerOverlays()
 	m.restyleAgentHub()
 	m.restyleViewerModals()

@@ -440,7 +440,7 @@ func New(ag *agent.Agent, cmdReg *command.Registry, skillMgr *skill.Manager, com
 		clipboardWrite:          clipboard.WriteAll,
 		clipboardImageRead:      readClipboardImage,
 		spin:                    s,
-		scramble:                NewScrambleModel(true),
+		scramble:                NewScrambleModel(true, defaultThemeID),
 		styles:                  initialStyles,
 		keys:                    DefaultKeyMap(),
 		state:                   StateIdle,

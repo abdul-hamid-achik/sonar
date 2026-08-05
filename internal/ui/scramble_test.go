@@ -5,7 +5,7 @@ import (
 )
 
 func TestNewScrambleModel(t *testing.T) {
-	s := NewScrambleModel(true)
+	s := NewScrambleModel(true, defaultThemeID)
 
 	if s.visible != 0 {
 		t.Errorf("expected visible=0, got %d", s.visible)
@@ -22,7 +22,7 @@ func TestNewScrambleModel(t *testing.T) {
 }
 
 func TestScrambleUpdate(t *testing.T) {
-	s := NewScrambleModel(true)
+	s := NewScrambleModel(true, defaultThemeID)
 
 	// Matching tick should advance visible
 	tick := ScrambleTickMsg{ID: s.id, Frame: s.frame}
@@ -46,7 +46,7 @@ func TestScrambleUpdate(t *testing.T) {
 }
 
 func TestScrambleView(t *testing.T) {
-	s := NewScrambleModel(true)
+	s := NewScrambleModel(true, defaultThemeID)
 
 	// Empty at visible=0
 	if v := s.View(); v != "" {
@@ -63,7 +63,7 @@ func TestScrambleView(t *testing.T) {
 }
 
 func TestScrambleReset(t *testing.T) {
-	s := NewScrambleModel(true)
+	s := NewScrambleModel(true, defaultThemeID)
 
 	// Advance some ticks
 	tick := ScrambleTickMsg{ID: s.id, Frame: s.frame}
@@ -82,7 +82,7 @@ func TestScrambleReset(t *testing.T) {
 }
 
 func TestScrambleRejectsDuplicateFrameTicks(t *testing.T) {
-	s := NewScrambleModel(true)
+	s := NewScrambleModel(true, defaultThemeID)
 	tick := ScrambleTickMsg{ID: s.id, Frame: s.frame}
 
 	advanced, next := s.Update(tick)
@@ -96,14 +96,14 @@ func TestScrambleRejectsDuplicateFrameTicks(t *testing.T) {
 }
 
 func TestScrambleSetDark(t *testing.T) {
-	s := NewScrambleModel(true)
+	s := NewScrambleModel(true, defaultThemeID)
 
 	// Store dark colors
 	darkFrom := s.colorFrom
 	darkTo := s.colorTo
 
 	// Switch to light
-	s.SetDark(false)
+	s.SetDark(false, defaultThemeID)
 	if s.colorFrom == darkFrom {
 		t.Error("expected colorFrom to change for light theme")
 	}
@@ -111,7 +111,7 @@ func TestScrambleSetDark(t *testing.T) {
 		t.Error("expected colorTo to change for light theme")
 	}
 	// Switch back to dark
-	s.SetDark(true)
+	s.SetDark(true, defaultThemeID)
 	if s.colorFrom != darkFrom {
 		t.Error("expected colorFrom to match original dark theme")
 	}
