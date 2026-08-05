@@ -67,7 +67,11 @@ type Model struct {
 	// explicitly to every palette lookup rather than held in a package global,
 	// because the ui tests run in parallel and a shared mutable theme would let
 	// one test repaint another's assertions.
-	themeID               string
+	themeID string
+	// themePickerBase is the committed theme captured when the theme picker
+	// opens. Live preview mutates themeID while the user navigates; cancelling
+	// restores this value without persisting, Enter persists the previewed one.
+	themePickerBase       string
 	reducedMotion         bool
 	glyphProfile          GlyphProfile
 	evalCount             int

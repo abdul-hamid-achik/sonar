@@ -800,6 +800,12 @@ func (m *Model) buildApprovalPreview(width int) string {
 		appendRow("Action", "Run "+actionLabel)
 		appendPathRow("Target", preview.Path)
 	}
+	// Reason is host-authored static policy text (for example which scoped-shell
+	// rule a bash command tripped). It answers "why is this being asked" ahead
+	// of the generic consequence and the exact command.
+	if preview.Reason != "" {
+		appendRow("Reason", preview.Reason)
+	}
 	appendRow("Impact", boundedApprovalMetadata(preview.Consequence, approvalMaximumConsequenceBytes))
 	// Progressive disclosure: Scope stays calm on narrow panes and is visible by
 	// default on wide surfaces (>= 40 content columns).

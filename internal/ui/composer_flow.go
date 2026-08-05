@@ -137,7 +137,18 @@ func (m *Model) queueComposerFollowUp() tea.Cmd {
 	if prompt == "" && len(m.pendingImages) > 0 {
 		prompt = "Analyze the attached image."
 	}
-	if prompt == "" || m.queuedFollowUp != nil {
+	if prompt == "" {
+		return nil
+	}
+	// Slash commands run immediately when their action is safe mid-turn;
+	// anything else (and every plain prompt) uses the single follow-up slot
+	// and executes on the next iteration once the active turn settles.
+	if strings.HasPrefix(prompt, "/") {
+		if cmd, ok := m.runSlashWhileBusy(prompt); ok {
+			return cmd
+		}
+	}
+	if m.queuedFollowUp != nil {
 		return nil
 	}
 	// Transfer attachment ownership with the text. A queued instruction is one

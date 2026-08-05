@@ -242,6 +242,13 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		if m.composerEditable() {
 			return m.queueComposerFollowUp(), true
 		}
+		// The queue slot is occupied, but a safe slash command still runs
+		// immediately: local commands do not need the next-iteration slot.
+		if m.state == StateWaiting || m.state == StateStreaming {
+			if strings.HasPrefix(strings.TrimSpace(m.input.Value()), "/") {
+				return m.queueComposerFollowUp(), true
+			}
+		}
 
 	case key.Matches(msg, m.keys.Complete):
 		// Tab key for autocomplete

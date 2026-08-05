@@ -58,6 +58,7 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		case OverlayModePicker:
 			m.closeModePicker()
 		case OverlayThemePicker:
+			m.revertThemePreview()
 			m.closeThemePicker()
 		case OverlayContextDoctor:
 			m.closeContextDoctor()
@@ -187,6 +188,12 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			var cmd tea.Cmd
 			m.themePickerState.List, cmd = m.themePickerState.List.Update(msg)
 			cmds = append(cmds, cmd)
+			// Live preview: repaint the entire frame (transcript, chrome, and
+			// the picker itself) in the highlighted scheme. SetTheme is a no-op
+			// when the selection did not move, so plain keys stay cheap.
+			if selected := m.themePickerState.SelectedThemeID(); selected != "" {
+				m.SetTheme(selected)
+			}
 		}
 		return tea.Batch(cmds...), true
 	}

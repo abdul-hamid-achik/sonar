@@ -97,6 +97,9 @@ func (m *Model) openThemePicker() {
 	if m == nil {
 		return
 	}
+	// Remember the committed scheme so cancelling can always revert to it:
+	// navigation previews live without persisting anything.
+	m.themePickerBase = m.ThemeID()
 	m.themePickerState = newThemePickerState(
 		m.ThemeID(), m.width, m.height, m.isDark, m.themeID, m.glyphProfile,
 	)
@@ -107,7 +110,20 @@ func (m *Model) openThemePicker() {
 
 func (m *Model) closeThemePicker() {
 	m.themePickerState = nil
+	m.themePickerBase = ""
 	m.closeOverlayToParent()
+}
+
+// revertThemePreview restores the committed theme that was active when the
+// picker opened. Live preview never persists, so cancelling always returns to
+// the scheme the user actually confirmed before navigating.
+func (m *Model) revertThemePreview() {
+	if m == nil {
+		return
+	}
+	if base := m.themePickerBase; base != "" && m.ThemeID() != base {
+		m.SetTheme(base)
+	}
 }
 
 func (m *Model) renderThemePicker() string {
@@ -118,13 +134,29 @@ func (m *Model) renderThemePicker() string {
 	content += "\n" + m.renderThemePreview(m.themePickerState.SelectedThemeID())
 	return m.renderPickerFrame(
 		content,
-		m.pickerNavigationFooter(false),
+		m.themePickerFooter(),
 	)
 }
 
-// renderThemePreview is deliberately small: it shows the selected scheme's
-// actual surface plus its primary semantic colors without applying or
-// persisting the theme. Navigation therefore remains reversible with Escape.
+// themePickerFooter names the live-preview navigation contract explicitly:
+// moving previews the whole frame, Enter applies and persists, Escape reverts.
+func (m *Model) themePickerFooter() string {
+	width := pickerListWidth(m.width)
+	hints := []keyHint{
+		{Key: m.keys.Cancel.Help().Key, Action: "revert"},
+		{Key: m.keys.CompleteSelect.Help().Key, Action: "apply"},
+		{Key: pickerMoveKey(m.glyphProfile), Action: "preview"},
+	}
+	return pickerTextForGlyphProfile(
+		m.renderKeyHints(width, hints...),
+		m.glyphProfile,
+	)
+}
+
+// renderThemePreview is deliberately small: it shows the highlighted scheme's
+// surface plus its primary semantic colors as a legend. The whole frame behind
+// the picker is already repainted in the highlighted scheme (live preview);
+// nothing is persisted until Enter, and Escape reverts to the committed theme.
 func (m *Model) renderThemePreview(id string) string {
 	theme := resolveTheme(id)
 	palette := outputSemanticPalette(m.isDark, theme.ID)

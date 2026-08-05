@@ -93,7 +93,10 @@ func TestHelpExplainsOneSlotFollowUpLifecycle(t *testing.T) {
 	for _, want := range []string{
 		"send / queue one follow-up",
 		"enter (running)",
-		"after the current turn settles successfully",
+		// Slash commands now run mid-turn without consuming the single
+		// follow-up slot, so help states both halves of the rule.
+		"slash commands run immediately",
+		"queue until the current turn settles",
 		"esc (running)",
 		"clear a queued follow-up first",
 		"press again to cancel",

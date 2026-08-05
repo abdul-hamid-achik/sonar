@@ -713,6 +713,39 @@ func TestCommandApprovalExplainsWhyAUTOPaused(t *testing.T) {
 	}
 }
 
+func TestCommandApprovalShowsWhyAUTOPaused(t *testing.T) {
+	m := newTestModel(t)
+	m.mode = ModeAuto
+	m.width = 120
+	m.height = 36
+	m = openApprovalForTest(t, m, ToolApprovalMsg{
+		ToolName: "bash",
+		Args:     map[string]any{"command": "echo $?"},
+		Preview: permission.ApprovalPreview{
+			Kind:        permission.PreviewCommand,
+			ActionLabel: "Run command",
+			Command:     "echo $?",
+			Reason:      "dynamic shell syntax ($?)",
+			Consequence: "Host policy did not pre-authorize this command for the current turn.",
+		},
+		Scope:    permission.ApprovalScope{Kind: permission.ScopeExactRequest},
+		Response: make(chan permission.ApprovalResponse, 1),
+	})
+
+	view := ansi.Strip(m.renderApproval())
+	for _, want := range []string{
+		"Permission · bash · AUTO",
+		"Reason",
+		"dynamic shell syntax ($?)",
+		"Impact",
+		"echo $?",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("AUTO approval omitted %q:\n%s", want, view)
+		}
+	}
+}
+
 func TestLargeWriteApprovalUsesViewportInsteadOfRefusal(t *testing.T) {
 	m := newTestModel(t)
 	responses := make(chan permission.ApprovalResponse, 1)
