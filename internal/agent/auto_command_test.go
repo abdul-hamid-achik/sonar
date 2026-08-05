@@ -24,7 +24,7 @@ func TestAutoScopedCommandAllowsRoutineWorkspaceDevelopment(t *testing.T) {
 	// provenance check without executing any fixture binary.
 	hostBin := t.TempDir()
 	for _, name := range []string{
-		"bun", "cargo", "date", "go", "gofmt", "grep", "head", "npm", "rg", "sed", "swift",
+		"bun", "cargo", "date", "go", "gofmt", "grep", "head", "npm", "pnpm", "rg", "sed", "swift", "yarn",
 	} {
 		if err := os.WriteFile(filepath.Join(hostBin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 			t.Fatalf("install host executable %s: %v", name, err)
@@ -54,6 +54,16 @@ func TestAutoScopedCommandAllowsRoutineWorkspaceDevelopment(t *testing.T) {
 		"go test -run=/subtest ./...",
 		"npm test",
 		"bun test",
+		// `run <script>` carries the same trust as the direct forms above: the
+		// workspace manifest already defines what `npm test` executes, so the
+		// script name adds no authority. Only the argv shape is policed.
+		"npm run build",
+		"npm run site:build",
+		"npm run build-storybook",
+		"npm run test_e2e",
+		"bun run lint",
+		"pnpm run test",
+		"yarn run lint",
 		"CI=1 cargo check",
 		"date",
 	} {
@@ -138,26 +148,21 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 		"rg -zP needle /dev/null",
 		"rg -Pz needle /dev/null",
 		"touch -r" + filepath.Join(outside, "reference") + " target",
-		"npm run deploy",
-		"npm run site:deploy",
-		"npm run site",
-		"bun run site",
-		"npm run build:watch",
-		"npm run test:watch",
-		"npm run site:dev",
-		"npm run docs:serve",
-		"npm run site:preview",
-		"npm run test:ui",
-		"npm run test:open",
-		"npm run test:debug",
-		"npm run lint:inspect",
-		"npm run lint:mcp",
+		// `run <script>` admits exactly one conservatively named script and
+		// nothing else. What the script DOES is workspace-defined and already
+		// trusted through the direct `npm test` form; what stays refused is
+		// every argv shape that reaches past the manifest — `--` passthrough
+		// and extra arguments hand flags to the interpreter or the script, and
+		// a name outside the charset can be an option, a path, or quoted spaces.
 		"npm run format -- --plugin=file:///private/tmp/plugin.mjs",
 		"npm run lint -- --inspect-config",
 		"npm test --node-options=--inspect-wait",
 		"npm test --node-op=--inspect-wait",
-		"npm run BUILD",
 		`npm run "build "`,
+		"npm run -s",
+		"npm run --silent build",
+		"bun run ./script.sh",
+		"npm run ../outside",
 		"npm test -- --watch",
 		"pnpm run test --watch=true",
 		"yarn test --watchAll",
@@ -182,10 +187,6 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 		"make test",
 		"task site:verify",
 		"just test",
-		"npm run site:build",
-		"pnpm run test",
-		"yarn run lint",
-		"bun run build",
 		"go generate ./...",
 		"mkdir /dev/null",
 		"mkdir " + filepath.Join(outside, "dir=x"),

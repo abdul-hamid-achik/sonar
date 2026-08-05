@@ -1192,8 +1192,29 @@ func clusteredShortOptionValue(argument string, options []string) (string, bool)
 	return "", false
 }
 
+// autoPackageRunScript is the conservative shape of a manifest script name:
+// letters, digits, dash, underscore, and the conventional namespace colon
+// (`site:build`). It deliberately cannot start with `-` (an option to the
+// runner), contain `/` or `.` (a path rather than a manifest entry), or carry
+// whitespace (quoted multi-word tokens).
+var autoPackageRunScript = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_:-]{0,127}$`)
+
+// autoScopedPackageCommandAllowed admits a runner's catalogued direct
+// subcommands plus exactly `run <script>`. The script NAME grants no new
+// authority: `npm test` and `bun test` already execute whatever the workspace
+// manifest defines for those names, so refusing `bun run lint` while admitting
+// `bun test` only moved the same trust decision behind an approval prompt —
+// in one audited AUTO session those refusals surfaced as unexplained
+// "arguments outside the host catalog" prompts for routine lint/build scripts.
+// The argv shape IS the boundary and stays strict: `--` passthrough and any
+// extra argument reach the interpreter or the script with flags the catalog
+// never inspected, and the charset keeps options, paths, and quoted spaces out
+// of the script slot.
 func autoScopedPackageCommandAllowed(args []string, direct ...string) bool {
-	return len(args) == 1 && firstArgIn(args, direct...)
+	if len(args) == 1 && firstArgIn(args, direct...) {
+		return true
+	}
+	return len(args) == 2 && args[0] == "run" && autoPackageRunScript.MatchString(args[1])
 }
 
 func autoScopedGoCommandAllowed(args []string) bool {
