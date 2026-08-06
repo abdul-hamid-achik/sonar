@@ -135,6 +135,16 @@ terminal:
         with: "ctrl+p settings"
       - regex: "\\b[0-9a-f]{7}\\b"
         with: "<session>"
+      # A settled turn's duration is wall-clock: the same fixture answers in
+      # 40ms on one pass and 120ms on the next, so "Done · 0.0s" and
+      # "Done · 0.1s" are both correct and a byte-compared snapshot has to
+      # choose one. Waiting longer cannot fix a value that measures waiting.
+      #
+      # Only the sub-ten-second form is normalized. Above that the reading is
+      # whole seconds, which no fixture reaches, and a spec that ever DOES
+      # assert a real duration should still be able to.
+      - regex: "· [0-9]\\.[0-9]s"
+        with: "· <elapsed>"
 
 artifacts:
   rawLog: true

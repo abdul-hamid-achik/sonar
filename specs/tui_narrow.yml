@@ -19,6 +19,11 @@ target:
         HOME: "${projectRoot}/.glyphrun/tmp/narrow-home"
         SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/narrow-agents"
         OLLAMA_HOST: "http://127.0.0.1:1"
+        # Every other TUI spec pins this, and this one was the exception by
+        # omission rather than by decision: its snapshots capture an idle
+        # footer with no activity in it, so animation adds nothing to assert
+        # and only widens the set of frames a capture can land on.
+        SONAR_REDUCED_MOTION: "1"
 terminal:
     cols: 80
     rows: 24
