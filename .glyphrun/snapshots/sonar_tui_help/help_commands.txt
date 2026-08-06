@@ -1,6 +1,7 @@
                      ╭────────────────────────────────────────────────────────────────────────────╮
                      │ Help                                                                       │
                      │                                                                            │
+                     │                                                                            │
                      │   Session                                                                  │
                      │   shift+tab         Cycle mode (NORMAL/PLAN/AUTO)                          │
                      │   ctrl+o            Open model picker                                      │
@@ -30,6 +31,5 @@
                      │                     the turn                                               │
                      │ Slash Commands                                                             │
                      │   /help             Show help overlay with shortcuts and commands          │
-                     │   /clear            Clear conversation history                             │
-                     │ esc/q close · j/k scroll · pgup/pgdn page · 28%                            │
+                     │ esc/q close · j/k scroll · pgup/pgdn page · 27%                            │
                      ╰────────────────────────────────────────────────────────────────────────────╯

@@ -11,6 +11,7 @@
                      │   ↑                 Previous input (empty input)                           │
                      │   ↓                 Next input (history active)                            │
                      │   ctrl+e            Open in $VISUAL/$EDITOR                                │
+                     │   alt+v             Hold the mic open / close and transcribe               │
                      │                                                                            │
                      │   Read                                                                     │
                      │   pgup              Scroll up                                              │
@@ -30,6 +31,5 @@
                      │   alt+m             Mouse capture off/on — turn off to select and copy     │
                      │                     with the mouse                                         │
                      │   alt+c             Toggle compact mode                                    │
-                     │                                                                            │
                      │ esc/q close · pgdn more · g/shift+g ends                                   │
                      ╰────────────────────────────────────────────────────────────────────────────╯
