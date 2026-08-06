@@ -51,6 +51,20 @@ func TestConfinementHoldsAgainstTheRealKernel(t *testing.T) {
 		return string(output), err
 	}
 
+	// A confinement that fails to START looks exactly like one that works
+	// perfectly: every denial below passes because nothing ran. That has now
+	// happened twice — once on macOS from a copied exec.Cmd Cancel, once on
+	// Linux from a bubblewrap bind whose source did not exist — so it is a
+	// precondition rather than a case, and every later subtest inherits it.
+	requireItRuns := func(t *testing.T) {
+		t.Helper()
+		output, err := run(t, "echo confinement-runs")
+		if err != nil || !strings.Contains(output, "confinement-runs") {
+			t.Fatalf("the confined command never ran, so no denial below means anything: %v\n%s", err, output)
+		}
+	}
+	requireItRuns(t)
+
 	t.Run("workspace stays usable", func(t *testing.T) {
 		// A sandbox that breaks ordinary work gets turned off, so this case is
 		// as load-bearing as the denials below.
@@ -244,6 +258,10 @@ func TestSecretComponentsAreDeniedAtAnyDepth(t *testing.T) {
 		return string(output)
 	}
 
+	if got := runComponent(t, policy, workspace, "echo confinement-runs"); !strings.Contains(got, "confinement-runs") {
+		t.Fatalf("the confined command never ran, so no denial below means anything:\n%s", got)
+	}
+
 	for name, script := range map[string]string{
 		"workspace root":  "cat .env",
 		"nested":          "cat config/deep/.env",
@@ -352,6 +370,12 @@ func TestHostSecretPolicyIsEnforcedByTheKernel(t *testing.T) {
 		return string(output)
 	}
 
+	// Same precondition as the other kernel test, for the same reason: a
+	// confinement that fails to start makes every denial below meaningless.
+	if got := runComponent(t, policy, workspace, "echo confinement-runs"); !strings.Contains(got, "confinement-runs") {
+		t.Fatalf("the confined command never ran, so no denial below means anything:\n%s", got)
+	}
+
 	for path := range secrets {
 		t.Run("denies/"+filepath.Base(filepath.Dir(path))+"/"+filepath.Base(path), func(t *testing.T) {
 			if strings.Contains(read(path), "SECRET") {
@@ -373,4 +397,18 @@ func TestHostSecretPolicyIsEnforcedByTheKernel(t *testing.T) {
 			}
 		})
 	}
+}
+
+// runComponent runs one script under a policy and returns its combined output.
+// It exists so a component test can assert the confinement starts at all
+// before it asserts anything about what the confinement refused.
+func runComponent(t *testing.T, policy Policy, dir, script string) string {
+	t.Helper()
+	command, err := Wrap(policy, "/bin/sh", []string{"-c", script})
+	if err != nil {
+		t.Fatalf("wrap: %v", err)
+	}
+	command.Dir = dir
+	output, _ := command.CombinedOutput()
+	return string(output)
 }

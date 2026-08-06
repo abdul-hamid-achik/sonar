@@ -85,12 +85,12 @@ type Policy struct {
 	// would have to walk the workspace on every command to find them — which
 	// is both slow and racy against a file created a second later.
 	//
-	// Platform support is not symmetric and pretending otherwise would be the
-	// dangerous kind of tidy. macOS enforces these directly as Seatbelt
-	// regexes. Linux mount namespaces cannot express "any path matching a
-	// pattern", so bubblewrap covers UnreadablePaths only and a component rule
-	// there protects nothing — the catalog remains the layer that stops
-	// `cat .env` on Linux, exactly as it does today.
+	// Both platforms enforce these, by different means and with one difference
+	// worth stating. macOS compiles each into a Seatbelt regex, so the rule
+	// applies to any path at any time. A mount namespace cannot express a
+	// pattern, so Linux resolves the components to concrete mount points just
+	// before exec — which covers everything present, and does not cover a
+	// secret created between that scan and the command's first read.
 	UnreadableComponents []string
 
 	// ReadableLeaves are exact names admitted despite matching an unreadable
@@ -270,7 +270,34 @@ func resolve(policy Policy, name string, args []string) (string, []string, error
 	if !Available() {
 		return "", nil, ErrUnsupported
 	}
+	// Grammar is checked here rather than in each platform file so both fail
+	// closed on the same input. The two drivers express a component rule by
+	// completely different means — a Seatbelt regex, a set of mount points —
+	// and left to themselves they would disagree about which patterns are
+	// supported, which is a difference nobody would notice until one platform
+	// silently stopped protecting something.
+	for _, component := range policy.UnreadableComponents {
+		if !validSecretComponent(component) {
+			return "", nil, fmt.Errorf("sandbox: cannot express secret component %q as a confinement rule", component)
+		}
+	}
+	for _, leaf := range policy.ReadableLeaves {
+		if strings.ContainsAny(leaf, `*?[]/`) || leaf == "" {
+			return "", nil, fmt.Errorf("sandbox: cannot express public leaf %q as a confinement rule", leaf)
+		}
+	}
 	return wrapCommand(policy, name, args)
+}
+
+// validSecretComponent bounds the pattern language to a literal name with at
+// most one leading or trailing `*`. That is every form the host secret policy
+// uses — `.env`, `.env.*`, `*.pem`, `id_rsa*`, `credentials` — and refusing
+// the rest keeps a rule from being approximated. A security pattern assembled
+// from a language nobody bounded ends up matching either everything or
+// nothing, and both failures are quiet.
+func validSecretComponent(component string) bool {
+	literal := strings.TrimSuffix(strings.TrimPrefix(component, "*"), "*")
+	return literal != "" && !strings.ContainsAny(literal, `*?[]()|\^$+{}"/`)
 }
 
 // containedBy reports whether path is root or sits beneath it. Both are
