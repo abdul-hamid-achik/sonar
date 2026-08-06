@@ -32,9 +32,15 @@ func TestGitReadSubcommandsAreAutoScoped(t *testing.T) {
 	}
 }
 
-// Each of these reads in one argument form and destroys in another. Admitting
-// the verb at all would mean the destructive form rides in on the read's
-// reputation, so none of them are catalogued.
+// Each of these reads in one argument form and destroys in another. The verb is
+// never catalogued, so the destructive form cannot ride in on the read's
+// reputation.
+//
+// Four of them — branch, tag, stash, worktree — are additionally admitted by
+// autoScopedGitListingAllowed in EXACT listing forms that carry no positional
+// operand, which is how every mutating spelling below is reached. The bare and
+// operand-bearing forms here must stay gated either way, and
+// TestGitListingVerbsAreAdmittedOnlyInExactForms pins the other side.
 func TestGitMutatingSubcommandsStayGated(t *testing.T) {
 	for _, args := range [][]string{
 		{"branch", "-D", "main"},
@@ -44,9 +50,11 @@ func TestGitMutatingSubcommandsStayGated(t *testing.T) {
 		{"config", "user.email", "x@y.z"},
 		{"config", "--get", "user.email"}, // reads, but the verb also writes
 		{"stash"},                         // bare PUSHES the worktree
-		{"stash", "list"},
-		{"remote", "-v"},
+		{"stash", "push"},
+		{"stash", "pop"},
 		{"remote", "add", "origin", "git@example.com:x/y"},
+		{"remote", "remove", "origin"},
+		{"remote", "show", "origin"}, // reads, but contacts the remote
 		{"checkout", "main"},
 		{"switch", "-c", "feature"},
 		{"restore", "."},

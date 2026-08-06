@@ -1273,3 +1273,201 @@ func TestNonWalkingGrepIsAdmittedAndWalkingGrepIsNot(t *testing.T) {
 		})
 	}
 }
+
+// TestPackageRunScriptsAreScopedToLocalVerification pins the one gap the audit
+// found on the deny side. `npm test` was always admitted on the reasoning that
+// the script name grants no new authority, and that reasoning silently carried
+// `npm run migrate` and `npm run deploy` with it — durable external effect,
+// unattended, which is the exact outcome the reasoning existed to prevent.
+func TestPackageRunScriptsAreScopedToLocalVerification(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+
+	for _, command := range []string{
+		"npm test", "npm run test", "npm run lint", "npm run build",
+		"npm run typecheck", "npm run format", "npm run coverage",
+		// Every segment is read, not just the head: real manifests do not put
+		// the verb first, and a head-only rule refuses all three of these.
+		"npm run build:ci", "npm run test:unit", "npm run lint:fix",
+		"npm run site:build", "npm run build-storybook", "npm run test_e2e",
+		"npm run type-check", "npm run docs:build",
+		"pnpm run check", "yarn run e2e", "bun run tsc",
+	} {
+		t.Run("admits/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); !assessment.admitted() {
+				t.Fatalf("routine verification script costs an approval: %#v", assessment)
+			}
+		})
+	}
+
+	for _, command := range []string{
+		"npm run migrate", "npm run deploy", "npm run release", "npm run publish",
+		"npm run db:push", "npm run db:migrate", "npm run deploy:prod",
+		"pnpm run seed", "yarn run sync-prod", "bun run start",
+		// A verification segment does not redeem an effectful one — this is the
+		// half of the rule that a first-match reading would get wrong.
+		"npm run deploy-check", "npm run migrate-test", "npm run test:migrate",
+		"npm run seed:test", "npm run publish-docs",
+		// A name that says prod is not one the host can vouch for, even when it
+		// is usually a local build. One approval, and `w` makes it durable.
+		"npm run build:prod",
+		// An unclassifiable name costs one approval rather than being guessed at.
+		"npm run smoke",
+	} {
+		t.Run("refuses/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); assessment.admitted() {
+				t.Fatalf("externally effectful script ran unattended: %#v", assessment)
+			}
+		})
+	}
+}
+
+// TestListingToolsRequireExplicitFileOperands pins the widening for tools whose
+// default IS the walk: they are admitted only in the form that cannot discover
+// an entry, so the per-operand checks see everything the command will touch.
+func TestListingToolsRequireExplicitFileOperands(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	workspace := t.TempDir()
+	for _, name := range []string{"app.go", "notes.md", ".env"} {
+		if err := os.WriteFile(filepath.Join(workspace, name), []byte("x\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(workspace, "src"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(workspace, "src"), filepath.Join(workspace, "link")); err != nil {
+		t.Fatal(err)
+	}
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(workspace)
+
+	for _, command := range []string{
+		"ls -l app.go", "ls -la app.go notes.md", "ls app.go", "du -h app.go", "du app.go notes.md",
+	} {
+		t.Run("admits/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); !assessment.admitted() {
+				t.Fatalf("explicit-file listing costs an approval: %#v", assessment)
+			}
+		})
+	}
+
+	for _, command := range []string{
+		// No operand: the tool picks its own targets.
+		"ls", "ls -la", "du -sh",
+		// A directory operand enumerates, at one level or all of them.
+		"ls -l src", "ls .", "du -sh src", "du .",
+		// A symlink to a directory enumerates just as well.
+		"ls -l link", "du -sh link",
+		// Recursion, and a missing path the checks above never saw.
+		"ls -R .", "ls -l ghost.go",
+		// Path authority is unchanged and independent.
+		"ls -l .env", "ls -l /etc",
+	} {
+		t.Run("refuses/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); assessment.admitted() {
+				t.Fatalf("a listing that discovers entries gained AUTO authority: %#v", assessment)
+			}
+		})
+	}
+}
+
+// TestInterpretersRunWorkspaceScriptsOnly pins the argv shape as the boundary:
+// the script path must be the first word, so every form that makes the
+// interpreter itself the program is refused by being unreachable rather than by
+// a flag denylist chasing three languages' options.
+func TestInterpretersRunWorkspaceScriptsOnly(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	installGrantTestExecutables(t, "node", "python", "python3")
+	workspace := t.TempDir()
+	for _, name := range []string{"tool.js", "script.py"} {
+		if err := os.WriteFile(filepath.Join(workspace, name), []byte("//\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(workspace)
+
+	for _, command := range []string{
+		"node tool.js",
+		"node tool.js --verbose",
+		"python script.py",
+		"python3 script.py",
+		// Words after the script belong to the script: `-c foo` lands in
+		// sys.argv, it never reaches the interpreter.
+		"python3 script.py -c foo",
+	} {
+		t.Run("admits/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); !assessment.admitted() {
+				t.Fatalf("workspace script costs an approval: %#v", assessment)
+			}
+		})
+	}
+
+	for _, command := range []string{
+		"node -e 'process.exit(1)'", "node --eval x", "node -p 1+1",
+		"python -c 'import os'", "python3 --command x", "python -m http.server",
+		"node --require ./preload tool.js", "node -r ./preload tool.js",
+		"node --inspect tool.js", "python -i script.py",
+		// The bare stdin form and an operand outside the workspace.
+		"node", "python3", "node -", "node /tmp/other.js",
+	} {
+		t.Run("refuses/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); assessment.admitted() {
+				t.Fatalf("interpreter ran something other than a workspace script: %#v", assessment)
+			}
+		})
+	}
+}
+
+// TestGitListingVerbsAreAdmittedOnlyInExactForms covers the four ref/remote
+// verbs that cannot join the subcommand allowlist: each of them mutates through
+// a positional operand, so the admitted forms carry none.
+func TestGitListingVerbsAreAdmittedOnlyInExactForms(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+
+	for _, command := range []string{
+		"git branch --list", "git branch --list -a", "git branch --list --remotes -v",
+		"git tag --list", "git remote", "git remote -v", "git remote --verbose",
+		"git stash list", "git worktree list",
+	} {
+		t.Run("admits/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); !assessment.admitted() {
+				t.Fatalf("read-only git listing costs an approval: %#v", assessment)
+			}
+		})
+	}
+
+	for _, command := range []string{
+		// A positional operand is how every one of these mutates.
+		"git branch newthing", "git tag v1.0", "git branch -D old", "git branch -d old",
+		"git tag -d v1.0", "git remote add origin https://example.com/x.git",
+		"git remote remove origin", "git stash", "git stash push", "git stash pop",
+		"git worktree add ../elsewhere", "git worktree remove ../elsewhere",
+		// -l means --list for tag and has meant --create-reflog for branch,
+		// and git changed its preference mid-history. One letter, two meanings,
+		// version dependent: refused in both.
+		"git branch -l", "git tag -l",
+		// show contacts the remote.
+		"git remote show origin", "git remote update",
+		// A listing flag without --list is not a listing.
+		"git branch -a", "git branch -v",
+	} {
+		t.Run("refuses/"+command, func(t *testing.T) {
+			if assessment := ag.assessAutoScopedCommand(command); assessment.admitted() {
+				t.Fatalf("a mutating or network git form gained AUTO authority: %#v", assessment)
+			}
+		})
+	}
+}

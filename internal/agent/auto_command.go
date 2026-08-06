@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -929,7 +930,36 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 			return assessment
 		}
 		allowed = true
-	case "find", "rg", "tree", "du", "ls":
+	case "ls", "du":
+		// The same boundary as grep, applied to a tool whose default IS the
+		// walk. `ls dir` enumerates one level and `du dir` enumerates the whole
+		// subtree, and neither level of enumeration is something the per-operand
+		// checks can see — so the admitted form is the one that never
+		// enumerates: explicit operands, every one of them an existing regular
+		// file. `ls -l main.go` and `du -h main.go` stat exactly what they were
+		// handed, which is the property, and `ls`, `ls src/`, `du -sh .` keep
+		// asking because each of those discovers entries for itself.
+		if !a.autoScopedFileOperandsOnly(args, baseDir) {
+			assessment.reason = autoCommandReasonHostToolAvailable
+			return assessment
+		}
+		allowed = true
+	case "node", "python", "python3":
+		// Running a workspace script is the trust level `npm test` and `go test`
+		// already carry: workspace-defined code, executed by the operator's own
+		// toolchain, with every path operand resolved through the workspace and
+		// the host secret policy by the loop above.
+		//
+		// The argv SHAPE is the boundary, exactly as it is for the package
+		// runners. The script path must be the first word, so every form that
+		// makes the interpreter itself the program — `-e`/`--eval`, `-c`,
+		// `-m module`, `-r`/`--require` preloads, `--inspect`, `-i`, and the
+		// bare stdin form — is refused by never being reachable, rather than by
+		// a flag denylist that has to stay ahead of three languages' options.
+		// Words AFTER the script belong to the script: `python x.py -c foo`
+		// puts `-c foo` in sys.argv, it does not reach the interpreter.
+		allowed = len(args) > 0 && args[0] != "-" && !strings.HasPrefix(args[0], "-")
+	case "find", "rg", "tree":
 		// These enumerate by construction — walking is what they are for, and
 		// rg walks the working directory when given no operand at all — so
 		// there is no non-walking form to admit. Built-in list/grep/read
@@ -1341,6 +1371,47 @@ func searchLongOptionTakesValue(name string, ripgrep bool) bool {
 // assessAutoScopedSimpleCommand, which is where an installed one lands.
 // TestSearchRefusalNamesTheToolThatWouldWork walks every name through the
 // public entry point, so the two lists cannot silently drift apart.
+// autoScopedFileOperandsOnly reports whether every positional operand names an
+// existing regular file inside the workspace, and that there is at least one.
+//
+// It is what lets a listing tool be admitted without admitting a listing: a
+// command that names only regular files cannot discover an entry, so the
+// per-operand workspace and secret-policy checks see everything it will touch.
+// A directory operand, a missing path, or no operand at all means the tool
+// picks its own targets, and that decision stays with the user.
+//
+// Option words are skipped rather than resolved. They are not operands, and the
+// generic path loop's habit of treating `-l` as a workspace-relative filename
+// is harmless there but would make every flag look like a missing file here.
+func (a *Agent) autoScopedFileOperandsOnly(args []string, baseDir string) bool {
+	operands := 0
+	endOptions := false
+	for _, argument := range args {
+		if !endOptions {
+			if argument == "--" {
+				endOptions = true
+				continue
+			}
+			if argument != "-" && strings.HasPrefix(argument, "-") {
+				continue
+			}
+		}
+		resolved := argument
+		if !filepath.IsAbs(resolved) && baseDir != "" {
+			resolved = filepath.Join(baseDir, resolved)
+		}
+		// Lstat, not Stat: a symlink to a directory must not read as a file.
+		// The operand loop resolves symlink escapes separately; this asks the
+		// narrower question of whether the tool can enumerate through it.
+		info, err := os.Lstat(resolved)
+		if err != nil || !info.Mode().IsRegular() {
+			return false
+		}
+		operands++
+	}
+	return operands > 0
+}
+
 // autoGrepWalksDirectories reports whether this grep invocation can reach a
 // file it was not handed, which is the only way a search escapes the
 // per-operand workspace and secret-policy checks.
@@ -1414,7 +1485,8 @@ func autoCommandEffectForExecutable(executable string, args []string) autoComman
 			return autoCommandEffectWorkspaceMutation
 		}
 		return autoCommandEffectReadOnly
-	case "go", "npm", "pnpm", "yarn", "bun", "cargo", "swift", "eslint", "prettier", "tsc", "golangci-lint", "staticcheck":
+	case "go", "npm", "pnpm", "yarn", "bun", "cargo", "swift", "eslint", "prettier", "tsc", "golangci-lint", "staticcheck",
+		"node", "python", "python3":
 		return autoCommandEffectWorkspaceExecution
 	default:
 		return autoCommandEffectReadOnly
@@ -1515,22 +1587,89 @@ func clusteredShortOptionValue(argument string, options []string) (string, bool)
 // whitespace (quoted multi-word tokens).
 var autoPackageRunScript = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_:-]{0,127}$`)
 
+// autoLocalVerificationScripts are the script names that conventionally mean
+// "check this working copy": compile it, test it, lint it, format it, type it.
+//
+// This is a convention guardrail, not a security boundary, and the distinction
+// is worth stating plainly. A script body is workspace-defined code either way,
+// so `npm test` can already POST to a paid API and no argv inspection will ever
+// notice. What the list does buy is the class of unattended action nobody wants
+// to discover after the fact: `run migrate`, `run deploy`, `run release`,
+// `run db:push`. Those have durable external effect, they are the reason a
+// human wants to be asked, and their names say so.
+//
+// An unrecognized name costs exactly one approval, and — since the offered
+// grant now names the segment that refused — one `w` press makes it durable.
+// That is the right price for a name the host cannot classify.
+var autoLocalVerificationScripts = map[string]struct{}{
+	"bench": {}, "build": {}, "check": {}, "compile": {}, "cover": {},
+	"coverage": {}, "dev": {}, "doc": {}, "docs": {}, "e2e": {}, "fmt": {},
+	"format": {}, "lint": {}, "prettier": {}, "spec": {}, "test": {},
+	"tests": {}, "tsc": {}, "type": {}, "typecheck": {}, "types": {},
+	"unit": {}, "validate": {}, "verify": {}, "watch": {},
+}
+
+// autoEffectfulScripts are the segments that name a durable or external effect.
+// They exist to VETO a name that also carries a verification segment, which is
+// the only case the rule below could otherwise get wrong: `deploy-check` and
+// `migrate-test` both contain a reassuring word, and neither is reassuring.
+var autoEffectfulScripts = map[string]struct{}{
+	"database": {}, "db": {}, "deploy": {}, "destroy": {}, "drop": {},
+	"install": {}, "migrate": {}, "migration": {}, "migrations": {},
+	"prod": {}, "production": {}, "provision": {}, "publish": {}, "push": {},
+	"release": {}, "reset": {}, "rollback": {}, "seed": {}, "serve": {},
+	"ship": {}, "staging": {}, "start": {}, "sync": {}, "upload": {},
+}
+
+// autoLocalVerificationScriptName reports whether a script name denotes local
+// verification: at least one segment names a verification step, and no segment
+// names a durable effect.
+//
+// It reads every segment rather than the head, because real manifests do not
+// put the verb first. The names in this repository's own routine-development
+// test are the evidence — `site:build`, `build-storybook`, `test_e2e` — and a
+// head-only reading refuses all three while a first-match reading would admit
+// `deploy-check`. Both halves of the rule are needed.
+//
+// The refusal direction is deliberate: `build:prod` costs one approval even
+// though it is usually a local build, because a name that says prod is not one
+// the host can vouch for. That is one press, and the offered grant now names
+// the segment that refused, so `w` makes it durable.
+func autoLocalVerificationScriptName(script string) bool {
+	verification := false
+	for _, segment := range strings.FieldsFunc(script, func(character rune) bool {
+		return character == ':' || character == '-' || character == '_' || character == '.'
+	}) {
+		if _, effectful := autoEffectfulScripts[strings.ToLower(segment)]; effectful {
+			return false
+		}
+		if _, safe := autoLocalVerificationScripts[strings.ToLower(segment)]; safe {
+			verification = true
+		}
+	}
+	return verification
+}
+
 // autoScopedPackageCommandAllowed admits a runner's catalogued direct
-// subcommands plus exactly `run <script>`. The script NAME grants no new
-// authority: `npm test` and `bun test` already execute whatever the workspace
-// manifest defines for those names, so refusing `bun run lint` while admitting
-// `bun test` only moved the same trust decision behind an approval prompt —
-// in one audited AUTO session those refusals surfaced as unexplained
-// "arguments outside the host catalog" prompts for routine lint/build scripts.
-// The argv shape IS the boundary and stays strict: `--` passthrough and any
-// extra argument reach the interpreter or the script with flags the catalog
-// never inspected, and the charset keeps options, paths, and quoted spaces out
-// of the script slot.
+// subcommands plus `run <script>` for a script whose name denotes local
+// verification. The argv shape IS the boundary and stays strict: `--`
+// passthrough and any extra argument reach the interpreter or the script with
+// flags the catalog never inspected, and the charset keeps options, paths, and
+// quoted spaces out of the script slot.
+//
+// The script name was previously unconstrained, on the reasoning that `npm
+// test` already runs manifest-defined code so the name grants no new authority.
+// That holds for the verification names and breaks for the rest: `npm run
+// migrate` is manifest-defined too, and running it unattended is exactly the
+// outcome the reasoning was meant to protect. Direct subcommands stay as the
+// caller lists them — those are named at the call site, one at a time.
 func autoScopedPackageCommandAllowed(args []string, direct ...string) bool {
 	if len(args) == 1 && firstArgIn(args, direct...) {
 		return true
 	}
-	return len(args) == 2 && args[0] == "run" && autoPackageRunScript.MatchString(args[1])
+	return len(args) == 2 && args[0] == "run" &&
+		autoPackageRunScript.MatchString(args[1]) &&
+		autoLocalVerificationScriptName(args[1])
 }
 
 func autoScopedGoCommandAllowed(args []string) bool {
@@ -1586,6 +1725,9 @@ func autoScopedGoCommandAllowed(args []string) bool {
 // flag at all. That is the operator's own configured tooling, not something a
 // model can introduce here, and it is equally true of everything else on PATH.
 func autoScopedGitCommandAllowed(args []string) bool {
+	if autoScopedGitListingAllowed(args) {
+		return true
+	}
 	if !firstArgIn(args,
 		"status", "log", "show", "diff", "rev-parse", "ls-files", "blame", "describe", "shortlog",
 	) {
@@ -1604,6 +1746,49 @@ func autoScopedGitCommandAllowed(args []string) bool {
 		return false
 	}
 	return autoGitShortOptionsAllowed(args)
+}
+
+// autoScopedGitListingAllowed admits the four git verbs that enumerate refs and
+// remotes, and admits them only in EXACT argv forms.
+//
+// These verbs cannot join the subcommand allowlist above, because that list's
+// contract is "cannot mutate under ANY accepted argument" and every one of them
+// fails it: a bare `git branch <name>` and `git tag <name>` create, `git stash`
+// pushes the worktree, `git worktree add` creates, `git remote add` adds. The
+// mutating spellings are all reached through a positional operand, so the forms
+// here carry none — the verb, a required listing flag, and nothing else.
+//
+// `--list` is required in its long spelling only. `-l` means --list for tag but
+// has meant --create-reflog for branch, and git changed which one it prefers
+// mid-history; a letter whose meaning depends on the subcommand AND the version
+// is exactly the per-subcommand grammar claim that has already been wrong twice
+// in this file.
+//
+// `git remote show` is deliberately absent: it contacts the remote.
+func autoScopedGitListingAllowed(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "remote":
+		return len(args) == 1 || len(args) == 2 && stringIn(args[1], "-v", "--verbose")
+	case "stash", "worktree":
+		return len(args) == 2 && args[1] == "list"
+	case "branch", "tag":
+		listed := false
+		for _, argument := range args[1:] {
+			if argument == "--list" {
+				listed = true
+				continue
+			}
+			if !stringIn(argument, "-a", "--all", "-r", "--remotes", "-v", "-vv", "--verbose") {
+				return false
+			}
+		}
+		return listed
+	default:
+		return false
+	}
 }
 
 // Short options git accepts with the value attached to the letter, across the

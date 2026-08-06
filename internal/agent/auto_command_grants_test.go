@@ -35,11 +35,11 @@ func TestSessionBashPrefixGrantAuthorizesValidatedSegments(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("AUTO shell catalog requires a POSIX shell")
 	}
-	installGrantTestExecutables(t, "go", "node")
+	installGrantTestExecutables(t, "go", "deno")
 	ag := New(nil, nil, 4096)
 	ag.SetWorkDir(t.TempDir())
 
-	compound := "node scripts/check.js && go test ./..."
+	compound := "deno scripts/check.js && go test ./..."
 	if ag.assessAutoScopedCommand(compound).admitted() {
 		t.Fatal("uncatalogued segment gained AUTO authority before any grant")
 	}
@@ -55,25 +55,25 @@ func TestSessionBashPrefixGrantAuthorizesValidatedSegments(t *testing.T) {
 	if assessment := ag.assessAutoScopedCommand(compound); !assessment.admitted() {
 		t.Fatalf("granted segment still refused after the always grant: %#v", assessment)
 	}
-	// The derived grant is "node" — the same executable-level breadth the
-	// simple form `node scripts/check.js` has always produced — so a variant
+	// The derived grant is "deno" — the same executable-level breadth the
+	// simple form `deno scripts/check.js` has always produced — so a variant
 	// script and tail are covered as long as every operand stays confined.
-	variant := "node scripts/other.js --verbose && go vet ./..."
+	variant := "deno scripts/other.js --verbose && go vet ./..."
 	if assessment := ag.assessAutoScopedCommand(variant); !assessment.admitted() {
 		t.Fatalf("granted prefix did not cover a variant tail: %#v", assessment)
 	}
 
 	for _, command := range []string{
 		// The grant covers its own segment, never a neighbour.
-		"node scripts/check.js && rm -rf .",
+		"deno scripts/check.js && rm -rf .",
 		// A different executable falls outside the derived prefix.
-		"deno scripts/check.js && go test ./...",
+		"ruby scripts/check.rb && go test ./...",
 		// Path authority still applies inside a granted segment.
-		"node scripts/check.js /etc/passwd && go test ./...",
-		"node scripts/check.js ../outside.js && go test ./...",
+		"deno scripts/check.js /etc/passwd && go test ./...",
+		"deno scripts/check.js ../outside.js && go test ./...",
 		// Composition checks are never grant-bypassed.
-		"node scripts/check.js $(cat /etc/passwd) && go test ./...",
-		"node scripts/check.js > /tmp/leak.txt && go test ./...",
+		"deno scripts/check.js $(cat /etc/passwd) && go test ./...",
+		"deno scripts/check.js > /tmp/leak.txt && go test ./...",
 	} {
 		t.Run(command, func(t *testing.T) {
 			if assessment := ag.assessAutoScopedCommand(command); assessment.admitted() {
@@ -87,7 +87,7 @@ func TestDurableBashPrefixRuleAuthorizesValidatedSegments(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("AUTO shell catalog requires a POSIX shell")
 	}
-	installGrantTestExecutables(t, "go", "node")
+	installGrantTestExecutables(t, "go", "deno")
 	store, err := permission.NewWorkspaceRulesStore(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -95,13 +95,13 @@ func TestDurableBashPrefixRuleAuthorizesValidatedSegments(t *testing.T) {
 	ag := New(nil, nil, 4096)
 	ag.SetWorkDir(t.TempDir())
 	ag.SetWorkspaceRulesStore(store)
-	if _, err := ag.AddWorkspaceBashPrefix("node *"); err != nil {
+	if _, err := ag.AddWorkspaceBashPrefix("deno *"); err != nil {
 		t.Fatal(err)
 	}
-	if assessment := ag.assessAutoScopedCommand("node scripts/check.js && go test ./..."); !assessment.admitted() {
+	if assessment := ag.assessAutoScopedCommand("deno scripts/check.js && go test ./..."); !assessment.admitted() {
 		t.Fatalf("durable rule did not authorize its segment: %#v", assessment)
 	}
-	if assessment := ag.assessAutoScopedCommand("node scripts/check.js && rm -rf ."); assessment.admitted() {
+	if assessment := ag.assessAutoScopedCommand("deno scripts/check.js && rm -rf ."); assessment.admitted() {
 		t.Fatalf("durable rule leaked beyond its segment: %#v", assessment)
 	}
 }
