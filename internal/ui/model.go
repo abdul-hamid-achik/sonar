@@ -740,6 +740,13 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 
 	case StreamDoneMsg:
 		m.handleStreamDone(msg)
+		// Reading the answer aloud outlives the turn that produced it, and the
+		// rail that reports it needs a clock. Nothing else starts one once the
+		// turn is done, and the spinner drops a competing tick chain by tag, so
+		// asking for one here cannot double the rate when a turn continues.
+		if cmd := m.startSpinnerCmd(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 
 	case ContextCompactedMsg:
 		m.handleContextCompacted(msg)

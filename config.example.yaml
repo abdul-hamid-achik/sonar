@@ -153,15 +153,37 @@ voice:
   # What the harness is doing — "reading", "running tests" — never the path it
   # is doing it to, and never repeated for a run of the same thing.
   activity: false
-  # `say -v ?` lists this machine's voices. Empty uses the system default.
+  # `say -v ?` lists this machine's voices. Empty uses the system default, and
+  # this setting applies to every language.
   # voice: Samantha
+  #
+  # A voice per language, which is usually what you want instead. A voice is
+  # built for one language and mangles the others — an English voice reading
+  # "encontré el problema" lands somewhere between an accent and a different
+  # sentence — so the harness detects which language an answer is in and picks
+  # from here.
+  #
+  # A language with no entry gets one chosen from what the host has installed,
+  # preferring your own region: that guess is what this map exists to correct.
+  # The host's own language is deliberately left to the system default rather
+  # than guessed at, because you already chose that one in system settings.
+  # voices:
+  #   es: Paulina    # Mexican Spanish; Mónica is Castilian
+  #   en: Samantha
+  #
   # Words per minute. Empty uses 210, faster than the system default, because a
   # coding session is listened to while working rather than attentively.
   # rate: 210
 
   # Dictation: alt+v opens the microphone, alt+v again closes it and the
-  # transcription lands in the composer as a draft you read before sending —
-  # dictation mis-hears, and nobody should act on words no one said.
+  # transcription lands in the composer. /voice does the same thing and needs no
+  # terminal configuration — on a stock macOS terminal Option composes a
+  # character rather than sending Alt, so alt+v never arrives at all until the
+  # terminal is told otherwise ("Use Option as Meta key", or Ghostty's
+  # macos-option-as-alt = true), and a leader key can claim it even then.
+  #
+  # What arrives is a draft you read before sending: dictation mis-hears, and
+  # nobody should act on words no one said.
   #
   # Toggle rather than hold-to-talk because terminals report key RELEASE only
   # under the Kitty protocol; a hold binding would work in Ghostty and do

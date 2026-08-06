@@ -37,6 +37,11 @@ type voiceState struct {
 	// spokenActivity is the last activity line said aloud, so a turn that reads
 	// four files in a row does not say "reading" four times.
 	lastActivity string
+	// language is the turn's detected language, decided once. The synthesizer
+	// only consults it when a process starts, so re-deciding per sentence would
+	// cost a scan of the whole answer to change nothing.
+	language      string
+	languageKnown bool
 }
 
 // StartVoice installs a speaker when the operator asked for one and the host
@@ -53,7 +58,7 @@ func (m *Model) StartVoice(cfg config.VoiceConfig) string {
 	if !speech.Available() {
 		return "voice: enabled in config but this host has no synthesizer; nothing will be spoken"
 	}
-	speaker, err := speech.New(cfg.Voice, cfg.Rate)
+	speaker, err := speech.New(cfg.Voice, cfg.Rate, cfg.Voices)
 	if err != nil {
 		return "voice: " + err.Error()
 	}
@@ -84,8 +89,29 @@ func (m *Model) speakAnswerDelta(answerSoFar string) {
 	if !m.answerMayHaveFinishedASentence(answerSoFar) {
 		return
 	}
-	sentences, _ := spokenSentences(spokenStreamingText(answerSoFar))
-	m.sayFrom(sentences)
+	projected := spokenStreamingText(answerSoFar)
+	sentences, _ := spokenSentences(projected)
+	m.sayFrom(sentences, m.turnLanguage(projected))
+}
+
+// turnLanguage decides once per turn which language the answer is in.
+//
+// Once, because the synthesizer reads the language only when it starts a
+// process, and because the verdict gets steadier as more of the answer arrives
+// rather than truer. A first sentence of "Listo." carries no evidence and would
+// pin the whole turn to the default if it were asked again later.
+func (m *Model) turnLanguage(projected string) string {
+	if m.voice.languageKnown {
+		return m.voice.language
+	}
+	language := spokenLanguage(projected)
+	if language == "" {
+		// Not yet decided. Thin evidence is a reason to look again with more
+		// text, not a verdict — so this deliberately does not latch.
+		return ""
+	}
+	m.voice.language, m.voice.languageKnown = language, true
+	return language
 }
 
 // answerMayHaveFinishedASentence skips the projection for a chunk that cannot
@@ -117,9 +143,9 @@ func (m *Model) answerMayHaveFinishedASentence(answerSoFar string) bool {
 // The position never moves backwards. A projection can shrink between chunks —
 // a closing fence removes everything it encloses — and treating that as "these
 // sentences were never said" is what makes a channel repeat itself.
-func (m *Model) sayFrom(sentences []string) {
+func (m *Model) sayFrom(sentences []string, language string) {
 	for index := m.voice.spoken; index < len(sentences); index++ {
-		_ = m.voice.speaker.Say(sentences[index])
+		_ = m.voice.speaker.SayIn(language, sentences[index])
 	}
 	if len(sentences) > m.voice.spoken {
 		m.voice.spoken = len(sentences)
@@ -136,17 +162,24 @@ func (m *Model) speakTurnEnd(answer string) {
 		return
 	}
 	if m.voice.config.Answer {
-		sentences, remainder := spokenSentences(spokenText(answer))
-		m.sayFrom(sentences)
+		projected := spokenText(answer)
+		language := m.turnLanguage(projected)
+		sentences, remainder := spokenSentences(projected)
+		m.sayFrom(sentences, language)
 		if remainder != "" {
-			_ = m.voice.speaker.Say(remainder)
+			_ = m.voice.speaker.SayIn(language, remainder)
 		}
 	}
+	// Nothing more is coming, so the synthesizer is told to drain rather than
+	// left waiting on an open pipe. That is what makes "is it still talking?" a
+	// question the harness can answer — and what the rail reads to say so.
+	m.voice.speaker.Finish()
 	// The next turn is a different answer, so the position starts over. This is
 	// the only place it may go back to zero.
 	m.voice.spoken = 0
 	m.voice.answerLen = 0
 	m.voice.lastActivity = ""
+	m.voice.language, m.voice.languageKnown = "", false
 }
 
 // speakReasoning offers a settled reasoning block to the reasoning channel.
@@ -164,12 +197,13 @@ func (m *Model) speakReasoning(reasoning string) {
 	if projected == "" {
 		return
 	}
+	language := spokenLanguage(projected)
 	sentences, remainder := spokenSentences(projected)
 	for _, sentence := range sentences {
-		_ = m.voice.speaker.Say(sentence)
+		_ = m.voice.speaker.SayIn(language, sentence)
 	}
 	if remainder != "" {
-		_ = m.voice.speaker.Say(remainder)
+		_ = m.voice.speaker.SayIn(language, remainder)
 	}
 }
 
@@ -188,6 +222,15 @@ func (m *Model) speakActivity(label, summary string) {
 	}
 	m.voice.lastActivity = line
 	_ = m.voice.speaker.Say(line)
+}
+
+// speakingAloud reports whether the synthesizer is still reading something out.
+//
+// Only meaningful after the turn's Finish, which is exactly when it is asked:
+// while a turn runs the rail has better things to report, and mid-turn the
+// answer is "a process exists", not "audio is playing".
+func (m *Model) speakingAloud() bool {
+	return m.voiceActive() && m.voice.speaker.Speaking()
 }
 
 // silenceVoice cancels speech immediately and drops anything not yet said.

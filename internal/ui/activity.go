@@ -188,6 +188,17 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 		// both locks the composer and avoids introducing another animation clock
 		// for a one-shot durable receipt lookup.
 		return workingActivity{label: "Inspecting recovery", detail: "read-only durable receipt", static: true}, true
+	// Reading the answer out loud ranks last on purpose, which is the opposite
+	// of the open microphone above. Speech overlaps a running turn for almost
+	// all of its duration, so anything higher would replace real progress with
+	// a state the listener can already hear. What it does cover is the gap the
+	// rail had nothing for: the turn is finished, the text is on screen, and the
+	// harness is still talking — where an idle composer otherwise reads as done.
+	case m.speakingAloud():
+		return workingActivity{
+			label: "Speaking", compactLabel: "Speaking",
+			detail: "any key stops", cancellable: false,
+		}, true
 	default:
 		return workingActivity{}, false
 	}

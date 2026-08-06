@@ -91,6 +91,15 @@ func (m *Model) sonarPulseGlyph() string {
 		// looking for it.
 		return lipgloss.NewStyle().Foreground(palette.Warning).Render(sonarListenBeats[beat])
 	}
+	if m.speakingAloud() {
+		// Speaking keeps the outward beats — audio leaving the machine is the
+		// emit half of the metaphor, the same direction as a ping — and takes
+		// one steady role instead of the accent cycle. Both halves of the voice
+		// interface are therefore one glyph family read in two directions, and
+		// each is one solid colour against work's alternating pair, so the three
+		// stay apart by shape first and by colour only as reinforcement.
+		return lipgloss.NewStyle().Foreground(palette.Special).Render(sonarPulseBeats[beat])
+	}
 	color := palette.Dim
 	switch beat {
 	case 0:

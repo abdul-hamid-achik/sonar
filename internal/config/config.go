@@ -209,9 +209,17 @@ type VoiceConfig struct {
 	// Activity speaks what the harness is doing — "reading", "running tests" —
 	// never the path it is doing it to.
 	Activity bool `yaml:"activity"`
-	// Voice names a synthesizer voice. Empty uses the system default; `say -v ?`
-	// lists what this machine has.
+	// Voice names a synthesizer voice for every language. Empty uses the system
+	// default; `say -v ?` lists what this machine has.
 	Voice string `yaml:"voice,omitempty"`
+	// Voices names a voice per ISO language code — {es: Paulina, en: Samantha}.
+	//
+	// A voice is built for one language and mangles the others: an English voice
+	// reading "encontré el problema" lands between an accent and a different
+	// sentence. The harness detects which language an answer is in and picks
+	// from here; a language with no entry gets one chosen from what the host
+	// has installed, which is a guess this map exists to correct.
+	Voices map[string]string `yaml:"voices,omitempty"`
 	// Rate is words per minute. Zero uses a default faster than the system's,
 	// because a coding session is listened to while working.
 	Rate int `yaml:"rate,omitempty"`

@@ -47,3 +47,7 @@ func interruptRecorder(command *exec.Cmd) {
 	}
 	_ = command.Process.Signal(os.Interrupt)
 }
+
+// listHostVoices has nothing to list: Available reports false on this platform,
+// so no synthesizer is driven and no voice name would reach one.
+func listHostVoices() []hostVoice { return nil }

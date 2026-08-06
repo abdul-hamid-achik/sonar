@@ -1,8 +1,10 @@
 package speech
 
 import (
+	"bufio"
 	"os/exec"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -79,4 +81,37 @@ func interruptRecorder(command *exec.Cmd) {
 	if err := command.Process.Signal(syscall.SIGINT); err != nil {
 		_ = command.Process.Kill()
 	}
+}
+
+// loadHostVoices parses `say -v '?'`.
+//
+// The format is name, then locale, then "# example", with the name padded by
+// spaces — and names contain spaces themselves ("Grandma (Spanish (Spain))"),
+// so the locale is found by looking for the field that LOOKS like one rather
+// than by counting columns.
+func listHostVoices() []hostVoice {
+	if !Available() {
+		return nil
+	}
+	output, err := exec.Command(sayPath, "-v", "?").Output()
+	if err != nil {
+		return nil
+	}
+	var voices []hostVoice
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	for scanner.Scan() {
+		line, _, _ := strings.Cut(scanner.Text(), "#")
+		fields := strings.Fields(line)
+		for index := len(fields) - 1; index >= 1; index-- {
+			if !looksLikeLocale(fields[index]) {
+				continue
+			}
+			name := strings.TrimSpace(strings.Join(fields[:index], " "))
+			if name != "" {
+				voices = append(voices, hostVoice{name: name, locale: fields[index]})
+			}
+			break
+		}
+	}
+	return voices
 }

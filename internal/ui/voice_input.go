@@ -66,10 +66,24 @@ func (m *Model) transcribingVoice() bool {
 
 // toggleVoiceInput is the whole interaction: open the microphone, or close it
 // and transcribe what was said.
+// toggleVoiceInput wraps the toggle so the rail it lights up also gets a clock.
+//
+// The activity animation only advances while a tick is already in flight, and
+// pressing this from an idle composer is exactly the case where none is — so
+// without the spinner the listening beats would sit frozen on whichever frame
+// they stopped at, which reads as a hung microphone rather than an open one.
 func (m *Model) toggleVoiceInput() tea.Cmd {
 	if m == nil {
 		return nil
 	}
+	// Sequenced rather than nested in one Batch call: the spinner is only owed
+	// once the toggle has changed the state it reads, and argument evaluation
+	// order is not a thing to make a UI depend on.
+	toggled := m.toggleVoiceInputOnly()
+	return tea.Batch(toggled, m.startSpinnerCmd())
+}
+
+func (m *Model) toggleVoiceInputOnly() tea.Cmd {
 	if m.voiceInput != nil && m.voiceInput.transcribing {
 		// A second press while the transcriber is working means "stop waiting",
 		// not "start again". Recording over an unfinished transcription would
