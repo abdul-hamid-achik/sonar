@@ -51,6 +51,9 @@ func VoiceForLanguage(language, configured string) string {
 		// accident is "Albert", a novelty voice nobody would choose.
 		return ""
 	}
+	if preferred := preferredVoice(language); preferred != "" {
+		return preferred
+	}
 	var fallback string
 	for _, voice := range hostVoices() {
 		if !strings.HasPrefix(strings.ToLower(voice.locale), language) {
@@ -77,6 +80,68 @@ func VoiceForLanguage(language, configured string) string {
 		}
 	}
 	return fallback
+}
+
+// standardVoices are the speech voices macOS ships per language, in preference
+// order, ahead of the joke voices it ships beside them.
+//
+// A list of names is the last thing this file wanted, and it is here because
+// the host offers nothing else to go on. `say -v ?` reports a name and a locale
+// and no notion of quality, so "Albert", "Zarvox", "Bahh" and "Bubbles" are
+// indistinguishable from "Samantha" — and they sort first, so the alphabetical
+// fallback reads every English answer in a novelty voice.
+//
+// The obvious data signal was tested and does not exist: the example sentence
+// beside each voice looked like it might separate the two families, and macOS
+// normalised all of them to "Hello! My name is X." years ago. Zarvox and
+// Samantha introduce themselves identically.
+//
+// So this is a preference, not a requirement: every entry is checked against
+// what the host actually has, an absent name is skipped, and a language that
+// matches nothing falls through to the generic rule below. Adding a language
+// here improves a default; leaving one out costs nothing but a worse guess.
+var standardVoices = map[string][]string{
+	"en": {"Samantha", "Alex", "Ava", "Allison", "Daniel", "Karen", "Moira"},
+	"es": {"Paulina", "Mónica", "Jorge", "Marisol", "Juan"},
+	"fr": {"Thomas", "Amélie", "Audrey"},
+	"de": {"Anna", "Markus", "Petra"},
+	"it": {"Alice", "Luca"},
+	"pt": {"Luciana", "Joana"},
+	"nl": {"Xander", "Ellen"},
+	"ja": {"Kyoko", "Otoya"},
+	"ko": {"Yuna"},
+	"zh": {"Ting-Ting", "Sin-ji", "Mei-Jia"},
+	"ru": {"Milena", "Yuri"},
+}
+
+// preferredVoice returns the first standard voice for a language that this host
+// actually has installed, or "" to fall through to the generic rule.
+func preferredVoice(language string) string {
+	candidates := standardVoices[language]
+	if len(candidates) == 0 {
+		return ""
+	}
+	installed := hostVoices()
+	region := hostRegion()
+	// Two passes so a region match wins over list order: on a Mexican machine
+	// Paulina should beat Mónica even if the list were the other way round.
+	for _, matchRegion := range []bool{true, false} {
+		if matchRegion && region == "" {
+			continue
+		}
+		for _, candidate := range candidates {
+			for _, voice := range installed {
+				if voice.name != candidate {
+					continue
+				}
+				if matchRegion && !strings.HasSuffix(voice.locale, "_"+region) {
+					continue
+				}
+				return voice.name
+			}
+		}
+	}
+	return ""
 }
 
 // hostLanguage is the language half of the host locale, e.g. "en".
