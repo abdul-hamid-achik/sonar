@@ -92,12 +92,18 @@ func TestActivityClocksDoNotPaintTenThousandEntryTranscript(t *testing.T) {
 		probe := &transcriptRenderProbe{}
 		m.transcriptRenderProbe = probe
 
-		updated, next := m.Update(m.spin.Tick())
-		m = updated.(*Model)
+		// A beat, not a tick: the pulse divides the activity clock down to a
+		// ping a second, and the ticks in between deliberately repaint nothing.
+		var next tea.Cmd
+		for range sonarPulseTickDivider {
+			var updated tea.Model
+			updated, next = m.Update(m.spin.Tick())
+			m = updated.(*Model)
+		}
 		if next == nil {
 			t.Fatal("active tool spinner did not continue its footer clock")
 		}
-		assertViewportBoundedRestage(t, probe, m.viewport.Height(), "spinner tick")
+		assertViewportBoundedRestage(t, probe, m.viewport.Height(), "activity beat")
 		if after := m.viewport.GetContent(); after == beforeTranscript {
 			t.Fatal("spinner tick left the running receipt on a frozen frame")
 		}
@@ -112,10 +118,10 @@ func TestActivityClocksDoNotPaintTenThousandEntryTranscript(t *testing.T) {
 
 		probe = &transcriptRenderProbe{}
 		m.transcriptRenderProbe = probe
-		updated, _ = m.Update(ToolCallResultMsg{
+		settled, _ := m.Update(ToolCallResultMsg{
 			ID: "active-tool", Name: "read_file", Result: "ok", Duration: 2 * time.Second,
 		})
-		m = updated.(*Model)
+		m = settled.(*Model)
 		assertTranscriptPainted(t, probe, "tool result")
 		if m.toolEntries[0].Status != ToolStatusDone {
 			t.Fatalf("tool result left status %v", m.toolEntries[0].Status)

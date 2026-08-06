@@ -149,7 +149,10 @@ type Model struct {
 	// restored session starts calm and nothing has to be persisted.
 	// sonarPulseFrame is the emit-side animation beat. It advances on the
 	// activity spinner's tick and never on one of its own.
-	sonarPulseFrame    uint64
+	sonarPulseFrame uint64
+	// sonarPulseTick counts the raw activity ticks the pulse divides down; a
+	// spinner's rate is not a ping's rate.
+	sonarPulseTick     uint64
 	expandedReadRuns   map[BlockID]struct{}
 	toolHitRegions     []toolHitRegion
 	thinkingHitRegions []thinkingHitRegion
@@ -928,8 +931,14 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 		cmds = append(cmds, cmd)
 		// The pulse rides this tick rather than starting one of its own, which
 		// is the same rule the ping trace follows: one clock per phase.
-		m.advanceSonarPulse()
-		m.advanceRunningToolReceiptFrame()
+		//
+		// A running receipt repaints only when its glyph will differ. Under the
+		// pulse that is once per beat, not once per tick; under the ASCII
+		// profile the spinner still owns the glyph and changes every time.
+		beatChanged := m.advanceSonarPulse()
+		if beatChanged || !m.sonarPulseOwnsMotion() {
+			m.advanceRunningToolReceiptFrame()
+		}
 	}
 
 	// Sticky reveal + context meter springs (harmonica). Independent of the

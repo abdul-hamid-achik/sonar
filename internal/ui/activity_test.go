@@ -168,13 +168,24 @@ func TestRunningToolCardAnimatesWhileFooterOwnsTheClock(t *testing.T) {
 	before := m.viewport.View()
 	footerBefore := m.renderWorkingLine()
 
-	msg := m.spin.Tick()
-	updated, _ := m.Update(msg)
+	// One tick is no longer one frame. The pulse divides the activity clock
+	// down to a ping a second, so a beat takes a few ticks — and the ticks in
+	// between must NOT repaint, or the transcript pays three identical frames
+	// per ping.
+	var updated tea.Model
+	for tick := 1; tick < sonarPulseTickDivider; tick++ {
+		updated, _ = m.Update(m.spin.Tick())
+		m = updated.(*Model)
+		if m.viewport.View() != before {
+			t.Fatalf("tick %d repainted the receipt without changing its glyph", tick)
+		}
+	}
+	updated, _ = m.Update(m.spin.Tick())
 	m = updated.(*Model)
 	after := m.viewport.View()
 	footerAfter := m.renderWorkingLine()
 	if before == after {
-		t.Fatalf("spinner tick left the running ToolCard on a frozen frame:\n%s", after)
+		t.Fatalf("a full beat left the running ToolCard on a frozen frame:\n%s", after)
 	}
 	if footerBefore == footerAfter || !strings.Contains(footerAfter, "Tool running") ||
 		!strings.Contains(footerAfter, "1.5s") || strings.Contains(footerAfter, "internal/ui") {
