@@ -55,6 +55,16 @@ const sonarPulseTickDivider = 4
 // looked, accurately, like something pasted into the row.
 var sonarPulseBeats = [sonarPulseFrames]string{"•", "◦", "·"}
 
+// sonarListenBeats are the same three glyphs in reverse: a return echo
+// converging instead of a ping going out.
+//
+// The inversion is the whole design. Emitting and listening are opposite halves
+// of one metaphor, so they should be opposite readings of one vocabulary rather
+// than two unrelated animations — and running the beats backwards distinguishes
+// them by SHAPE, which survives a monochrome terminal, where two colors of the
+// same dot would not.
+var sonarListenBeats = [sonarPulseFrames]string{"·", "◦", "•"}
+
 // sonarPulseGlyph is the current frame, or "" when this terminal or this
 // moment should keep the existing motion.
 //
@@ -75,6 +85,12 @@ func (m *Model) sonarPulseGlyph() string {
 	// false to the state: nothing has stopped, and an empty accent cell in a
 	// row that is otherwise reporting progress reads as a stall.
 	beat := m.sonarPulseFrame % sonarPulseFrames
+	if m.listeningForVoice() {
+		// Listening runs the beats inward and wears the warning role, because
+		// an open microphone is a state a person must be able to notice without
+		// looking for it.
+		return lipgloss.NewStyle().Foreground(palette.Warning).Render(sonarListenBeats[beat])
+	}
 	color := palette.Dim
 	switch beat {
 	case 0:

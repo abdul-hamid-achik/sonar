@@ -1007,6 +1007,7 @@ func run() int {
 	if notice := m.StartVoice(cfg.Voice); notice != "" {
 		fmt.Fprintln(os.Stderr, notice)
 	}
+	m.SetVoiceInput(cfg.Voice.Input)
 	if permChecker.SkipsApprovals() {
 		m.SetApprovalPosture(ui.ApprovalPostureSkipApprovals)
 	} else {

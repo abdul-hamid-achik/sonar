@@ -215,6 +215,26 @@ type VoiceConfig struct {
 	// Rate is words per minute. Zero uses a default faster than the system's,
 	// because a coding session is listened to while working.
 	Rate int `yaml:"rate,omitempty"`
+	// Input configures dictation. It is a separate half: hearing and speaking
+	// have independent drivers, and a host can have one without the other.
+	Input VoiceInputConfig `yaml:"input,omitempty"`
+}
+
+// VoiceInputConfig turns a spoken utterance into composer text.
+//
+// Local only. A hosted transcriber would be faster and nearly free, but sending
+// audio off the machine is a different decision from sending text — voice
+// carries who is in the room and what else was said — and it is not one a
+// default should make. The transcript lands in the composer rather than being
+// sent, because dictation mis-hears and nobody should act on words no one said.
+type VoiceInputConfig struct {
+	// Model is a whisper.cpp ggml model path. Empty searches the conventional
+	// install locations and prefers the smaller models: on a laptop the
+	// difference between base and large is seconds per utterance.
+	Model string `yaml:"model,omitempty"`
+	// Language is an ISO code. Empty lets Whisper detect it, which costs a
+	// little latency and is the right default for a bilingual user.
+	Language string `yaml:"language,omitempty"`
 }
 
 type AgentsConfig struct {

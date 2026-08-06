@@ -2,7 +2,10 @@
 
 package speech
 
-import "os/exec"
+import (
+	"os"
+	"os/exec"
+)
 
 // Linux and the rest reach a synthesizer through the same subprocess shape, but
 // none is part of a base system the way macOS ships `say`. Reporting false is
@@ -21,3 +24,24 @@ func synthesizerCommand(string, int) (string, []string, error) {
 }
 
 func signalSynthesizer(*exec.Cmd) {}
+
+// captureCommand records from ALSA, which is the one recorder present on a
+// stock Linux without a desktop audio stack. It is unverified on a real host —
+// this project has no Linux machine to try it on — so CaptureAvailable's
+// ffmpeg probe is what actually gates it, and a wrong device name here fails
+// loudly at record time rather than silently producing nothing.
+func captureCommand(destination string) (string, []string) {
+	return "ffmpeg", []string{
+		"-hide_banner", "-loglevel", "error",
+		"-f", "alsa", "-i", "default",
+		"-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
+		"-y", destination,
+	}
+}
+
+func interruptRecorder(command *exec.Cmd) {
+	if command == nil || command.Process == nil {
+		return
+	}
+	_ = command.Process.Signal(os.Interrupt)
+}

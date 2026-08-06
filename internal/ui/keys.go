@@ -34,6 +34,7 @@ type KeyMap struct {
 	HistoryUp         key.Binding
 	HistoryDown       key.Binding
 	ToggleFocusedTool key.Binding
+	VoiceInput        key.Binding
 	ToggleThinking    key.Binding
 	CompactToggle     key.Binding
 	ExternalEditor    key.Binding
@@ -55,6 +56,14 @@ func DefaultKeyMap() KeyMap {
 		Cancel: key.NewBinding(
 			key.WithKeys("esc"),
 			key.WithHelp("esc", "cancel / close overlay"),
+		),
+		// alt+<letter> is this map's namespace for toggles (alt+m mouse capture,
+		// alt+t, alt+d), and alt+v is free. A toggle rather than hold-to-talk
+		// because terminals report key RELEASE only under the Kitty protocol —
+		// a hold binding would work in Ghostty and do nothing in Terminal.app.
+		VoiceInput: key.NewBinding(
+			key.WithKeys("alt+v"),
+			key.WithHelp("alt+v", "hold the mic open / close and transcribe"),
 		),
 		Quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),
@@ -229,7 +238,7 @@ func (k KeyMap) HelpSections() []KeyHelpSection {
 	return []KeyHelpSection{
 		{"Compose", []key.Binding{
 			k.Send, k.NewLine, k.Paste, k.Complete, k.HistoryUp, k.HistoryDown,
-			k.ExternalEditor,
+			k.ExternalEditor, k.VoiceInput,
 		}},
 		{"Read", []key.Binding{
 			k.PageUp, k.PageDown, k.HalfPageUp, k.HalfPageDn, k.JumpLatest, k.TranscriptSearch,

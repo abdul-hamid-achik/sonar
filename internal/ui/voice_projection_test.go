@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/abdul-hamid-achik/sonar/internal/config"
+	"github.com/abdul-hamid-achik/sonar/internal/speech"
 )
 
 // TestSpokenTextDropsWhatCannotBeHeard is the measured case. The raw form of
@@ -213,5 +214,60 @@ func TestVoiceSilenceDiscardsPendingSpeech(t *testing.T) {
 	if m.voice.pending != "" || m.voice.lastActivity != "" {
 		t.Fatalf("silence left state behind: pending=%q activity=%q",
 			m.voice.pending, m.voice.lastActivity)
+	}
+}
+
+// TestListeningTakesTheRailFromEverything pins the one state that outranks a
+// running turn. An open microphone is the only moment the harness captures the
+// room rather than reporting on itself, and a person has to be able to notice
+// it without going looking.
+func TestListeningTakesTheRailFromEverything(t *testing.T) {
+	m := newTestModel(t)
+	m.state = StateStreaming
+	m.toolsPending = 1
+	busy, ok := m.currentWorkingActivity()
+	if !ok || busy.label == "Listening" {
+		t.Fatalf("precondition: a busy turn already claims to listen: %#v", busy)
+	}
+
+	m.voiceInput = &voiceInputState{transcribing: true}
+	transcribing, ok := m.currentWorkingActivity()
+	if !ok || transcribing.label != "Transcribing" {
+		t.Fatalf("transcribing did not take the rail from a running tool: %#v", transcribing)
+	}
+	// Transcription is a one-shot wait with nothing to animate, so it is static
+	// rather than adding a second clock.
+	if !transcribing.static {
+		t.Fatal("transcribing animates, which would add a clock for a fixed wait")
+	}
+}
+
+// The listening animation is the pulse read backwards: an echo converging
+// rather than a ping going out. Distinguishing them by SHAPE is what makes it
+// survive a monochrome terminal, where two colors of the same dot would not.
+func TestListeningAnimationInvertsTheEmitOne(t *testing.T) {
+	emit := sonarPulseBeats
+	listen := sonarListenBeats
+	if len(emit) != len(listen) {
+		t.Fatalf("the two animations do not share a vocabulary: %v vs %v", emit, listen)
+	}
+	for index := range emit {
+		if emit[index] != listen[len(listen)-1-index] {
+			t.Fatalf("listening is not the emit sequence reversed: %v vs %v", emit, listen)
+		}
+	}
+}
+
+// The two halves of voice fail for different reasons and are fixed by different
+// commands, so the message names which one rather than saying "unavailable".
+func TestVoiceUnavailableNoticeNamesTheFix(t *testing.T) {
+	if got := voiceUnavailableNotice(speech.ErrNoCapture); !strings.Contains(got, "ffmpeg") {
+		t.Fatalf("a missing recorder did not name its install: %q", got)
+	}
+	if got := voiceUnavailableNotice(speech.ErrNoTranscriber); !strings.Contains(got, "whisper") {
+		t.Fatalf("a missing transcriber did not name its install: %q", got)
+	}
+	if got := voiceUnavailableNotice(nil); got != "" {
+		t.Fatalf("no error produced a notice: %q", got)
 	}
 }

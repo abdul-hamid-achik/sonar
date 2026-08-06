@@ -159,6 +159,31 @@ voice:
   # coding session is listened to while working rather than attentively.
   # rate: 210
 
+  # Dictation: alt+v opens the microphone, alt+v again closes it and the
+  # transcription lands in the composer as a draft you read before sending —
+  # dictation mis-hears, and nobody should act on words no one said.
+  #
+  # Toggle rather than hold-to-talk because terminals report key RELEASE only
+  # under the Kitty protocol; a hold binding would work in Ghostty and do
+  # nothing in Terminal.app.
+  #
+  # Local only, and deliberately: a hosted transcriber is faster and nearly
+  # free, but audio carries who is in the room and what else was said, which is
+  # a different decision from sending text. Needs two tools, and pressing alt+v
+  # without them names which one is missing:
+  #
+  #   brew install ffmpeg whisper-cpp
+  #
+  # There is no enable flag — the key does nothing until pressed.
+  input:
+    # A whisper.cpp ggml model path. Empty searches the usual install locations
+    # and prefers the smaller models: on a laptop the difference between base
+    # and large is seconds of waiting per utterance.
+    # model: ~/.cache/whisper.cpp/ggml-base.bin
+    # ISO code. Empty lets Whisper detect it, which costs a little latency and
+    # is the right default if you switch languages.
+    # language: es
+
 # Provider-loop budgets are independent so interactive turns stay concise while
 # AUTO has room to inspect, implement, and verify without a premature stop.
 tools:

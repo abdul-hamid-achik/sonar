@@ -103,6 +103,11 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			return nil, true
 		}
 
+	case key.Matches(msg, m.keys.VoiceInput):
+		// Dictation is composer input, so it is available wherever the composer
+		// is: mid-turn a spoken follow-up queues exactly as a typed one does.
+		return m.toggleVoiceInput(), true
+
 	case key.Matches(msg, m.keys.ToggleFocusedTool):
 		// Toggle last tool entry only when input is empty.
 		if m.state == StateIdle && strings.TrimSpace(m.input.Value()) == "" {

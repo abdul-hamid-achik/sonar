@@ -79,6 +79,19 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 	}
 
 	switch {
+	// An open microphone outranks everything. It is the one state where the
+	// harness is capturing the room rather than reporting on itself, and a
+	// person must be able to notice it without going looking — so it takes the
+	// rail even from a running turn, whose progress is one line below anyway.
+	case m.listeningForVoice():
+		return workingActivity{
+			label: "Listening", compactLabel: "Listening",
+			detail: "alt+v to stop", cancellable: false,
+		}, true
+	case m.transcribingVoice():
+		return workingActivity{
+			label: "Transcribing", compactLabel: "Transcribing", static: true,
+		}, true
 	case m.shuttingDown:
 		return workingActivity{label: "Stopping safely", detail: "waiting for receipts"}, true
 	case m.initializing && (!m.turnReady || m.state == StateIdle):

@@ -149,6 +149,12 @@ type Model struct {
 	// restored session starts calm and nothing has to be persisted.
 	// voice owns spoken output when it is enabled and the host can honour it.
 	voice *voiceState
+	// voiceInput owns the microphone. Separate from voice because hearing and
+	// speaking are independent capabilities with independent drivers: a host
+	// can have one without the other.
+	voiceInput         *voiceInputState
+	voiceInputModel    string
+	voiceInputLanguage string
 	// sonarPulseFrame is the emit-side animation beat. It advances on the
 	// activity spinner's tick and never on one of its own.
 	sonarPulseFrame uint64
@@ -574,6 +580,7 @@ func (m *Model) beginShutdown() tea.Cmd {
 	// rather than at exit also means the last thing a quitting user hears is
 	// silence, not half of a sentence about work they just abandoned.
 	m.closeVoice()
+	m.closeVoiceInput()
 	m.cancelTerminalInputResume()
 	m.cancelSessionTitleGen()
 	m.pendingOllamaInventory = nil
@@ -710,6 +717,9 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 
 	case activityHeartbeatMsg:
 		return m, m.handleActivityHeartbeat(msg)
+
+	case VoiceTranscriptMsg:
+		return m, m.handleVoiceTranscript(msg)
 
 	case tea.KeyPressMsg:
 		// Any key silences speech, before the key is even routed. Interruption

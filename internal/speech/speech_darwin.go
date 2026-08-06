@@ -48,3 +48,33 @@ func signalSynthesizer(command *exec.Cmd) {
 		_ = command.Process.Kill()
 	}
 }
+
+// captureCommand records 16kHz mono 16-bit WAV from the default input.
+//
+// `:default` names the default audio input device in avfoundation's
+// "video:audio" address form — the empty video half is required, and omitting
+// the colon selects a camera instead. 16kHz mono is what every Whisper family
+// model expects; feeding anything else costs a resample nobody sees.
+func captureCommand(destination string) (string, []string) {
+	return "ffmpeg", []string{
+		"-hide_banner", "-loglevel", "error",
+		"-f", "avfoundation", "-i", ":default",
+		"-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
+		"-y", destination,
+	}
+}
+
+// interruptRecorder asks ffmpeg to finish the file it is writing.
+//
+// SIGINT, not SIGKILL. A WAV header carries its data size in a field written
+// when the stream closes; ffmpeg backpatches it on interrupt and cannot on a
+// kill, which leaves a file every reader treats as empty. Same lesson as the
+// git index lock, one signal further along.
+func interruptRecorder(command *exec.Cmd) {
+	if command == nil || command.Process == nil {
+		return
+	}
+	if err := command.Process.Signal(syscall.SIGINT); err != nil {
+		_ = command.Process.Kill()
+	}
+}
