@@ -117,8 +117,14 @@ sandbox:
   enabled: false
   # Confined commands reach the network. Leave false: sonar's own provider
   # calls are made by the sonar process, never by a confined child, so denying
-  # this costs inference nothing. It costs `npm install` and `go mod download`,
-  # which already require an interactive approval of their own.
+  # this costs inference nothing.
+  #
+  # While it is false, commands that cannot succeed WITHOUT the network keep
+  # asking rather than being widened — `npm install`, `pip install`,
+  # `go mod download`, `curl`. Running them unattended into a denial the same
+  # setting causes would trade a useful question for a guaranteed failure the
+  # person who could have answered it never sees. Set it true and they widen
+  # with everything else.
   allow_network: false
 
 # Provider-loop budgets are independent so interactive turns stay concise while

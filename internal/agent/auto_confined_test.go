@@ -45,7 +45,6 @@ func TestConfinementWidensOnlyTheRefusalsItMakesMoot(t *testing.T) {
 		"xcrun --version",                    // installed but uncatalogued
 		"grep -rn TODO .",                    // a walk the ignore policy cannot see
 		"node -e 'console.log(1)'",           // inline interpreter code
-		"curl https://example.com",           // network, which the kernel denies
 		"grep -rn TODO . && xcrun --version", // every segment moot
 	}
 	for _, command := range widened {
@@ -60,7 +59,10 @@ func TestConfinementWidensOnlyTheRefusalsItMakesMoot(t *testing.T) {
 	}
 
 	// The sandbox leaves the workspace writable and cannot reach published
-	// state, so these keep asking.
+	// state, so these keep asking. `curl` is not here: it is refused for a
+	// different reason entirely — it cannot succeed under a network-denying
+	// policy — and TestConfinementDoesNotWidenIntoACertainFailure owns that
+	// case, including the part where granting the network widens it.
 	stillAsks := []string{
 		"rm -rf .",                       // destroys uncommitted work inside the box
 		"git push --force",               // rewrites history no filesystem bounds
@@ -121,5 +123,64 @@ func TestConfinedApprovalReasonMatchesTheDecision(t *testing.T) {
 	}
 	if reason := confined.autoCommandApprovalReason(AuthorityAutoScoped, "rm -rf ."); reason == "" {
 		t.Fatal("a command that still asks carries no reason")
+	}
+}
+
+// TestConfinementDoesNotWidenIntoACertainFailure covers a regression the
+// widening itself introduced.
+//
+// Before it, `npm install` prompted: a human saw it, approved, and it worked.
+// After, it was admitted — because "arguments outside the catalog" is a
+// containment refusal the kernel had made moot — and then failed against a
+// network the same sandbox denies. That trades a useful question for an
+// unattended, guaranteed failure the person who could have answered never sees.
+//
+// The premise of widening is that the kernel makes a command safe. For a
+// fetching command under a network-denying policy it does not make it safe, it
+// makes it fail.
+func TestConfinementDoesNotWidenIntoACertainFailure(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	if !sandbox.Available() {
+		t.Skip("no confinement driver on this platform")
+	}
+	installGrantTestExecutables(t, "npm", "pip", "curl", "go", "xcrun")
+	denied, workspace := confinedAgent(t, true)
+	if err := os.WriteFile(filepath.Join(workspace, "package.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	granted, _ := confinedAgent(t, true)
+	granted.SetSandboxPosture(SandboxPosture{Enabled: true, AllowNetwork: true})
+
+	fetching := []string{
+		"npm install", "npm ci", "npm i", "pip install requests",
+		"go mod download", "curl https://example.com",
+		// One fetching segment is enough to keep the whole command asking.
+		"xcrun --version && npm install",
+	}
+	for _, command := range fetching {
+		t.Run("asks/"+command, func(t *testing.T) {
+			if denied.assessConfinedCommand(command).admitted() {
+				t.Fatal("a command that cannot succeed without the network ran unattended")
+			}
+			// Granting the network restores the widening: the failure was the
+			// reason to ask, and it is gone.
+			if !granted.assessConfinedCommand(command).admitted() {
+				t.Fatal("a network-granted confinement still refused a fetching command")
+			}
+		})
+	}
+
+	// The offline forms of the same tools are unaffected. This is a certainty
+	// test, not a safety one: `go build` may fetch a missing module and usually
+	// does not, so one cold-cache failure is a better trade than prompting on
+	// every build.
+	for _, command := range []string{"npm test", "npm run lint", "go build ./...", "xcrun --version"} {
+		t.Run("still-widens/"+command, func(t *testing.T) {
+			if !denied.assessConfinedCommand(command).admitted() {
+				t.Fatal("an offline command was refused for needing the network")
+			}
+		})
 	}
 }

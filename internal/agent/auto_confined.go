@@ -97,6 +97,7 @@ func (a *Agent) assessConfinedCommand(command string) autoCommandAssessment {
 	// Every segment is checked, not only the one that refused. A compound whose
 	// grep is moot and whose `rm -rf` is not must still ask, and asking about
 	// the whole command is the only answer that is true of all of it.
+	allowNetwork := a.SandboxPosture().AllowNetwork
 	for _, words := range commands {
 		for len(words) > 0 && autoCommandAssignmentAllowed(words[0]) {
 			words = words[1:]
@@ -105,6 +106,15 @@ func (a *Agent) assessConfinedCommand(command string) autoCommandAssessment {
 			continue
 		}
 		if !autoConfinedSegmentAdmissible(words) {
+			return assessment
+		}
+		// A command whose only path to success is a resource the policy denies
+		// must not be widened. The premise here is "the kernel makes this
+		// safe"; for `npm install` under a network-denying sandbox the kernel
+		// does not make it safe, it makes it fail — and an unattended,
+		// guaranteed failure is worse than the approval it replaced, because
+		// the human who would have approved it never sees it.
+		if !allowNetwork && autoConfinedNeedsNetwork(words) {
 			return assessment
 		}
 	}
@@ -141,4 +151,70 @@ func autoConfinedSegmentAdmissible(words []string) bool {
 		return false
 	}
 	return true
+}
+
+// autoConfinedNetworkSubcommands names the first argument that turns a local
+// tool into a fetching one. A package manager reads a manifest offline and
+// installs from a registry online, and only the second form is a certain
+// failure under a network-denying sandbox.
+var autoConfinedNetworkSubcommands = map[string]map[string]struct{}{
+	"npm":      {"install": {}, "i": {}, "ci": {}, "add": {}, "update": {}, "audit": {}, "publish": {}},
+	"pnpm":     {"install": {}, "i": {}, "add": {}, "update": {}, "fetch": {}, "publish": {}},
+	"yarn":     {"install": {}, "add": {}, "upgrade": {}, "publish": {}},
+	"bun":      {"install": {}, "add": {}, "update": {}, "publish": {}},
+	"pip":      {"install": {}, "download": {}},
+	"pip3":     {"install": {}, "download": {}},
+	"cargo":    {"fetch": {}, "install": {}, "update": {}, "publish": {}},
+	"gem":      {"install": {}, "update": {}, "fetch": {}},
+	"composer": {"install": {}, "update": {}, "require": {}},
+	"brew":     {"install": {}, "update": {}, "upgrade": {}, "fetch": {}},
+	"apt":      {"install": {}, "update": {}, "upgrade": {}},
+	"apt-get":  {"install": {}, "update": {}, "upgrade": {}},
+}
+
+// autoConfinedNetworkExecutables reach the network in every form they have, so
+// no subcommand distinguishes them.
+var autoConfinedNetworkExecutables = map[string]struct{}{
+	"curl": {}, "wget": {}, "ssh": {}, "scp": {}, "sftp": {}, "rsync": {},
+	"ping": {}, "nc": {}, "netcat": {}, "telnet": {}, "ftp": {}, "gh": {}, "glab": {},
+}
+
+// autoConfinedNeedsNetwork reports whether a segment obviously cannot succeed
+// without the network.
+//
+// It is a certainty test, not a safety one, and the difference decides what
+// belongs in it. `go build` may fetch a missing module and usually does not;
+// admitting it and letting a cold cache fail once is a better trade than
+// prompting on every build. `npm install` has no offline meaning at all. Only
+// commands in the second category are here, which is why the list can stay
+// short and does not need to be complete: an omission costs one confusing
+// failure, and a false entry costs an approval on work that would have run.
+func autoConfinedNeedsNetwork(words []string) bool {
+	executable := words[0]
+	if _, always := autoConfinedNetworkExecutables[executable]; always {
+		return true
+	}
+	if autoConfinedGoNeedsNetwork(words) {
+		return true
+	}
+	subcommands, known := autoConfinedNetworkSubcommands[executable]
+	if !known || len(words) < 2 {
+		return false
+	}
+	// `npm run <script>` is the manifest's own code and may do anything; it is
+	// judged by the script-name rules, not here.
+	_, fetching := subcommands[words[1]]
+	return fetching
+}
+
+// autoConfinedGoNeedsNetwork covers the `go mod` forms that fetch. They are
+// spelled as three words, so they are checked apart from the table above.
+//
+// In practice only the widening path reaches this: `go mod tidy` is already
+// catalogued and admitted before confinement is consulted, so a cold module
+// cache can still fail it under a network-denying sandbox. That predates all
+// of this and belongs to the catalog's own admission, not here.
+func autoConfinedGoNeedsNetwork(words []string) bool {
+	return len(words) >= 3 && words[0] == "go" && words[1] == "mod" &&
+		(words[2] == "download" || words[2] == "tidy")
 }
