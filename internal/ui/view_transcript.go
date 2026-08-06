@@ -807,6 +807,12 @@ func (m *Model) runningToolActivityGlyph() string {
 	if m == nil || m.reducedMotion {
 		return ""
 	}
+	// The card and the rail move together. Two moving glyphs in one frame,
+	// driven by one clock but drawn from two vocabularies, would read as two
+	// unrelated things happening rather than one.
+	if pulse := m.sonarPulseGlyph(); pulse != "" {
+		return pulse
+	}
 	return m.spin.View()
 }
 

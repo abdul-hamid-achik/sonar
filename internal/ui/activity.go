@@ -342,6 +342,12 @@ func (m *Model) renderWorkingLine() string {
 					motion = motionStyle.Render(glyphEllipsis(m.glyphProfile))
 				}
 			}
+		} else if pulse := m.sonarPulseGlyph(); pulse != "" {
+			// Every active phase that is not a wait: a tool running, a stream
+			// arriving, a session restoring. The waiting phase keeps the trace
+			// above, because there a fact exists to show and identity is the
+			// weaker thing to spend the cells on.
+			motion = pulse
 		} else {
 			motion = m.spin.View()
 		}

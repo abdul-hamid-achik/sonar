@@ -147,6 +147,9 @@ type Model struct {
 	// expandedReadRuns names the collapsed read-run summaries the reader has
 	// opened, keyed by the run's first block. Absence means collapsed, so a
 	// restored session starts calm and nothing has to be persisted.
+	// sonarPulseFrame is the emit-side animation beat. It advances on the
+	// activity spinner's tick and never on one of its own.
+	sonarPulseFrame    uint64
 	expandedReadRuns   map[BlockID]struct{}
 	toolHitRegions     []toolHitRegion
 	thinkingHitRegions []thinkingHitRegion
@@ -923,6 +926,9 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 		var cmd tea.Cmd
 		m.spin, cmd = m.spin.Update(msg)
 		cmds = append(cmds, cmd)
+		// The pulse rides this tick rather than starting one of its own, which
+		// is the same rule the ping trace follows: one clock per phase.
+		m.advanceSonarPulse()
 		m.advanceRunningToolReceiptFrame()
 	}
 
