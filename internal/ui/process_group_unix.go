@@ -16,13 +16,27 @@ const tuiProcessGroupCleanupTimeout = 100 * time.Millisecond
 // TUI effect terminates the process and every descendant it spawned. This is
 // intentionally not used for tea.ExecProcess: Bubble Tea owns interactive
 // editor execution and terminal restoration synchronously.
+// configureTUICommandProcessGroup gives a host-owned subprocess its own group
+// and cancels that group politely first.
+//
+// SIGTERM before SIGKILL is not manners, it is correctness for the one command
+// this path exists to run. `git commit` takes .git/index.lock before it writes
+// and removes it on the way out, and SIGKILL cannot be caught — so a cancelled
+// /commit left a zero-byte lock behind that blocks every later git command in
+// the repository until a human deletes it. It happened four times in one
+// session before anyone connected the two.
+//
+// Escalation is not skipped, only delayed: cmd.WaitDelay already arms the
+// uncatchable kill, and cleanupTUICommandProcessGroup repeats it afterwards for
+// any descendant that was forking during cancellation. A process that ignores
+// SIGTERM still dies; one that handles it gets to leave the repository usable.
 func configureTUICommandProcessGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return os.ErrProcessDone
 		}
-		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		err := syscall.Kill(-cmd.Process.Pid, syscall.SIGTERM)
 		if errors.Is(err, syscall.ESRCH) {
 			return os.ErrProcessDone
 		}

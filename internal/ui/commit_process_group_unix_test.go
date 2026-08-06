@@ -110,3 +110,56 @@ func runGitForCommitTest(t *testing.T, dir string, args ...string) string {
 	}
 	return string(out)
 }
+
+// TestCancelledCommitLeavesNoIndexLock is the test for a bug that cost four
+// manual `rm .git/index.lock` in one session before anyone connected the
+// cancelled /commit to the lock.
+//
+// git takes .git/index.lock before it writes and removes it on the way out.
+// SIGKILL cannot be caught, so a killed git never reaches the removal and the
+// repository is left unusable for every later git command until a human
+// deletes the file. The fix is to signal first; this proves the signal
+// actually reaches a process that can act on it.
+func TestCancelledCommitLeavesNoIndexLock(t *testing.T) {
+	// No GOOS guard: this file's build constraints already exclude every
+	// platform without POSIX process groups.
+	dir := t.TempDir()
+	lock := filepath.Join(dir, "index.lock")
+	// A stand-in for git: take the lock, trap the polite signal, release it.
+	// Using a real `git commit` would need a repository, a staged change, and a
+	// window narrow enough to cancel inside — this reproduces the contract that
+	// actually matters, which is that SIGTERM arrives and can be handled.
+	script := filepath.Join(dir, "taker.sh")
+	body := "#!/bin/sh\n" +
+		"trap 'rm -f " + lock + "; exit 0' TERM\n" +
+		"touch " + lock + "\n" +
+		"while true; do sleep 0.05; done\n"
+	if err := os.WriteFile(script, []byte(body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cmd := exec.CommandContext(ctx, "/bin/sh", script)
+	configureTUICommandProcessGroup(cmd)
+	cmd.WaitDelay = 2 * time.Second
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	for waited := 0; waited < 200; waited++ {
+		if _, err := os.Stat(lock); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if _, err := os.Stat(lock); err != nil {
+		t.Fatalf("precondition: the stand-in never took the lock: %v", err)
+	}
+
+	cancel()
+	_ = cmd.Wait()
+	cleanupTUICommandProcessGroup(cmd)
+
+	if _, err := os.Stat(lock); err == nil {
+		t.Fatal("a cancelled command left its lock behind; the repository would be stuck")
+	}
+}
