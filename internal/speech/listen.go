@@ -7,8 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 // Listening: capture a spoken utterance and transcribe it locally.
@@ -102,7 +104,7 @@ func (l *Listener) Start() error {
 	path := file.Name()
 	_ = file.Close()
 
-	name, args := captureCommand(path)
+	name, args := captureCommand(path, MaxUtterance)
 	command := exec.Command(name, args...)
 	if err := command.Start(); err != nil {
 		_ = os.Remove(path)
@@ -174,6 +176,27 @@ func (l *Listener) Cancel() {
 // minimumUtteranceBytes is roughly a fifth of a second of 16kHz mono 16-bit
 // audio plus a header. Below this there is nothing to transcribe.
 const minimumUtteranceBytes = 6 * 1024
+
+// MaxUtterance is how long the RECORDER will run before stopping itself.
+//
+// The caller already bounds an utterance, and that bound is the one a user
+// meets. This one exists for the case the caller cannot cover: a harness killed
+// outright leaves no code to run a timer, and an orphaned recorder holds the
+// microphone open and fills a disk for as long as the machine is up. A process
+// that cannot be told to stop has to know when to.
+//
+// Longer than the caller's timeout on purpose. In a live session the caller
+// always closes the microphone first and says why; reaching this one means
+// nothing was left to ask.
+const MaxUtterance = 3 * time.Minute
+
+// captureLimitSeconds renders a duration for ffmpeg's -t, which takes seconds.
+func captureLimitSeconds(limit time.Duration) string {
+	if limit <= 0 {
+		limit = MaxUtterance
+	}
+	return strconv.FormatInt(int64(limit.Seconds()), 10)
+}
 
 // LocalTranscriber runs whisper.cpp on the recorded file.
 type LocalTranscriber struct {

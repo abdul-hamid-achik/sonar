@@ -5,6 +5,7 @@ package speech
 import (
 	"os"
 	"os/exec"
+	"time"
 )
 
 // Linux and the rest reach a synthesizer through the same subprocess shape, but
@@ -30,10 +31,11 @@ func signalSynthesizer(*exec.Cmd) {}
 // this project has no Linux machine to try it on — so CaptureAvailable's
 // ffmpeg probe is what actually gates it, and a wrong device name here fails
 // loudly at record time rather than silently producing nothing.
-func captureCommand(destination string) (string, []string) {
+func captureCommand(destination string, limit time.Duration) (string, []string) {
 	return "ffmpeg", []string{
 		"-hide_banner", "-loglevel", "error",
 		"-f", "alsa", "-i", "default",
+		"-t", captureLimitSeconds(limit),
 		"-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
 		"-y", destination,
 	}

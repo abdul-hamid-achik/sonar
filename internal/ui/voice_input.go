@@ -27,6 +27,10 @@ import (
 // voiceListenTimeout bounds one utterance. A microphone left open by a
 // forgotten keypress is a privacy problem, not just an idle process, so it
 // closes itself.
+//
+// This is the bound a user meets, and it is the shorter of two: the recorder
+// carries speech.MaxUtterance as its own stop time, for the case this timer
+// cannot cover — a harness killed outright leaves nothing running to fire it.
 const voiceListenTimeout = 2 * time.Minute
 
 // voiceTranscribeTimeout bounds the transcriber. Local Whisper on a laptop
@@ -94,12 +98,17 @@ func (m *Model) startVoiceInput() tea.Cmd {
 		// ordering available.
 		return m.setFooterNotice(noticeWarning, voiceUnavailableNotice(speech.ErrNoTranscriber), 6*time.Second)
 	}
+	// Speech output and speech input must not overlap: a synthesizer talking
+	// into an open microphone transcribes the harness. This has to happen
+	// BEFORE the microphone opens — it used to run after, which is the overlap
+	// it exists to prevent. Nobody heard it because the key handler silences
+	// speech before routing any key, so the call below was already redundant by
+	// the time it ran; a path that reaches here without a key press would have
+	// recorded the tail of a sentence.
+	m.silenceVoice()
 	if err := m.voiceInput.listener.Start(); err != nil {
 		return m.setFooterNotice(noticeWarning, voiceUnavailableNotice(err), 6*time.Second)
 	}
-	// Speech output and speech input must not overlap: a synthesizer talking
-	// into an open microphone transcribes the harness.
-	m.silenceVoice()
 	m.voiceInput.token++
 	token := m.voiceInput.token
 	return tea.Tick(voiceListenTimeout, func(time.Time) tea.Msg {

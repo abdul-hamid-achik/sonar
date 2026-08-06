@@ -192,6 +192,36 @@ func TestVoiceAnswerSpeaksEachSentenceOnce(t *testing.T) {
 	}
 }
 
+// A slash is not a path.
+//
+// The reducer keeps only a token's last segment, which is what makes
+// "internal/agent/auto_command.go" worth hearing and what silently rewrote
+// every other slash people type. Each case below is what the projection
+// actually said before this rule existed.
+func TestSpokenProjectionOnlyReducesRealPaths(t *testing.T) {
+	for _, testCase := range []struct{ raw, want string }{
+		// Left alone: a date reduced to its year, two fractions reduced to
+		// their denominators, and a conjunction reduced to its second half —
+		// which reversed the sentence.
+		{"Lo hicimos el 5/8/2026 y salió bien.", "Lo hicimos el 5/8/2026 y salió bien."},
+		{"Cubrimos 1/2 de los casos.", "Cubrimos 1/2 de los casos."},
+		{"El ratio es 3/4 aproximadamente.", "El ratio es 3/4 aproximadamente."},
+		{"Aplica a usuarios y/o administradores.", "Aplica a usuarios y/o administradores."},
+		// Still reduced, because these are paths.
+		{"Mirá internal/agent/auto_command.go ahí.", "Mirá auto command dot go ahí."},
+		{"El paquete internal/ui tiene el bug.", "El paquete ui tiene el bug."},
+		{"Está en /usr/local/bin ahora.", "Está en bin ahora."},
+		{"El reporte 2024/01/informe.pdf sirve.", "El reporte informe dot pdf sirve."},
+		// A wildcard is punctuation with no name in it. "go test dot dot dot"
+		// is a second of noise; whoever hears "go test" knows which tree.
+		{"Corré go test ./... y verificá.", "Corré go test y verificá."},
+	} {
+		if got := spokenText(testCase.raw); got != testCase.want {
+			t.Errorf("spokenText(%q)\n got: %q\nwant: %q", testCase.raw, got, testCase.want)
+		}
+	}
+}
+
 // A code fence is held back until it closes.
 //
 // While one streams it is indistinguishable from prose, so every line of the

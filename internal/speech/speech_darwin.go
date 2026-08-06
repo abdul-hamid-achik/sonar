@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"strconv"
 	"syscall"
+	"time"
 )
 
 // sayPath is the macOS synthesizer. It is part of the base system, reads from
@@ -55,10 +56,11 @@ func signalSynthesizer(command *exec.Cmd) {
 // "video:audio" address form — the empty video half is required, and omitting
 // the colon selects a camera instead. 16kHz mono is what every Whisper family
 // model expects; feeding anything else costs a resample nobody sees.
-func captureCommand(destination string) (string, []string) {
+func captureCommand(destination string, limit time.Duration) (string, []string) {
 	return "ffmpeg", []string{
 		"-hide_banner", "-loglevel", "error",
 		"-f", "avfoundation", "-i", ":default",
+		"-t", captureLimitSeconds(limit),
 		"-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
 		"-y", destination,
 	}

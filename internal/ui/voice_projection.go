@@ -3,6 +3,7 @@ package ui
 import (
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Spoken projection: what a coding-agent transcript sounds like when it is
@@ -36,7 +37,9 @@ var (
 	// Leading markup a reader sees and a listener does not need.
 	spokenLeadingMarkup = regexp.MustCompile(`(?m)^\s*(#{1,6}\s+|[-*+]\s+|\d+\.\s+|>\s*)`)
 	spokenEmphasis      = regexp.MustCompile(`\*\*|__|\*|_{2,}`)
-	// A path-looking token: two or more segments, or one with an extension.
+	// Any token carrying a slash. Whether it is a PATH is decided by
+	// slashIsAPath, not here: a regex that tried would also have to know that
+	// "5/8/2026" is a date.
 	spokenPathToken = regexp.MustCompile(`\S*/\S+`)
 	// Long hex runs — digests, object ids, session handles.
 	spokenHexRun     = regexp.MustCompile(`\b[0-9a-f]{7,}\b`)
@@ -67,6 +70,44 @@ func spokenText(markdown string) string {
 	text = spokenEmphasis.ReplaceAllString(text, "")
 	text = spokenWhitespace.ReplaceAllString(text, " ")
 	return strings.TrimSpace(text)
+}
+
+// slashIsAPath reports whether a slash-bearing token is a path at all.
+//
+// Reducing a token to its last segment is right for
+// internal/agent/auto_command.go and wrong for most other things people write
+// with a slash. Measured against ordinary prose, the reducer turned "5/8/2026"
+// into "2026", "1/2" into "2", "3/4" into "4" and "y/o" into "o" — a date, two
+// fractions and a conjunction, each reduced to the half that carries the least
+// meaning, and the last of them reversing what the sentence said.
+//
+// Two shapes are excluded, both by what they are rather than by a list:
+// segments that are all digits are an amount, a ratio or a date; and a pair of
+// single characters is a conjunction (y/o, s/n, and/or is caught by neither and
+// is accepted as the cost of a rule this small).
+func slashIsAPath(token string) bool {
+	segments := strings.Split(token, "/")
+	numeric, named := true, false
+	for _, segment := range segments {
+		if segment == "" {
+			// "/" and "dir/" have empty segments and are still paths. Only what
+			// a segment CONTAINS can disqualify a token.
+			continue
+		}
+		named = true
+		if strings.ContainsFunc(segment, func(r rune) bool { return !unicode.IsDigit(r) }) {
+			numeric = false
+			break
+		}
+	}
+	if named && numeric {
+		return false
+	}
+	if len(segments) == 2 &&
+		len([]rune(segments[0])) == 1 && len([]rune(segments[1])) == 1 {
+		return false
+	}
+	return true
 }
 
 // withoutUnfinishedMarkup drops a span whose closing delimiter has not arrived.
@@ -110,12 +151,23 @@ func spokenPath(token string) string {
 	if index := strings.IndexByte(trimmed, ':'); index > 0 {
 		trimmed = trimmed[:index]
 	}
+	if strings.ContainsRune(trimmed, '/') && !slashIsAPath(trimmed) {
+		return token
+	}
 	base := trimmed
 	if index := strings.LastIndexByte(base, '/'); index >= 0 {
 		base = base[index+1:]
 	}
 	if base == "" {
 		return "a path"
+	}
+	if !strings.ContainsFunc(base, func(r rune) bool {
+		return unicode.IsLetter(r) || unicode.IsDigit(r)
+	}) {
+		// Punctuation with no name in it — "./..." is the whole Go tree, and a
+		// listener hearing "go test" already knows which tree. Saying "dot dot
+		// dot" adds a second of noise and no information.
+		return ""
 	}
 	base = strings.ReplaceAll(base, "_", " ")
 	base = strings.ReplaceAll(base, "-", " ")
