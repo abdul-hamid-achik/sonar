@@ -1,0 +1,88 @@
+version: 1
+contractHash: sha256:b38588940943beb05edac83cc27394a908a4d578d034b0903148b5a8ffe81a1d
+name: sonar_tui_sandbox
+intent: |
+    with sandbox.enabled, a command dispatched by a real AUTO turn arrives at
+    the kernel confined: workspace reads still work, the workspace .env does not
+    yield its contents, and a write outside every writable root does not happen.
+    The Go tests prove the boundary against the kernel and through the bash
+    tool; this proves the setting survives config loading, the authority
+    snapshot, and the tool loop on its way to a syscall.
+target:
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek-sandbox"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/sandbox-protocol.txt"
+    cwd: "${projectRoot}/.glyphrun/tmp/sandbox-home/workspace"
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/sandbox-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/sandbox-agents"
+        SONAR_REDUCED_MOTION: "1"
+terminal:
+    cols: 100
+    rows: 30
+preconditions:
+    commands:
+        # The workspace holds one ordinary file and one secret. The escape
+        # target is the HOME directory itself, which is outside every root the
+        # default policy makes writable — a temp directory would not be, since
+        # the policy allows TMPDIR so `go build` can create its work directory.
+        - run: "rm -rf .glyphrun/tmp/sandbox-home .glyphrun/tmp/sandbox-agents .glyphrun/tmp/sandbox-protocol.txt .glyphrun/tmp/fake-deepseek-sandbox && mkdir -p .glyphrun/tmp/sandbox-home/.config/sonar .glyphrun/tmp/sandbox-home/workspace .glyphrun/tmp/sandbox-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' 'sandbox:' '  enabled: true' > .glyphrun/tmp/sandbox-home/.config/sonar/config.yaml && printf 'WORKSPACE-CONTENT\\n' > .glyphrun/tmp/sandbox-home/workspace/app.txt && printf 'API_KEY=SECRET-VALUE\\n' > .glyphrun/tmp/sandbox-home/workspace/.env && printf '#!/bin/sh\\ncat .env\\n' > .glyphrun/tmp/sandbox-home/workspace/leak.sh && printf '#!/bin/sh\\necho escaped > \"$HOME/sandbox-escape-probe.txt\"\\n' > .glyphrun/tmp/sandbox-home/workspace/escape.sh && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek-sandbox ./specs/fixtures/fake_deepseek_sandbox"
+          cwd: "."
+          timeoutMs: 60000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 8000
+    - wait:
+        screen:
+            contains: "deepseek-v4-flash"
+        timeoutMs: 5000
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "PLAN"
+        timeoutMs: 3000
+    - press: "shift+tab"
+    - wait:
+        screen:
+            contains: "AUTO"
+        timeoutMs: 3000
+    - type: "Probe the confinement boundary."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Confinement held"
+        timeoutMs: 30000
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exited: true
+        timeoutMs: 10000
+outcomes:
+    - id: workspace_stays_usable
+      description: a confined command still reads an ordinary workspace file
+      verify:
+        command:
+            run: "grep -q '^workspace_readable=true$' .glyphrun/tmp/sandbox-protocol.txt"
+    - id: workspace_secret_is_withheld
+      description: the workspace .env does not yield its contents to a confined command
+      verify:
+        command:
+            run: "grep -q '^secret_withheld=true$' .glyphrun/tmp/sandbox-protocol.txt"
+    - id: escape_write_is_refused
+      description: a write outside every writable root does not happen
+      verify:
+        command:
+            run: "grep -q '^escape_refused=true$' .glyphrun/tmp/sandbox-protocol.txt && grep -q '^escape_file_exists=false$' .glyphrun/tmp/sandbox-protocol.txt"
+    - id: fixture_protocol_held
+      description: all three probes ran through a real AUTO turn with no protocol error
+      verify:
+        command:
+            run: "grep -q '^protocol_ok=true$' .glyphrun/tmp/sandbox-protocol.txt"
+    - id: session_quits_cleanly
+      description: the wrapper and sonar exit successfully
+      verify:
+        process:
+            exitCode: 0

@@ -267,3 +267,22 @@ func (s *Stream) ToolCall(id, name string, arguments map[string]any) {
 
 // Finish settles the turn with a stop reason and the usage receipt.
 func (s *Stream) Finish(reason string) { finish(s.w, reason, 7, 5) }
+
+// ToolReceiptText returns the content of the conversation's most recent tool
+// message for the expected call, or "" when there is none.
+//
+// It exists for the case where a fixture must assert on what the MODEL was
+// told rather than on whether the host considered the call a success. A
+// confinement test is exactly that: "the host intended to confine this" and
+// "the command could not read the secret" are different claims, and only the
+// second is worth a spec.
+func ToolReceiptText(request ChatRequest, expectedID string) string {
+	content := ""
+	for _, message := range request.Messages {
+		if message.Role != "tool" || message.ToolCallID != expectedID {
+			continue
+		}
+		content = message.Content
+	}
+	return content
+}
