@@ -65,8 +65,7 @@ func (m *Model) transcribingVoice() bool {
 }
 
 // toggleVoiceInput is the whole interaction: open the microphone, or close it
-// and transcribe what was said.
-// toggleVoiceInput wraps the toggle so the rail it lights up also gets a clock.
+// and transcribe what was said. It also gives the rail it lights up a clock.
 //
 // The activity animation only advances while a tick is already in flight, and
 // pressing this from an idle composer is exactly the case where none is — so
@@ -106,11 +105,15 @@ func (m *Model) startVoiceInput() tea.Cmd {
 		}
 		m.voiceInput = &voiceInputState{listener: listener}
 	}
-	if !speech.TranscriberAvailable() {
+	if err := m.voiceTranscriber().Ready(); err != nil {
 		// Refused before the microphone opens, not after. Recording someone's
 		// voice and then telling them it cannot be transcribed is the worst
 		// ordering available.
-		return m.setFooterNotice(noticeWarning, voiceUnavailableNotice(speech.ErrNoTranscriber), 6*time.Second)
+		//
+		// Asked of the transcriber this session will actually use, not of the
+		// package default: a configured model path is part of whether it can
+		// run, and the earlier version checked only that the binary existed.
+		return m.setFooterNotice(noticeWarning, voiceUnavailableNotice(err), 8*time.Second)
 	}
 	// Speech output and speech input must not overlap: a synthesizer talking
 	// into an open microphone transcribes the harness. This has to happen
@@ -216,7 +219,63 @@ func voiceUnavailableNotice(err error) string {
 		return "Voice input needs a recorder: brew install ffmpeg"
 	case strings.Contains(err.Error(), speech.ErrNoTranscriber.Error()):
 		return "Voice input needs a transcriber: brew install whisper-cpp"
+	case strings.Contains(err.Error(), speech.ErrNoModel.Error()):
+		// Named separately from the transcriber because Homebrew installs
+		// whisper-cli and no usable model, so this is what a fresh install
+		// looks like — and "brew install whisper-cpp" is then advice to
+		// reinstall something that is already there.
+		return "Voice input needs a model: " + speech.ModelDownloadHint()
 	default:
 		return "Voice input failed: " + sanitizeTerminalSingleLine(err.Error())
 	}
+}
+
+// reportVoiceStatus prints every part of the voice pipeline and what is missing.
+//
+// Voice can fail in four independent places — recorder, transcriber, model,
+// synthesizer — and three of them fail silently from the user's side: the key
+// does nothing, or the microphone opens and produces no text. Without this,
+// diagnosing a missing model meant listing audio devices, recording a sample by
+// hand and reading the source, which is what it actually took once.
+func (m *Model) reportVoiceStatus() tea.Cmd {
+	var voices map[string]string
+	if m.voiceActive() {
+		voices = m.voice.config.Voices
+	}
+	var report strings.Builder
+	report.WriteString("Voice pipeline\n\n")
+	broken := 0
+	for _, entry := range speech.Diagnose(m.voiceInputModel, voices) {
+		mark := "ok  "
+		if !entry.OK {
+			mark, broken = "MISSING", broken+1
+		}
+		detail := entry.Detail
+		if detail == "" {
+			detail = "—"
+		}
+		fmt.Fprintf(&report, "  %-8s %-12s %s\n", mark, entry.Component, detail)
+		if entry.Fix != "" {
+			fmt.Fprintf(&report, "           %-12s %s\n", "", entry.Fix)
+		}
+	}
+	// Whether speech is switched on is a separate question from whether it
+	// could work, and answering only the second is how a fully-installed
+	// pipeline stays silent with nothing explaining it.
+	switch {
+	case !m.voiceActive():
+		report.WriteString("\n  Spoken output is off. Set voice.enabled: true in your config.")
+	case !m.voice.config.Answer:
+		report.WriteString("\n  Spoken output is on, but the answer channel is off (voice.answer).")
+	}
+	if broken == 0 {
+		report.WriteString("\n  Dictation is ready: /voice or alt+v opens the microphone.")
+	}
+	m.entries = append(m.entries, ChatEntry{
+		Kind: "system", Content: sanitizeTerminalMultiline(report.String()),
+	})
+	m.invalidateEntryCache()
+	m.refreshTranscript()
+	m.resumeFollow()
+	return nil
 }

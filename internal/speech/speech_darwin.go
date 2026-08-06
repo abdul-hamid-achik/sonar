@@ -19,6 +19,9 @@ const sayPath = "/usr/bin/say"
 // interface that gets used at all is run faster than its default.
 const defaultRate = 210
 
+// synthesizerName is the driver this platform speaks through.
+func synthesizerName() string { return sayPath }
+
 func Available() bool {
 	path, err := exec.LookPath(sayPath)
 	return err == nil && path != ""

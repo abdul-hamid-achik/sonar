@@ -81,3 +81,37 @@ func TestMicrophoneOpensOnlyAfterSpeechIsSilenced(t *testing.T) {
 		t.Fatal("the microphone opens before speech is silenced; the recorder will capture the synthesizer")
 	}
 }
+
+// The hint has to name a stop that works in this terminal.
+//
+// It used to say only "alt+v to stop", which is exactly wrong for whoever
+// needed it most: someone who opened the microphone with /voice because alt+v
+// never reaches the app is then told to press alt+v to close it. Escape is the
+// one key no terminal or leader can intercept, so it is named first.
+func TestListeningHintNamesAStopThatAlwaysWorks(t *testing.T) {
+	m := newTestModel(t)
+	m.voiceInput = &voiceInputState{}
+	activity, ok := m.currentWorkingActivity()
+	if ok && activity.label == "Listening" {
+		t.Fatal("precondition: a Listener-less state should not report listening")
+	}
+
+	// The copy itself is what this pins, since driving a real microphone in a
+	// unit test is not available.
+	source, err := os.ReadFile("activity.go")
+	if err != nil {
+		t.Fatalf("read activity.go: %v", err)
+	}
+	body := string(source)
+	start := strings.Index(body, `label: "Listening"`)
+	if start < 0 {
+		t.Fatal("the Listening activity is gone; this test needs rewriting")
+	}
+	hint := body[start:min(start+200, len(body))]
+	if !strings.Contains(hint, "esc") {
+		t.Fatalf("the listening hint does not name escape: %q", hint)
+	}
+	if !strings.Contains(hint, "/voice") {
+		t.Fatalf("the listening hint names no terminal-independent stop: %q", hint)
+	}
+}

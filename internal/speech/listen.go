@@ -43,6 +43,11 @@ import (
 var (
 	ErrNoCapture     = errors.New("speech: no audio recorder found (install ffmpeg)")
 	ErrNoTranscriber = errors.New("speech: no local transcriber found (install whisper-cpp)")
+	// ErrNoModel is separate from ErrNoTranscriber because the two are fixed by
+	// different commands and the wrong one wastes an afternoon. Homebrew's
+	// whisper-cpp installs the binary and no usable model at all, so this is
+	// not an edge case — it is what a fresh install looks like.
+	ErrNoModel = errors.New("speech: no whisper model found")
 )
 
 // Transcriber turns a recorded WAV file into text. It exists as an interface so
@@ -50,6 +55,15 @@ var (
 // can be replaced in a test without a microphone.
 type Transcriber interface {
 	Transcribe(ctx context.Context, wavPath string) (string, error)
+	// Ready reports whether transcription can run right now, naming what is
+	// missing when it cannot.
+	//
+	// It exists so the refusal can happen BEFORE the microphone opens. Checking
+	// only at transcription time means recording someone speaking and then
+	// telling them it was never going to work, which is the worst ordering
+	// available — and is what shipped, because the availability check looked for
+	// the binary and the model was checked three function calls later.
+	Ready() error
 }
 
 // Listener records one utterance at a time.
@@ -208,10 +222,34 @@ type LocalTranscriber struct {
 	Language string
 }
 
-// TranscriberAvailable reports whether a local transcriber can run.
+// TranscriberAvailable reports whether the default local transcriber can run.
 func TranscriberAvailable() bool {
-	_, err := exec.LookPath(whisperBinary)
-	return err == nil
+	return LocalTranscriber{}.Ready() == nil
+}
+
+// Ready checks both halves: the binary, and a model it can load.
+func (t LocalTranscriber) Ready() error {
+	if _, err := exec.LookPath(whisperBinary); err != nil {
+		return ErrNoTranscriber
+	}
+	if t.resolveModel() == "" {
+		return ErrNoModel
+	}
+	return nil
+}
+
+// resolveModel is the configured model if it names a readable file, otherwise
+// whatever the host has. A configured path that does not exist returns empty
+// rather than being passed through: whisper fails with its own message about a
+// file, and the caller can say something more useful first.
+func (t LocalTranscriber) resolveModel() string {
+	if model := strings.TrimSpace(t.Model); model != "" {
+		if info, err := os.Stat(model); err == nil && info.Mode().IsRegular() {
+			return model
+		}
+		return ""
+	}
+	return defaultWhisperModel()
 }
 
 // whisperBinary is whisper.cpp's CLI. The name changed from `main` to
@@ -221,16 +259,10 @@ func TranscriberAvailable() bool {
 const whisperBinary = "whisper-cli"
 
 func (t LocalTranscriber) Transcribe(ctx context.Context, wavPath string) (string, error) {
-	if !TranscriberAvailable() {
-		return "", ErrNoTranscriber
+	if err := t.Ready(); err != nil {
+		return "", err
 	}
-	model := strings.TrimSpace(t.Model)
-	if model == "" {
-		model = defaultWhisperModel()
-	}
-	if model == "" {
-		return "", fmt.Errorf("%w: no model found; set voice.input.model", ErrNoTranscriber)
-	}
+	model := t.resolveModel()
 	args := []string{"-m", model, "-f", wavPath, "--no-timestamps", "--no-prints", "-otxt", "-of", wavPath}
 	if language := strings.TrimSpace(t.Language); language != "" {
 		args = append(args, "-l", language)
@@ -247,29 +279,84 @@ func (t LocalTranscriber) Transcribe(ctx context.Context, wavPath string) (strin
 	return strings.TrimSpace(string(transcript)), nil
 }
 
-// defaultWhisperModel looks where a whisper.cpp install conventionally puts its
-// models. It prefers the smaller ones: on a laptop the difference between base
-// and large is seconds of waiting per utterance, and an utterance dictated into
-// a prompt is re-read by the person who spoke it.
+// defaultWhisperModel finds a usable model wherever whisper.cpp installs put
+// them.
+//
+// It globs rather than naming four files. The previous version listed
+// ggml-base, ggml-base.en, ggml-small and ggml-tiny, and on the machine this
+// was written for the answer was none of them: Homebrew's whisper-cpp ships
+// exactly one file, `for-tests-ggml-tiny.bin`, and someone who downloads
+// ggml-large-v3-turbo.bin by hand had it ignored too. A directory of models
+// should be read as a directory of models.
+//
+// Smaller is preferred. Dictation is re-read by the person who spoke it, so
+// seconds of latency per utterance cost more than the accuracy they buy — and
+// file size orders the whisper family correctly, tiny through large, without
+// this needing to know their names.
 func defaultWhisperModel() string {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return ""
-	}
-	roots := []string{
-		filepath.Join(home, ".cache", "whisper.cpp"),
-		filepath.Join(home, "Library", "Application Support", "whisper.cpp"),
-		"/opt/homebrew/share/whisper-cpp",
-		"/usr/local/share/whisper-cpp",
-	}
-	names := []string{"ggml-base.bin", "ggml-base.en.bin", "ggml-small.bin", "ggml-tiny.bin"}
-	for _, root := range roots {
-		for _, name := range names {
-			candidate := filepath.Join(root, name)
-			if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
-				return candidate
+	var best string
+	var bestSize int64
+	for _, root := range whisperModelRoots() {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !usableWhisperModel(entry.Name()) {
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil || !info.Mode().IsRegular() || info.Size() < minimumWhisperModelBytes {
+				continue
+			}
+			if best == "" || info.Size() < bestSize {
+				best, bestSize = filepath.Join(root, entry.Name()), info.Size()
 			}
 		}
 	}
-	return ""
+	return best
+}
+
+func whisperModelRoots() []string {
+	roots := []string{"/opt/homebrew/share/whisper-cpp", "/usr/local/share/whisper-cpp"}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return roots
+	}
+	return append([]string{
+		filepath.Join(home, ".cache", "whisper.cpp"),
+		filepath.Join(home, ".local", "share", "whisper.cpp"),
+		filepath.Join(home, "Library", "Application Support", "whisper.cpp"),
+		filepath.Join(home, "models"),
+	}, roots...)
+}
+
+// usableWhisperModel rejects the one file Homebrew actually ships.
+//
+// `for-tests-ggml-tiny.bin` is 575 KB of fixture built to make whisper.cpp's
+// own suite run, and it transcribes real speech into noise. Accepting it would
+// be worse than finding nothing: "dictation is broken" sends someone looking at
+// their microphone, while "no model" names the thing to fix.
+func usableWhisperModel(name string) bool {
+	return strings.HasPrefix(name, "ggml-") && strings.HasSuffix(name, ".bin")
+}
+
+// minimumWhisperModelBytes is below the smallest real model (tiny is ~75 MB)
+// and above every fixture. Size is the check because the fixture's NAME is a
+// convention nobody promised to keep.
+const minimumWhisperModelBytes = 20 << 20
+
+// ModelDownloadHint is the command that fixes ErrNoModel.
+//
+// It exists because the error is otherwise a dead end. Homebrew's whisper-cpp
+// ships `for-tests-ggml-tiny.bin` and no downloader, whisper.cpp's own
+// download script is in a repository the user does not have, and "install a
+// model" leaves someone searching for a file name and a URL. The multilingual
+// base model is the recommendation rather than base.en: this harness is used in
+// more than one language, and the English-only variant silently mis-transcribes
+// the others rather than failing.
+func ModelDownloadHint() string {
+	root := "~/.cache/whisper.cpp"
+	return "mkdir -p " + root + " && curl -L -o " + root + "/ggml-base.bin " +
+		"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
 }

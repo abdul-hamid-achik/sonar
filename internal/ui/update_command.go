@@ -400,6 +400,9 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 	case command.ActionVoiceInput:
 		return m.toggleVoiceInput()
 
+	case command.ActionVoiceStatus:
+		return m.reportVoiceStatus()
+
 	case command.ActionSwitchTheme:
 		return m.applyTheme(result.Data)
 

@@ -20,6 +20,8 @@ import (
 // wired here until that call is made.
 func Available() bool { return false }
 
+func synthesizerName() string { return "" }
+
 func synthesizerCommand(string, int) (string, []string, error) {
 	return "", nil, ErrUnavailable
 }

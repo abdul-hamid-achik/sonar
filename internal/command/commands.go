@@ -960,9 +960,17 @@ func RegisterBuiltins(r *Registry) {
 		Name:        "voice",
 		Aliases:     []string{"listen", "mic"},
 		Description: "Open the microphone and dictate into the composer (same as alt+v)",
-		Usage:       "/voice",
-		Handler: func(_ *Context, _ []string) Result {
-			return Result{Action: ActionVoiceInput}
+		Usage:       "/voice [status]",
+		Handler: func(_ *Context, args []string) Result {
+			if len(args) == 0 {
+				return Result{Action: ActionVoiceInput}
+			}
+			switch strings.ToLower(args[0]) {
+			case "status", "check", "doctor":
+				return Result{Action: ActionVoiceStatus}
+			default:
+				return Result{Error: "usage: /voice [status]"}
+			}
 		},
 	})
 

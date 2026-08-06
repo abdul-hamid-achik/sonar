@@ -85,8 +85,13 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 	// rail even from a running turn, whose progress is one line below anyway.
 	case m.listeningForVoice():
 		return workingActivity{
+			// Both ways in are named, and esc is named first because it is the
+			// only one that works in every terminal. alt+v does not exist until
+			// the terminal is told Option means Alt, and a leader key can claim
+			// it even then — a hint that offers only alt+v tells someone whose
+			// terminal ate it that the microphone cannot be closed.
 			label: "Listening", compactLabel: "Listening",
-			detail: "alt+v to stop", cancellable: false,
+			detail: "esc cancels · alt+v or /voice stops", cancellable: false,
 		}, true
 	case m.transcribingVoice():
 		return workingActivity{

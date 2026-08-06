@@ -218,6 +218,7 @@ const (
 	ActionPermissionsPanel              // Open the interactive permissions panel
 	ActionShowContextDoctor             // Open the animated context-usage overlay
 	ActionVoiceInput                    // Open or close the microphone and dictate into the composer
+	ActionVoiceStatus                   // Report every part of the voice pipeline and what is missing
 )
 
 // Registry holds all registered slash commands.

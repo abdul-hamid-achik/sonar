@@ -196,6 +196,16 @@ voice:
   #
   #   brew install ffmpeg whisper-cpp
   #
+  # That is NOT enough on its own. Homebrew's whisper-cpp ships one 575 KB test
+  # fixture and no usable model, so both commands succeed and dictation still
+  # cannot run. Download one:
+  #
+  #   mkdir -p ~/.cache/whisper.cpp && curl -L -o ~/.cache/whisper.cpp/ggml-base.bin \
+  #     https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+  #
+  # `/voice status` reports every part of the pipeline and the command that
+  # fixes whichever one is missing.
+  #
   # There is no enable flag — the key does nothing until pressed.
   input:
     # A whisper.cpp ggml model path. Empty searches the usual install locations

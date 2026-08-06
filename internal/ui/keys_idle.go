@@ -68,6 +68,18 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return m.beginShutdown(), true
 
 	case key.Matches(msg, m.keys.Cancel):
+		// An open microphone owns Escape before anything else does. It is the
+		// only stop that works in every terminal — alt+v may never arrive and
+		// /voice needs the composer, which is awkward while dictating into it —
+		// and discarding is the right default for a key that means "undo this":
+		// someone hitting escape mid-sentence wants the recording gone, not
+		// transcribed.
+		if m.listeningForVoice() {
+			m.voiceInput.listener.Cancel()
+			m.voiceInput.token++
+			m.voiceInput.transcribing = false
+			return m.setFooterNotice(noticeInfo, "Voice input cancelled.", 2*time.Second), true
+		}
 		// A visible queued follow-up owns the first Escape. Clearing the queue
 		// must not also cancel the active run; a later Escape still reaches the
 		// ordinary cancellation path below.
