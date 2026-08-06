@@ -52,7 +52,17 @@ var (
 // complete record, and a listener who needs the exact path reads it. Trying to
 // keep both would produce the 12.9-second version nobody listens to twice.
 func spokenText(markdown string) string {
-	text := withoutUnfinishedMarkup(sanitizeTerminalMultiline(markdown))
+	return spokenProjection(sanitizeTerminalMultiline(markdown))
+}
+
+// spokenProjection is the projection itself, over text already made safe.
+//
+// Split out so the streaming entry point sanitizes once rather than twice. The
+// order is not interchangeable: ansi.Strip removes escape sequences whose
+// payload can contain any byte, so counting delimiters before stripping would
+// count a backtick that is not in the prose and hold back a span that was never
+// opened.
+func spokenProjection(text string) string {
 	// Fences first: everything inside one is code, and code is never spoken.
 	// Replacing rather than deleting keeps a sentence from fusing with the one
 	// on the far side of a block.
@@ -70,6 +80,20 @@ func spokenText(markdown string) string {
 	text = spokenEmphasis.ReplaceAllString(text, "")
 	text = spokenWhitespace.ReplaceAllString(text, " ")
 	return strings.TrimSpace(text)
+}
+
+// spokenStreamingText projects an answer that is still arriving.
+//
+// It differs from spokenText in one way, and only while text is still on its
+// way: a span whose closing delimiter has not shown up yet is held back rather
+// than projected. That distinction is the whole point. Applying the holdback to
+// SETTLED text loses information permanently — a finished answer containing one
+// unmatched backtick ("El símbolo ` sirve para código. Eso era todo.") kept
+// only "El símbolo", because a delimiter that will never be closed is not an
+// unfinished span, it is a character. Once nothing more is coming, there is
+// nothing to wait for.
+func spokenStreamingText(markdown string) string {
+	return spokenProjection(withoutUnfinishedMarkup(sanitizeTerminalMultiline(markdown)))
 }
 
 // slashIsAPath reports whether a slash-bearing token is a path at all.

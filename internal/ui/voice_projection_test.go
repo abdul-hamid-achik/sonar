@@ -192,6 +192,37 @@ func TestVoiceAnswerSpeaksEachSentenceOnce(t *testing.T) {
 	}
 }
 
+// The holdback applies to text that is still arriving, and to nothing else.
+//
+// Waiting for a closing delimiter is right while more is coming and destructive
+// once it is not: a finished answer carrying one unmatched backtick lost every
+// word after it — permanently, since the turn boundary is the last chance to
+// say anything. A delimiter that will never close is a character, not an
+// unfinished span.
+func TestSettledTextIsNeverHeldBack(t *testing.T) {
+	const answer = "El símbolo ` sirve para código. Eso era todo lo que faltaba."
+
+	if got := spokenStreamingText(answer); strings.Contains(got, "Eso era todo") {
+		t.Fatalf("streaming did not hold back an unclosed span: %q", got)
+	}
+	settled := spokenText(answer)
+	if !strings.Contains(settled, "Eso era todo lo que faltaba") {
+		t.Fatalf("a settled answer lost everything after a lone backtick: %q", settled)
+	}
+
+	// End to end: the turn boundary has to say what streaming withheld.
+	m := voiceTestModel(t, true, false, false)
+	m.speakAnswerDelta(answer)
+	held := m.voice.spoken
+	m.speakTurnEnd(answer)
+	if held != 0 {
+		t.Fatalf("precondition: streaming should have withheld everything, said %d", held)
+	}
+	if sentences, _ := spokenSentences(settled); len(sentences) < 2 {
+		t.Fatalf("the settled projection has nothing to flush: %q", sentences)
+	}
+}
+
 // A slash is not a path.
 //
 // The reducer keeps only a token's last segment, which is what makes
@@ -230,7 +261,7 @@ func TestSpokenProjectionOnlyReducesRealPaths(t *testing.T) {
 // are the same missing rule.
 func TestVoiceHoldsBackAnUnfinishedFence(t *testing.T) {
 	const opening = "Found it. Look:\n\n```go\nfunc main() {\n\t// Do the thing. Then this.\n"
-	projected := spokenText(opening)
+	projected := spokenStreamingText(opening)
 	if strings.Contains(projected, "func main") || strings.Contains(projected, "Then this") {
 		t.Fatalf("an unfinished fence was projected as prose: %q", projected)
 	}
@@ -240,7 +271,7 @@ func TestVoiceHoldsBackAnUnfinishedFence(t *testing.T) {
 
 	// The same rule covers an inline span whose closing backtick has not
 	// arrived, which is the streaming case that slid the old byte offset.
-	if got := spokenText("Mirá el archivo `internal"); strings.Contains(got, "internal") {
+	if got := spokenStreamingText("Mirá el archivo `internal"); strings.Contains(got, "internal") {
 		t.Fatalf("an unfinished inline span was projected: %q", got)
 	}
 

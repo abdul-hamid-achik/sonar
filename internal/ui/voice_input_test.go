@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/abdul-hamid-achik/sonar/internal/command"
 	"github.com/abdul-hamid-achik/sonar/internal/speech"
 )
 
@@ -19,6 +20,31 @@ func TestTheUITimeoutClosesTheMicrophoneFirst(t *testing.T) {
 	if voiceListenTimeout >= speech.MaxUtterance {
 		t.Fatalf("the recorder's backstop (%v) fires at or before the UI's timeout (%v), so a recording would end without a message",
 			speech.MaxUtterance, voiceListenTimeout)
+	}
+}
+
+// Dictation must be reachable without a key binding.
+//
+// alt+<letter> does not exist on a stock macOS terminal — Option composes a
+// character and the app is sent nothing — and where it does exist a leader key
+// or a multiplexer can claim it first. This is the way in that no terminal can
+// intercept, so it has to actually dispatch and actually be listed.
+func TestDictationIsReachableWithoutAKeyBinding(t *testing.T) {
+	registry := command.NewRegistry()
+	command.RegisterBuiltins(registry)
+
+	for _, name := range []string{"voice", "listen", "mic"} {
+		result := registry.Execute(&command.Context{}, name, nil)
+		if result.Action != command.ActionVoiceInput {
+			t.Fatalf("/%s dispatched %v (error %q), want ActionVoiceInput",
+				name, result.Action, result.Error)
+		}
+	}
+
+	m := newTestModel(t)
+	m.cmdRegistry = registry
+	if !strings.Contains(m.buildHelpContent(80), "/voice") {
+		t.Fatal("the help overlay does not list /voice, so nobody whose terminal eats alt+v can find it")
 	}
 }
 

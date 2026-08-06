@@ -84,7 +84,7 @@ func (m *Model) speakAnswerDelta(answerSoFar string) {
 	if !m.answerMayHaveFinishedASentence(answerSoFar) {
 		return
 	}
-	sentences, _ := spokenSentences(spokenText(answerSoFar))
+	sentences, _ := spokenSentences(spokenStreamingText(answerSoFar))
 	m.sayFrom(sentences)
 }
 
