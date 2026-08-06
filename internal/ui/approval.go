@@ -802,6 +802,16 @@ func (m *Model) buildApprovalPreview(width int) string {
 	if preview.Reason != "" {
 		appendRow("Reason", preview.Reason)
 	}
+	// Danger is not the same question as Reason, and the modal used to answer
+	// only the second. Reason says which rule was tripped — for `git reset
+	// --hard` that is "git's mutating verbs are not catalogued", which is true
+	// and is not the sentence the reader needed. This one is derived from argv
+	// alone, so it costs nothing and cannot be absent when it matters most.
+	if preview.Kind == permission.PreviewCommand {
+		if warning := permission.DestructiveCommandWarning(preview.Command); warning != "" {
+			appendRow("Danger", warning)
+		}
+	}
 	appendRow("Impact", boundedApprovalMetadata(preview.Consequence, approvalMaximumConsequenceBytes))
 	// Progressive disclosure: Scope stays calm on narrow panes and is visible by
 	// default on wide surfaces (>= 40 content columns).
