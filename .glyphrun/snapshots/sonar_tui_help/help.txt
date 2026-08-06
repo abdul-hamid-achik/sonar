@@ -11,7 +11,7 @@
                      │   ↑                 Previous input (empty input)                           │
                      │   ↓                 Next input (history active)                            │
                      │   ctrl+e            Open in $VISUAL/$EDITOR                                │
-                     │   alt+v             Hold the mic open / close and transcribe               │
+                     │   alt+v             Open the mic / close and transcribe · /voice also      │
                      │                                                                            │
                      │   Read                                                                     │
                      │   pgup              Scroll up                                              │

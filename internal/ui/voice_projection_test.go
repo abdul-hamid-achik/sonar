@@ -147,42 +147,80 @@ func TestVoiceChannelsAreIndependent(t *testing.T) {
 		t.Fatal("a model with no speaker reported voice as active")
 	}
 
-	// A channel that is off consumes nothing, so the answer channel's pending
-	// tail stays empty when only activity is on.
+	// A channel that is off consumes nothing, so the answer channel's position
+	// stays at zero when only activity is on.
 	activityOnly := voiceTestModel(t, false, false, true)
 	activityOnly.speakAnswerDelta("A complete sentence. And another.")
-	if activityOnly.voice.pending != "" {
-		t.Fatalf("a disabled answer channel consumed text: %q", activityOnly.voice.pending)
+	if activityOnly.voice.spoken != 0 {
+		t.Fatalf("a disabled answer channel consumed text: %d", activityOnly.voice.spoken)
 	}
 }
 
 // TestVoiceAnswerSpeaksEachSentenceOnce pins the streaming contract: the
-// pending tail grows by whole sentences and never repeats one.
+// position advances by whole sentences and never revisits one.
 func TestVoiceAnswerSpeaksEachSentenceOnce(t *testing.T) {
 	m := voiceTestModel(t, true, false, false)
 
 	m.speakAnswerDelta("The fix landed.")
-	first := m.voice.pending
-	if !strings.Contains(first, "The fix landed.") {
-		t.Fatalf("a complete sentence was not consumed: %q", first)
+	if m.voice.spoken != 1 {
+		t.Fatalf("a complete sentence was not consumed: %d", m.voice.spoken)
 	}
 
 	// The same prefix arriving again must add nothing.
 	m.speakAnswerDelta("The fix landed.")
-	if m.voice.pending != first {
-		t.Fatalf("a sentence was consumed twice: %q -> %q", first, m.voice.pending)
+	if m.voice.spoken != 1 {
+		t.Fatalf("a sentence was consumed twice: %d", m.voice.spoken)
 	}
 
 	// A growing but incomplete tail is held back.
 	m.speakAnswerDelta("The fix landed. Now running")
-	if m.voice.pending != first {
-		t.Fatalf("an incomplete tail was spoken: %q", m.voice.pending)
+	if m.voice.spoken != 1 {
+		t.Fatalf("an incomplete tail was spoken: %d", m.voice.spoken)
 	}
 
 	// Completing it consumes exactly that sentence.
 	m.speakAnswerDelta("The fix landed. Now running the tests.")
-	if !strings.Contains(m.voice.pending, "Now running the tests.") {
-		t.Fatalf("the completed tail was not consumed: %q", m.voice.pending)
+	if m.voice.spoken != 2 {
+		t.Fatalf("the completed tail was not consumed: %d", m.voice.spoken)
+	}
+
+	// Ending the turn is the only boundary that rewinds, because the next turn
+	// is a different answer.
+	m.speakTurnEnd("The fix landed. Now running the tests.")
+	if m.voice.spoken != 0 {
+		t.Fatalf("the turn boundary did not reset the position: %d", m.voice.spoken)
+	}
+}
+
+// A code fence is held back until it closes.
+//
+// While one streams it is indistinguishable from prose, so every line of the
+// block would be read aloud; and when the closing fence lands the projection
+// collapses to something SHORTER than what was already spoken. Both failures
+// are the same missing rule.
+func TestVoiceHoldsBackAnUnfinishedFence(t *testing.T) {
+	const opening = "Found it. Look:\n\n```go\nfunc main() {\n\t// Do the thing. Then this.\n"
+	projected := spokenText(opening)
+	if strings.Contains(projected, "func main") || strings.Contains(projected, "Then this") {
+		t.Fatalf("an unfinished fence was projected as prose: %q", projected)
+	}
+	if !strings.Contains(projected, "Found it.") {
+		t.Fatalf("prose before the fence was dropped with it: %q", projected)
+	}
+
+	// The same rule covers an inline span whose closing backtick has not
+	// arrived, which is the streaming case that slid the old byte offset.
+	if got := spokenText("Mirá el archivo `internal"); strings.Contains(got, "internal") {
+		t.Fatalf("an unfinished inline span was projected: %q", got)
+	}
+
+	// Streaming the whole thing must never step backwards.
+	m := voiceTestModel(t, true, false, false)
+	m.speakAnswerDelta(opening)
+	afterFence := m.voice.spoken
+	m.speakAnswerDelta(opening + "}\n```\n\nThat fixes it.")
+	if m.voice.spoken < afterFence {
+		t.Fatalf("the closing fence rewound the position: %d -> %d", afterFence, m.voice.spoken)
 	}
 }
 
@@ -203,17 +241,33 @@ func TestVoiceActivityDoesNotRepeatItself(t *testing.T) {
 
 // Interruption cancels and never queues. This is the gap every existing
 // implementation of spoken agent output leaves open.
-func TestVoiceSilenceDiscardsPendingSpeech(t *testing.T) {
+//
+// What it must NOT do is forget where the answer had reached. Silencing runs on
+// every key press, so an interrupted turn that then keeps streaming would
+// re-speak itself from its first sentence — and because the Enter that sends a
+// message is also a key press, a turn-scoped mute would silence every answer.
+// The position survives; only the audio and the activity de-duplicator reset.
+func TestVoiceSilenceCancelsAudioAndKeepsItsPlace(t *testing.T) {
 	m := voiceTestModel(t, true, false, true)
 	m.speakAnswerDelta("One sentence. Two sentences.")
 	m.speakActivity("Reading", "main.go")
-	if m.voice.pending == "" || m.voice.lastActivity == "" {
+	if m.voice.spoken == 0 || m.voice.lastActivity == "" {
 		t.Fatal("precondition: nothing was queued to discard")
 	}
+	position := m.voice.spoken
+
 	m.silenceVoice()
-	if m.voice.pending != "" || m.voice.lastActivity != "" {
-		t.Fatalf("silence left state behind: pending=%q activity=%q",
-			m.voice.pending, m.voice.lastActivity)
+	if m.voice.lastActivity != "" {
+		t.Fatalf("silence kept the activity de-duplicator: %q", m.voice.lastActivity)
+	}
+	if m.voice.spoken != position {
+		t.Fatalf("silence lost the answer position: %d -> %d", position, m.voice.spoken)
+	}
+
+	// The rest of the same answer arriving must add only what is new.
+	m.speakAnswerDelta("One sentence. Two sentences. Three sentences.")
+	if m.voice.spoken != position+1 {
+		t.Fatalf("an interrupted answer repeated itself: %d -> %d", position, m.voice.spoken)
 	}
 }
 

@@ -217,6 +217,7 @@ const (
 	ActionPermissionsClearRules         // Clear all durable workspace rules
 	ActionPermissionsPanel              // Open the interactive permissions panel
 	ActionShowContextDoctor             // Open the animated context-usage overlay
+	ActionVoiceInput                    // Open or close the microphone and dictate into the composer
 )
 
 // Registry holds all registered slash commands.

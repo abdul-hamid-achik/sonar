@@ -58,12 +58,20 @@ func DefaultKeyMap() KeyMap {
 			key.WithHelp("esc", "cancel / close overlay"),
 		),
 		// alt+<letter> is this map's namespace for toggles (alt+m mouse capture,
-		// alt+t, alt+d), and alt+v is free. A toggle rather than hold-to-talk
-		// because terminals report key RELEASE only under the Kitty protocol —
-		// a hold binding would work in Ghostty and do nothing in Terminal.app.
+		// alt+t, alt+d). A toggle rather than hold-to-talk because terminals
+		// report key RELEASE only under the Kitty protocol — a hold binding
+		// would work in Ghostty and do nothing in Terminal.app.
+		//
+		// The help names /voice as well, and that is not redundancy. On macOS
+		// this chord does not exist until the terminal is told that Option means
+		// Alt (Terminal.app: "Use Option as Meta key"; Ghostty:
+		// macos-option-as-alt = true) — before that Option composes a character
+		// and the app is never sent anything. A leader key or a multiplexer can
+		// also claim it first. Someone whose terminal eats the chord needs the
+		// other way in printed next to it, not in a footnote.
 		VoiceInput: key.NewBinding(
 			key.WithKeys("alt+v"),
-			key.WithHelp("alt+v", "hold the mic open / close and transcribe"),
+			key.WithHelp("alt+v", "open the mic / close and transcribe · /voice also"),
 		),
 		Quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),

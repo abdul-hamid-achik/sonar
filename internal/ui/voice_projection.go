@@ -49,7 +49,7 @@ var (
 // complete record, and a listener who needs the exact path reads it. Trying to
 // keep both would produce the 12.9-second version nobody listens to twice.
 func spokenText(markdown string) string {
-	text := sanitizeTerminalMultiline(markdown)
+	text := withoutUnfinishedMarkup(sanitizeTerminalMultiline(markdown))
 	// Fences first: everything inside one is code, and code is never spoken.
 	// Replacing rather than deleting keeps a sentence from fusing with the one
 	// on the far side of a block.
@@ -67,6 +67,31 @@ func spokenText(markdown string) string {
 	text = spokenEmphasis.ReplaceAllString(text, "")
 	text = spokenWhitespace.ReplaceAllString(text, " ")
 	return strings.TrimSpace(text)
+}
+
+// withoutUnfinishedMarkup drops a span whose closing delimiter has not arrived.
+//
+// This is rule 2 applied to streaming, and it is not a refinement — without it
+// the answer channel reads source code aloud. A fence is only recognizable once
+// both halves exist, so while one streams, every line of the block is ordinary
+// prose to the projection: a comment ending in a period, or `foo.` at the end
+// of a line, is spoken as a sentence. Then the closing fence lands, the block
+// collapses, and the projection is suddenly SHORTER than what was already read
+// out. Holding the tail back until it closes costs one chunk of latency on a
+// block nobody wanted to hear anyway.
+//
+// The markers are handled longest-first so that the three backticks of a fence
+// are consumed as a fence rather than counted as inline spans.
+func withoutUnfinishedMarkup(text string) string {
+	for _, marker := range []string{"```", "~~~", "`"} {
+		if strings.Count(text, marker)%2 == 0 {
+			continue
+		}
+		if index := strings.LastIndex(text, marker); index >= 0 {
+			text = text[:index]
+		}
+	}
+	return text
 }
 
 // spokenPath reduces a path to what identifies it out loud.

@@ -951,6 +951,21 @@ func RegisterBuiltins(r *Registry) {
 		},
 	})
 
+	// Dictation has a key binding too, and this exists because a key binding is
+	// not reachable everywhere. alt+<letter> never leaves a stock macOS terminal
+	// — Option composes a character instead — and where it does, a terminal
+	// multiplexer or a leader key can claim it first. A slash command survives
+	// both, and completion makes it discoverable without reading the help.
+	r.Register(&Command{
+		Name:        "voice",
+		Aliases:     []string{"listen", "mic"},
+		Description: "Open the microphone and dictate into the composer (same as alt+v)",
+		Usage:       "/voice",
+		Handler: func(_ *Context, _ []string) Result {
+			return Result{Action: ActionVoiceInput}
+		},
+	})
+
 	r.Register(&Command{
 		Name:        "context",
 		Aliases:     []string{"numctx", "ctx"},

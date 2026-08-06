@@ -397,6 +397,9 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		m.overlayParent = OverlayNone
 		return m.openContextDoctor()
 
+	case command.ActionVoiceInput:
+		return m.toggleVoiceInput()
+
 	case command.ActionSwitchTheme:
 		return m.applyTheme(result.Data)
 
