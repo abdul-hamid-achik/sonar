@@ -455,27 +455,25 @@ func (m *Model) openModelPicker() {
 		m.input.Blur()
 		return
 	}
+	// Past this point the catalog does not describe the active provider, and in
+	// this fork there is exactly one such provider: `ollama`, which means
+	// Ollama Cloud and is absent from the Catwalk snapshot.
+	//
+	// The local daemon's inventory used to answer here, and it is the wrong
+	// answer twice over. Those models run on this machine, and sonar has no
+	// local runtime to run them with — ProviderProfile.IsRemote() is constant
+	// true — so every row offered a switch that could not happen. It also
+	// described a DIFFERENT service than the one in use: Ollama Cloud is a
+	// hosted OpenAI-compatible endpoint that shares a name with the daemon and
+	// nothing else. A picker listing one while connected to the other is not a
+	// fallback, it is a wrong answer delivered confidently.
+	//
+	// Saying so is the honest option. sonar cannot enumerate models for a
+	// provider outside the catalog, and the configured model still works — it
+	// simply cannot be chosen from a list nobody can build.
+	// Config-declared models remain a legitimate fallback: they name what the
+	// operator chose, not what some daemon happens to have pulled.
 	if m.router == nil {
-		return
-	}
-	if len(m.ollamaModels) > 0 {
-		m.modelPickerState = newOllamaModelPickerState(m.ollamaModels, m.model, m.width, m.height, m.isDark, m.themeID, m.reducedMotion)
-		m.restylePickerOverlays()
-		if m.ollamaVersion != "" {
-			m.modelPickerState.List.Title = ollamaModelPickerTitle(m.ollamaVersion)
-		}
-		m.overlay = OverlayModelPicker
-		m.input.Blur()
-		return
-	}
-	if m.ollamaInventoryAttempted {
-		m.modelPickerState = newOllamaModelPickerState(nil, m.model, m.width, m.height, m.isDark, m.themeID, m.reducedMotion)
-		m.restylePickerOverlays()
-		if m.ollamaVersion != "" {
-			m.modelPickerState.List.Title = ollamaModelPickerTitle(m.ollamaVersion)
-		}
-		m.overlay = OverlayModelPicker
-		m.input.Blur()
 		return
 	}
 	catalog := m.router.ListModels()

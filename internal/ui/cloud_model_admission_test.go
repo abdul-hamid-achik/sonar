@@ -85,3 +85,36 @@ func TestModelPickerNeverOffersAReviewAffordance(t *testing.T) {
 		t.Errorf("decision reason still implies a confirmation: %q", reason)
 	}
 }
+
+// TestUncataloguedProviderNeverOffersLocalDaemonModels covers the second half
+// of the same confusion the local-only gate came from.
+//
+// `provider: ollama` means Ollama CLOUD — a hosted OpenAI-compatible endpoint
+// that shares a name with the local daemon and nothing else. It is absent from
+// the Catwalk snapshot, so the picker fell through to the daemon's inventory
+// and offered models that (a) run on this machine, which sonar has no runtime
+// for, and (b) belong to a different service than the one connected. A wrong
+// answer delivered confidently is worse than no list.
+func TestUncataloguedProviderNeverOffersLocalDaemonModels(t *testing.T) {
+	m := newTestModel(t)
+	m.ollamaModels = []OllamaModelDescriptor{
+		{Name: "qwen3:8b", Source: OllamaModelLocal, Selectable: true, Fit: true},
+		{Name: "llama3:70b", Source: OllamaModelLocal, Selectable: true, Fit: true},
+	}
+	m.ollamaInventoryAttempted = true
+	m.router = nil
+
+	m.openModelPicker()
+	if m.overlay == OverlayModelPicker {
+		t.Fatal("an uncatalogued provider opened a picker built from the local daemon inventory")
+	}
+	if m.modelPickerState != nil && len(m.modelPickerState.Inventory) > 0 {
+		t.Fatalf("local daemon models reached a picker: %#v", m.modelPickerState.Inventory)
+	}
+}
+
+// The catalogued path is covered by the existing picker suite, which builds
+// its models through the router. It is not re-asserted here because this
+// model's activeProviderName still answers "ollama" when no manager is set —
+// a separate inheritance, and the reason the catalogued branch is unreachable
+// from a bare test model at all.
