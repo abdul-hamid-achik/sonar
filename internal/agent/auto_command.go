@@ -213,7 +213,10 @@ func (a *Agent) autoCommandApprovalReason(mode AuthorityMode, command string) st
 	if mode != AuthorityAutoScoped {
 		return ""
 	}
-	assessment := a.assessAutoScopedCommand(command)
+	// The reason a user reads must be the reason the host acted on. Assessing
+	// without confinement here would explain a prompt that confinement had
+	// already prevented, or fail to explain one it declined to prevent.
+	assessment := a.assessConfinedCommand(command)
 	if assessment.admitted() {
 		return ""
 	}
@@ -370,7 +373,11 @@ const (
 // destructive commands, network-facing CLIs, redirection to files, and
 // workspace escapes continue through interactive approval.
 func (a *Agent) autoScopedCommandAllowed(command string) bool {
-	return a.assessAutoScopedCommand(command).admitted()
+	// Confinement gets the second look, and only ever a second one: it can turn
+	// a catalog refusal into an admission, never the reverse. With the sandbox
+	// off — or configured on a platform that cannot honor it — this is exactly
+	// the call it always was.
+	return a.assessConfinedCommand(command).admitted()
 }
 
 func (a *Agent) assessAutoScopedCommand(command string) autoCommandAssessment {

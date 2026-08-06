@@ -65,8 +65,8 @@ ollama:
 
 # local_only bounds TOOL endpoints (MCP), not inference. sonar always reaches
 # DeepSeek over the network, so leaving this true does not keep prompts on the
-# machine — it only refuses remote MCP servers. Approved shell tools remain an
-# explicit network-capable boundary until OS sandboxing lands.
+# machine — it only refuses remote MCP servers. Shell tools are bounded by the
+# sandbox below rather than by this setting.
 # Presentation only: no effect on authority, tool policy, or what leaves the
 # machine. Every scheme is contrast-checked for light and dark terminals.
 # Pick interactively with /theme; that choice is stored in
@@ -103,6 +103,16 @@ privacy:
 # Off by default because it changes which commands SUCCEED, not only which are
 # allowed to start — with the network denied, a build that needs to download a
 # module fails. Turn it on deliberately rather than discover it.
+# Turning this on also WIDENS what AUTO runs unattended, and that is the point.
+# Most of the scoped-shell catalog's refusals exist to prove containment from a
+# command line alone — an uncatalogued binary, `node -e`, a search that walks a
+# directory. Once the kernel proves containment for every command, those
+# refusals have nothing left to prove and stop asking.
+#
+# What keeps asking is what confinement does not cover: the workspace stays
+# writable, so `rm -rf .` still destroys uncommitted work, and `git push
+# --force` still rewrites history no filesystem boundary reaches. Those are
+# decisions a human owns either way.
 sandbox:
   enabled: false
   # Confined commands reach the network. Leave false: sonar's own provider

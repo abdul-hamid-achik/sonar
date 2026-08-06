@@ -166,6 +166,13 @@ type SandboxConfig struct {
 	// Enabled confines every shell subprocess this host starts. On a platform
 	// with no confinement driver it has no effect and startup says so, rather
 	// than reporting a boundary that is not there.
+	//
+	// It also widens AUTO, which is the reason the sandbox is worth having.
+	// Most catalog refusals exist to prove containment from argv; once the
+	// kernel proves it for every command, they stop asking. What keeps asking
+	// is what confinement does not cover — the workspace is writable, so
+	// destructive work inside it and published state like a force push remain
+	// human decisions. See internal/agent/auto_confined.go.
 	Enabled bool `yaml:"enabled"`
 
 	// AllowNetwork lets confined commands reach the network.
