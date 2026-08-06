@@ -147,6 +147,8 @@ type Model struct {
 	// expandedReadRuns names the collapsed read-run summaries the reader has
 	// opened, keyed by the run's first block. Absence means collapsed, so a
 	// restored session starts calm and nothing has to be persisted.
+	// voice owns spoken output when it is enabled and the host can honour it.
+	voice *voiceState
 	// sonarPulseFrame is the emit-side animation beat. It advances on the
 	// activity spinner's tick and never on one of its own.
 	sonarPulseFrame uint64
@@ -568,6 +570,10 @@ func (m *Model) SetInitCancel(cancel context.CancelFunc) {
 
 func (m *Model) beginShutdown() tea.Cmd {
 	m.shuttingDown = true
+	// A synthesizer must not outlive the session that started it. Closing here
+	// rather than at exit also means the last thing a quitting user hears is
+	// silence, not half of a sentence about work they just abandoned.
+	m.closeVoice()
 	m.cancelTerminalInputResume()
 	m.cancelSessionTitleGen()
 	m.pendingOllamaInventory = nil
@@ -706,6 +712,12 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 		return m, m.handleActivityHeartbeat(msg)
 
 	case tea.KeyPressMsg:
+		// Any key silences speech, before the key is even routed. Interruption
+		// cancels and never queues: someone typing while the harness is talking
+		// has stopped listening, and audio that keeps going is talking over
+		// them. This is the gap every existing implementation of this leaves
+		// open, and it costs one line here to close.
+		m.silenceVoice()
 		if cmd, handled := m.handleKeyPress(msg); handled {
 			return m, cmd
 		}

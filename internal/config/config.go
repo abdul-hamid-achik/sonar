@@ -51,6 +51,7 @@ type Config struct {
 	Experts       ExpertsConfig       `yaml:"experts,omitempty"`
 	Privacy       PrivacyConfig       `yaml:"privacy,omitempty"`
 	Sandbox       SandboxConfig       `yaml:"sandbox,omitempty"`
+	Voice         VoiceConfig         `yaml:"voice,omitempty"`
 	Credentials   CredentialsConfig   `yaml:"credentials,omitempty"`
 	UI            UIConfig            `yaml:"ui,omitempty"`
 }
@@ -183,6 +184,37 @@ type SandboxConfig struct {
 	// interactive approval, so the usual answer is to leave this false and
 	// approve those individually.
 	AllowNetwork bool `yaml:"allow_network"`
+}
+
+// VoiceConfig reads the transcript aloud through a host synthesizer.
+//
+// Three channels rather than one switch. Answer, reasoning and activity are
+// different things to hear: an AUTO turn produces eight tool receipts and
+// several reasoning blocks, and spoken together they bury the one sentence
+// worth waiting for. Only the answer speaks by default.
+//
+// What is spoken is a PROJECTION, not the transcript. A path read aloud is
+// noise — the same sentence measures 12.9 seconds spoken raw and 6.1 projected,
+// and the difference is a URL and a file path being spelled out. The screen
+// keeps the complete record; the speaker gets what can be acted on.
+type VoiceConfig struct {
+	// Enabled turns speech on. A host with no synthesizer says so at startup
+	// rather than staying quiet and letting the setting look broken.
+	Enabled bool `yaml:"enabled"`
+	// Answer speaks the assistant's reply, sentence by sentence as it streams.
+	Answer bool `yaml:"answer"`
+	// Reasoning speaks thinking blocks once settled. Off by default: reasoning
+	// contradicts itself, abandons paths, and runs far longer than the answer.
+	Reasoning bool `yaml:"reasoning"`
+	// Activity speaks what the harness is doing — "reading", "running tests" —
+	// never the path it is doing it to.
+	Activity bool `yaml:"activity"`
+	// Voice names a synthesizer voice. Empty uses the system default; `say -v ?`
+	// lists what this machine has.
+	Voice string `yaml:"voice,omitempty"`
+	// Rate is words per minute. Zero uses a default faster than the system's,
+	// because a coding session is listened to while working.
+	Rate int `yaml:"rate,omitempty"`
 }
 
 type AgentsConfig struct {

@@ -1001,6 +1001,12 @@ func run() int {
 	} else {
 		m.SetImageStore(imageStore)
 	}
+	// Spoken output. A request the host cannot honour is reported rather than
+	// silently dropped: someone who enabled voice and hears nothing deserves to
+	// be told which half is missing.
+	if notice := m.StartVoice(cfg.Voice); notice != "" {
+		fmt.Fprintln(os.Stderr, notice)
+	}
 	if permChecker.SkipsApprovals() {
 		m.SetApprovalPosture(ui.ApprovalPostureSkipApprovals)
 	} else {

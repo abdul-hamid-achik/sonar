@@ -31,6 +31,10 @@ func (m *Model) handleStreamText(msg StreamTextMsg, cmds []tea.Cmd) []tea.Cmd {
 	m.thinkSearchBuf = outSearchBuf
 	if mainText != "" {
 		m.appendTranscriptStreamText(mainText)
+		// The answer channel is offered the whole answer so far, not the
+		// delta: the projection has to see complete markdown, and a fence
+		// that is still open cannot be recognized from its opening line.
+		m.speakAnswerDelta(m.streamBuf.String())
 	}
 	if thinkText != "" {
 		m.appendTranscriptThinkingText(thinkText)
@@ -65,6 +69,12 @@ func (m *Model) handleStreamThinking(msg StreamThinkingMsg, cmds []tea.Cmd) []te
 
 // handleStreamDone records the settled token counts for one model response.
 func (m *Model) handleStreamDone(msg StreamDoneMsg) {
+	// A turn rarely ends on a period, and a final clause held back forever is
+	// the one sentence a listener most wanted.
+	m.speakTurnEnd(m.streamBuf.String())
+	if thinking := strings.TrimSpace(m.thinkBuf.String()); thinking != "" {
+		m.speakReasoning(thinking)
+	}
 	m.evalCount = msg.EvalCount
 	m.promptTokens = msg.PromptTokens
 	m.turnEvalTotal += msg.EvalCount
@@ -129,6 +139,13 @@ func (m *Model) handleToolCallStart(msg ToolCallStartMsg, cmds []tea.Cmd) []tea.
 		ResultLanguage: resultLanguage,
 	}
 	te.Summary = boundedToolCardSummary(toolSummary(classifyTool(msg.Name), te))
+	// The activity channel reuses the label and the summary the transcript
+	// itself paints, so what is heard and what is shown cannot describe the
+	// same work differently. presentTool owns that vocabulary already.
+	m.speakActivity(
+		presentTool(msg.Name, toolCardKindForProjectedTool(msg.Name, projection), ToolCardRunning).label,
+		te.Summary,
+	)
 	if classifyTool(msg.Name) == ToolTypeFileWrite {
 		// The Adapter captured this before returning control to the tool
 		// execution path. Update only installs the immutable result.
