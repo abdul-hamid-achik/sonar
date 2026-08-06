@@ -177,6 +177,7 @@ func (a *Agent) buildApprovalPreview(ctx context.Context, mode AuthorityMode, tc
 		preview.Consequence = "Host policy did not pre-authorize this command for the current turn. Shell commands can change files, start processes, or contact external systems; inspect the exact command before allowing it."
 		preview.Reason = a.autoCommandApprovalReason(mode, preview.Command)
 		preview.CommandPrefix = a.autoCommandGrantPrefix(mode, preview.Command)
+		preview.CommandSegments = a.autoCommandSegmentBreakdown(mode, preview.Command)
 	case "copy":
 		preview.Kind = permissionpkg.PreviewFilesystem
 		preview.ActionLabel = "Copy file"

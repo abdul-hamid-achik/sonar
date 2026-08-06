@@ -551,14 +551,34 @@ func (m *Model) renderWorkingLine() string {
 	if session != "" {
 		selectionWidth = max(1, textWidth-lipgloss.Width(" · ")-lipgloss.Width(session))
 	}
+	// Degrading is silent today, and silence here is a small lie: at 60 columns
+	// the rail reads "Running · AUTO" and at 90 the same turn reads "Running ·
+	// AUTO · 2m42s · ↑ 2.2k", with nothing to say the first one dropped
+	// anything. A reader cannot tell a turn with no elapsed time from a pane too
+	// narrow to show it.
+	//
+	// The marker is opportunistic: it is added only when it fits AFTER the
+	// candidate is chosen, never budgeted before. Budgeting it first cost a
+	// whole tier — at the 30-column tier the rail dropped "Hitspec" to make
+	// room for a mark saying something had been dropped, which is a worse trade
+	// than the silence it was fixing. Where the pane is too narrow for even the
+	// marker, the compression is self-evident anyway.
+	marker := glyphEllipsis(m.glyphProfile)
 	chosen := candidates[len(candidates)-1]
-	for _, candidate := range candidates {
+	degraded := len(candidates) > 1
+	for index, candidate := range candidates {
 		if lipgloss.Width(candidate) <= selectionWidth {
-			chosen = candidate
+			chosen, degraded = candidate, index > 0
 			break
 		}
 	}
+	truncated := lipgloss.Width(chosen) > selectionWidth
 	chosen = truncateDisplayWithGlyphProfile(chosen, selectionWidth, m.glyphProfile)
+	// Truncation already ends in an ellipsis, which says the same thing; two in
+	// a row would only look like a rendering bug.
+	if degraded && !truncated && lipgloss.Width(chosen)+lipgloss.Width(marker)+1 <= selectionWidth {
+		chosen += " " + marker
+	}
 	if session != "" {
 		chosen += " · " + session
 	}

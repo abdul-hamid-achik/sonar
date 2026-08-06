@@ -1061,3 +1061,64 @@ func TestWorkingFooterShowsUnqueuedDraftImages(t *testing.T) {
 		t.Fatalf("working footer hid pending draft image: %q", line)
 	}
 }
+
+// TestActivityRailMarksWhatItDropped covers a small lie the rail used to tell.
+// The same turn reads "Running · AUTO · 2m42s · ↑ 2.2k" on a wide pane and
+// "Running · AUTO" on a narrow one, with nothing to distinguish a turn that has
+// no elapsed time from a pane too narrow to show it.
+func TestActivityRailMarksWhatItDropped(t *testing.T) {
+	base := time.Date(2026, 8, 5, 12, 0, 0, 0, time.UTC)
+	build := func(width int) string {
+		m := newTestModel(t)
+		m.width = width
+		m.now = func() time.Time { return base.Add(162 * time.Second) }
+		m.state = StateStreaming
+		m.turnStartedAt = base
+		m.evalCount = 2200
+		return ansi.Strip(m.renderWorkingLine())
+	}
+
+	wide := build(120)
+	if !strings.Contains(wide, "2m42s") || !strings.Contains(wide, "2.2k") {
+		t.Fatalf("a wide rail dropped content it had room for: %q", wide)
+	}
+	if strings.HasSuffix(strings.TrimSpace(wide), "…") {
+		t.Fatalf("a rail showing everything still claimed it had dropped something: %q", wide)
+	}
+
+	// Find the width where the rail actually starts dropping rather than
+	// hard-coding one: a layout change should move this test, not break it.
+	degradedAt, degraded := 0, ""
+	for width := 110; width >= 44; width-- {
+		if line := build(width); !strings.Contains(line, "2.2k") {
+			degradedAt, degraded = width, line
+			break
+		}
+	}
+	if degradedAt == 0 {
+		t.Fatal("no width in range dropped the token count; this test no longer covers degradation")
+	}
+	if !strings.HasSuffix(strings.TrimSpace(degraded), "…") {
+		t.Fatalf("a rail degraded at width %d did not say so: %q", degradedAt, degraded)
+	}
+}
+
+// The marker never costs content. Budgeting it before the candidate was chosen
+// made the 30-column tier drop its route identity to make room for a mark
+// saying something had been dropped.
+func TestActivityRailMarkerNeverCostsATier(t *testing.T) {
+	for _, width := range []int{30, 40, 56, 72, 90, 120} {
+		t.Run(fmt.Sprint(width), func(t *testing.T) {
+			m := newTestModel(t)
+			m.width = width
+			m.state = StateStreaming
+			line := m.renderWorkingLine()
+			if got := lipgloss.Width(line); got > m.chatPaneWidth() {
+				t.Fatalf("rail overflowed: width=%d pane=%d line=%q", got, m.chatPaneWidth(), line)
+			}
+			if plain := ansi.Strip(line); !strings.Contains(plain, "Run") {
+				t.Fatalf("rail lost its label at width %d: %q", width, plain)
+			}
+		})
+	}
+}

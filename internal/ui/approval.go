@@ -811,6 +811,13 @@ func (m *Model) buildApprovalPreview(width int) string {
 		if warning := permission.DestructiveCommandWarning(preview.Command); warning != "" {
 			appendRow("Danger", warning)
 		}
+		// Which part of a compound command needs a decision. The host marks the
+		// refusing segment; approving grants the whole chain either way, and
+		// seeing where the objection sits is what makes the offered prefix
+		// legible rather than arbitrary.
+		if preview.CommandSegments != "" {
+			appendRow("Parts", preview.CommandSegments)
+		}
 	}
 	appendRow("Impact", boundedApprovalMetadata(preview.Consequence, approvalMaximumConsequenceBytes))
 	// Progressive disclosure: Scope stays calm on narrow panes and is visible by

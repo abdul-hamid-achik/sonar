@@ -262,6 +262,91 @@ func (a *Agent) autoCommandGrantPrefix(mode AuthorityMode, command string) strin
 	return prefix
 }
 
+// maxAutoCommandSegmentLeaders bounds the segment line below. A command with
+// more parts than this is one nobody reads segment by segment anyway, and the
+// modal has a width to respect.
+const maxAutoCommandSegmentLeaders = 8
+
+// autoCommandSegmentBreakdown names each part of a compound command and marks
+// the one that refused.
+//
+// The approval modal shows a compound command as a wall of text, and the
+// reader's actual question is "which part of this needs me". Answering it is
+// the other half of naming the right grant: since 8c7ca7f the offer points at
+// the refusing segment, and this makes that segment visible instead of leaving
+// the reader to work backwards from a prefix.
+//
+// It is host-authored as one finished string rather than as an index the UI
+// would re-split. The host's splitter and any second one would agree until
+// they did not — a redirect, a quoted separator — and a marker pointing at the
+// wrong segment is worse than no marker at all.
+//
+// Only leading words appear. Arguments are already on the Command row, and
+// repeating them here would be the wall of text this row exists to summarize.
+func (a *Agent) autoCommandSegmentBreakdown(mode AuthorityMode, command string) string {
+	if mode != AuthorityAutoScoped {
+		return ""
+	}
+	assessment := a.assessAutoScopedCommand(command)
+	if assessment.admitted() || assessment.refusedSegment < 0 {
+		return ""
+	}
+	commands, _, _, ok := splitStaticShellCommands(command)
+	if !ok || len(commands) < 2 || assessment.refusedSegment >= len(commands) {
+		// A single segment needs no breakdown: the Command row already is one.
+		return ""
+	}
+	leaders := make([]string, 0, len(commands))
+	for index, words := range commands {
+		for len(words) > 0 && autoCommandAssignmentAllowed(words[0]) {
+			words = words[1:]
+		}
+		leader := "?"
+		if len(words) > 0 {
+			leader = sanitizeAutoSegmentLeader(words[0])
+		}
+		if index == assessment.refusedSegment {
+			leader += " ←"
+		}
+		leaders = append(leaders, leader)
+		if len(leaders) == maxAutoCommandSegmentLeaders {
+			if index < len(commands)-1 {
+				leaders = append(leaders, "…")
+			}
+			break
+		}
+	}
+	return strings.Join(leaders, " · ")
+}
+
+// sanitizeAutoSegmentLeader keeps an executable name to its base and bounds it.
+// A leader is model-supplied text on its way to a terminal, so it is trimmed to
+// something that cannot carry control characters or reflow the modal.
+func sanitizeAutoSegmentLeader(word string) string {
+	word = strings.TrimSpace(word)
+	if word == "" {
+		// filepath.Base("") answers ".", which would print as a segment named
+		// after the current directory rather than as the unknown it is.
+		return "?"
+	}
+	word = filepath.Base(word)
+	const maximum = 24
+	cleaned := make([]rune, 0, maximum)
+	for _, character := range word {
+		if unicode.IsControl(character) || unicode.IsSpace(character) {
+			continue
+		}
+		cleaned = append(cleaned, character)
+		if len(cleaned) == maximum {
+			break
+		}
+	}
+	if len(cleaned) == 0 {
+		return "?"
+	}
+	return string(cleaned)
+}
+
 type autoSimpleCommandAssessment struct {
 	allowed             bool
 	effect              autoCommandEffect

@@ -205,7 +205,14 @@ type ApprovalPreview struct {
 	// a curable segment, and hosts then fall back to DeriveBashPrefix — the
 	// field narrows an offer, it never creates one. Deterministic and bounded
 	// like Reason, so preview revalidation still compares it by value.
-	CommandPrefix     string
+	CommandPrefix string
+	// CommandSegments names each part of a compound command and marks the one
+	// that refused, as a finished host-authored line. It answers the question a
+	// wall of shell text provokes — which part of this needs me — and it is a
+	// string rather than an index because the UI must never re-split a command
+	// the host already split: two splitters agree until they do not, and a
+	// marker on the wrong segment is worse than none.
+	CommandSegments   string
 	Path              string
 	SourcePath        string
 	DestinationPath   string

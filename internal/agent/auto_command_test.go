@@ -1471,3 +1471,59 @@ func TestGitListingVerbsAreAdmittedOnlyInExactForms(t *testing.T) {
 		})
 	}
 }
+
+// TestSegmentBreakdownMarksTheRefusingPart is the reader-facing half of the
+// grant fix. Since 8c7ca7f the offer points at the segment that refused; this
+// makes that segment visible instead of leaving the reader to work backwards
+// from a prefix and a wall of shell text.
+func TestSegmentBreakdownMarksTheRefusingPart(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	installGrantTestExecutables(t, "sed", "grep")
+	workspace := t.TempDir()
+	if err := os.WriteFile(filepath.Join(workspace, "notes.go"), []byte("package notes\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(workspace)
+
+	// The audited shape: only the grep recurses, and only the grep refuses.
+	got := ag.autoCommandSegmentBreakdown(AuthorityAutoScoped,
+		"cd "+workspace+" && sed -n 1,5p notes.go && echo ==== && grep -rn TODO notes.go")
+	if got != "cd · sed · echo · grep ←" {
+		t.Fatalf("segment breakdown = %q", got)
+	}
+
+	// A single segment needs no breakdown: the Command row already is one.
+	if got := ag.autoCommandSegmentBreakdown(AuthorityAutoScoped, "grep -rn TODO notes.go"); got != "" {
+		t.Fatalf("a single segment produced a breakdown: %q", got)
+	}
+	// Neither does an admitted command, or one outside AUTO.
+	if got := ag.autoCommandSegmentBreakdown(AuthorityAutoScoped, "sed -n 1,5p notes.go && cat notes.go"); got != "" {
+		t.Fatalf("an admitted command produced a breakdown: %q", got)
+	}
+	if got := ag.autoCommandSegmentBreakdown(AuthorityNormal, "sed -n 1,5p notes.go && grep -rn x notes.go"); got != "" {
+		t.Fatalf("NORMAL mode produced a breakdown: %q", got)
+	}
+}
+
+// A leader is model-supplied text on its way to a terminal. It is reduced to a
+// base name, stripped of anything that could reflow or escape the modal, and
+// bounded — and a long chain is truncated rather than allowed to wrap.
+func TestSegmentBreakdownBoundsWhatItPrints(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("AUTO shell catalog requires a POSIX shell")
+	}
+	for _, tc := range []struct{ word, want string }{
+		{"grep", "grep"},
+		{"/usr/local/bin/grep", "grep"},
+		{"", "?"},
+		{strings.Repeat("x", 80), strings.Repeat("x", 24)},
+		{"a\tb", "ab"},
+	} {
+		if got := sanitizeAutoSegmentLeader(tc.word); got != tc.want {
+			t.Fatalf("sanitizeAutoSegmentLeader(%q) = %q, want %q", tc.word, got, tc.want)
+		}
+	}
+}
