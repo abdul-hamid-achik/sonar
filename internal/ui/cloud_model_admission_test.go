@@ -1,53 +1,63 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// privacy.local_only forbids hosted inference. The picker used to present that
-// as a "review" the operator could perform: the row read "review required", the
-// footer key hint read "review", and selecting produced "requires Ollama Cloud
-// confirmation for this conversation". No confirmation surface existed —
-// OverlayCloudConsent was declared but nothing ever opened it, and the field
-// that would have recorded a grant was never set outside tests. The prompt was
-// a dead end that read like a step.
+// TestLocalOnlyNeverGatesInferenceInSonar pins a boundary this fork does not
+// have, which is why the test asserts an absence.
 //
-// The rule itself is unchanged and still enforced; only the false affordance is
-// gone. What replaces it has to name the setting, because that is the only
-// thing the operator can actually change.
-func TestCloudModelUnderLocalOnlyIsRefusedWithAnActionableReason(t *testing.T) {
+// privacy.local_only bounds TOOL endpoints — the MCP layer really enforces it,
+// with its own resolver and dialer in internal/mcp/http_policy.go. It cannot
+// bound inference here: sonar reaches hosted providers exclusively,
+// ProviderProfile.IsRemote() is constant true, and a rule refusing a hosted
+// model could only ever refuse every model the harness supports.
+//
+// The picker carried that rule anyway, copied from local-agent — where it IS
+// correct, because Ollama runs models on the machine and there is a local
+// alternative to fall back to. Here it contradicted both AGENTS.md and
+// internal/llm's TestSwitchProviderIgnoresLocalOnly. The copy is gone, and the
+// divergence between the two harnesses is now a decision rather than drift.
+func TestLocalOnlyNeverGatesInferenceInSonar(t *testing.T) {
 	m := newTestModel(t)
-	m.localOnly = true
 	m.ollamaModels = []OllamaModelDescriptor{{
 		Name: "qwen-cloud:latest", Source: OllamaModelCloud, Selectable: true, Fit: true,
 	}}
-
-	err := m.validateModelAdmission("qwen-cloud:latest")
-	if err == nil {
-		t.Fatal("a hosted model was admitted under privacy.local_only")
-	}
-	message := err.Error()
-	if !strings.Contains(message, "local_only") {
-		t.Errorf("refusal does not name the setting to change: %q", message)
-	}
-	for _, forbidden := range []string{"confirmation", "consent", "review"} {
-		if strings.Contains(strings.ToLower(message), forbidden) {
-			t.Errorf("refusal still implies a confirmation step (%q): %q", forbidden, message)
-		}
+	if err := m.validateModelAdmission("qwen-cloud:latest"); err != nil {
+		t.Fatalf("a hosted model was refused by the picker: %v", err)
 	}
 }
 
-// Clearing the setting is the whole remedy: the same model must then admit.
-func TestCloudModelAdmitsOnceLocalOnlyIsCleared(t *testing.T) {
-	m := newTestModel(t)
-	m.localOnly = false
-	m.ollamaModels = []OllamaModelDescriptor{{
-		Name: "qwen-cloud:latest", Source: OllamaModelCloud, Selectable: true, Fit: true,
-	}}
-
-	if err := m.validateModelAdmission("qwen-cloud:latest"); err != nil {
-		t.Fatalf("a hosted model was refused with local_only off: %v", err)
+// TestNoLocalOnlyInferenceGateReturns is the guard that keeps the copy from
+// coming back. The rule reads as a safety feature, so the next person to sync a
+// file from local-agent has every reason to restore it — and nothing in a
+// hosted-only harness would fail if they did, because the branch is simply
+// never taken until someone configures local_only and then cannot pick a model.
+//
+// A source scan is the only thing that fails at the moment the copy lands.
+func TestNoLocalOnlyInferenceGateReturns(t *testing.T) {
+	entries, err := os.ReadDir(".")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Clean(name))
+		if err != nil {
+			t.Fatalf("read %s: %v", name, err)
+		}
+		for lineNumber, line := range strings.Split(string(body), "\n") {
+			if strings.Contains(line, "localOnly") && !strings.HasPrefix(strings.TrimSpace(line), "//") {
+				t.Errorf("%s:%d reintroduces a local-only gate in the UI; privacy.local_only bounds tool endpoints, and this fork has no local inference to fall back to",
+					name, lineNumber+1)
+			}
+		}
 	}
 }
 

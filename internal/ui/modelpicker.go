@@ -595,13 +595,19 @@ func (m *Model) ollamaModelDescriptor(name string) (OllamaModelDescriptor, bool)
 
 func (m *Model) validateModelAdmission(name string) error {
 	if descriptor, ok := m.ollamaModelDescriptor(name); ok {
-		// privacy.local_only is a standing decision, not a per-conversation
-		// prompt: there is no in-session grant that would make a hosted model
-		// local. Say what has to change instead of implying a confirmation
-		// exists somewhere in the UI.
-		if descriptor.Source == OllamaModelCloud && m.localOnly {
-			return fmt.Errorf("model %q runs on Ollama Cloud, which privacy.local_only forbids; clear that setting to use a hosted model", name)
-		}
+		// No local-only gate on inference here, and its absence is the point.
+		//
+		// privacy.local_only bounds TOOL endpoints. In sonar it can never bound
+		// inference, because sonar has no local inference to fall back to:
+		// ProviderProfile.IsRemote() is constant true, so a rule refusing a
+		// hosted model could only ever refuse every model the harness supports.
+		// This surface used to carry that rule anyway — a copy of local-agent's,
+		// where it is correct because Ollama really does run models on the
+		// machine — and it contradicted both AGENTS.md and
+		// TestSwitchProviderIgnoresLocalOnly, which pins the opposite.
+		//
+		// See TestLocalOnlyNeverGatesInferenceInSonar. If a local runtime ever
+		// returns, the rule comes back with it.
 		if descriptor.Selectable && descriptor.Fit {
 			return nil
 		}

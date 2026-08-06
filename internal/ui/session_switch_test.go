@@ -122,7 +122,6 @@ func TestSessionSwitchTargetMismatchRestoresOriginalDraft(t *testing.T) {
 			attachImageFixture(t, m, secondPath, "")
 			wantImages := clonePendingImages(m.pendingImages)
 
-			m.localOnly = true
 			m.ollamaModels = append(m.ollamaModels, OllamaModelDescriptor{
 				Name: "qwen:cloud", Source: OllamaModelCloud, Selectable: true, Fit: true,
 			})

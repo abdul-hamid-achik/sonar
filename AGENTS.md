@@ -150,6 +150,22 @@ to make a refactor pass.
 `privacy.local_only` bounds **tool** endpoints (MCP), not inference. Every
 sonar request leaves the machine by construction.
 
+It is really enforced — `internal/mcp/http_policy.go` resolves the target
+itself and verifies every address it gets back — so the setting is not a
+leftover, even though the name reads like one. What *was* a leftover is an
+inference gate: the model picker refused an Ollama Cloud model under
+`local_only`, copied from `local-agent`, where it is correct because Ollama
+runs models on the machine and there is a local alternative to fall back to.
+Here it could only ever refuse every model the harness supports, and it
+contradicted `TestSwitchProviderIgnoresLocalOnly` two packages away. It is
+gone, and `internal/ui`'s `TestNoLocalOnlyInferenceGateReturns` fails if it
+comes back — a source scan, because nothing else fails at the moment the copy
+lands.
+
+That split is the general shape of these two repositories: sonar is hosted
+APIs, `local-agent` is local models through Ollama. A rule about locality
+usually belongs to exactly one of them.
+
 ## Architecture
 
 ### Package layout (`internal/`)

@@ -51,7 +51,6 @@ func (m *Model) handleCoreReady(msg CoreReadyMsg) {
 	m.setCurrentModelProjection(msg.Model)
 	m.ollamaModels = msg.OllamaModels
 	m.modelList = append([]string(nil), msg.ModelList...)
-	m.localOnly = msg.LocalOnly
 	m.ollamaInventoryAttempted = msg.OllamaInventoryAttempted
 	m.setActiveProfileMetadata(msg.AgentProfile)
 	if msg.NumCtx > 0 {
@@ -74,7 +73,6 @@ func (m *Model) handleInitComplete(msg InitCompleteMsg, cmds []tea.Cmd) []tea.Cm
 	m.ollamaModels = msg.OllamaModels
 	m.modelList = append([]string(nil), msg.ModelList...)
 	m.ollamaVersion = msg.OllamaVersion
-	m.localOnly = msg.LocalOnly
 	m.ollamaInventoryAttempted = msg.OllamaInventoryAttempted
 	m.setActiveProfileMetadata(msg.AgentProfile)
 	m.agentList = msg.AgentList

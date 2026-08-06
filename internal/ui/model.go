@@ -333,7 +333,6 @@ type Model struct {
 	modelList                 []string
 	ollamaModels              []OllamaModelDescriptor
 	ollamaVersion             string
-	localOnly                 bool
 	ollamaOffline             bool
 	ollamaInventoryAttempted  bool
 	pendingOllamaInventory    *OllamaModelInventoryMsg

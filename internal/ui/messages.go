@@ -158,7 +158,6 @@ type CoreReadyMsg struct {
 	Model                    string
 	ModelList                []string
 	OllamaModels             []OllamaModelDescriptor
-	LocalOnly                bool
 	OllamaInventoryAttempted bool
 	AgentProfile             string
 	NumCtx                   int
@@ -170,7 +169,6 @@ type InitCompleteMsg struct {
 	ModelList                []string
 	OllamaModels             []OllamaModelDescriptor
 	OllamaVersion            string
-	LocalOnly                bool
 	OllamaInventoryAttempted bool
 	AgentProfile             string
 	AgentList                []string
