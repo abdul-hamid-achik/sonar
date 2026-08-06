@@ -138,12 +138,16 @@ type Model struct {
 	transcriptSearch *TranscriptSearchState
 
 	// Tool display
-	toolEntries        []ToolEntry
-	outputDetails      *OutputDetailStore
-	modalStack         ModalStack
-	outputViewers      map[OverlayID]*OutputViewer
-	diffViewers        map[OverlayID]*DiffViewer
-	toolsCollapsed     bool
+	toolEntries    []ToolEntry
+	outputDetails  *OutputDetailStore
+	modalStack     ModalStack
+	outputViewers  map[OverlayID]*OutputViewer
+	diffViewers    map[OverlayID]*DiffViewer
+	toolsCollapsed bool
+	// expandedReadRuns names the collapsed read-run summaries the reader has
+	// opened, keyed by the run's first block. Absence means collapsed, so a
+	// restored session starts calm and nothing has to be persisted.
+	expandedReadRuns   map[BlockID]struct{}
 	toolHitRegions     []toolHitRegion
 	thinkingHitRegions []thinkingHitRegion
 	diffGeneration     uint64
@@ -1735,6 +1739,11 @@ func (m *Model) handleMouseClick(x, y int) tea.Cmd {
 	for _, region := range m.toolHitRegions {
 		if region.contains(x, vpY) {
 			if region.ToolIndex >= 0 && region.ToolIndex < len(m.toolEntries) {
+				// A run summary carries its first member's tool index, so the
+				// run answers before the individual receipt does.
+				if m.toggleReadRunAtTool(region.ToolIndex) {
+					return nil
+				}
 				if target, ok := m.toolActionTarget(region.ToolIndex); ok {
 					return m.dispatchUIAction(UIActionRequest{
 						ActionID: toolToggleActionID,

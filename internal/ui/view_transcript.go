@@ -290,8 +290,21 @@ func (m *Model) renderEntryInto(b *strings.Builder, entryIndex, contentW int, me
 		state.assistantStarted = false
 		return
 	}
+	// A run of consecutive settled read-family receipts renders as one line at
+	// its first entry; the rest render nothing. Both answers come from the same
+	// pair of predicates, so exactly one entry in a run produces a chunk, and
+	// the 1:1 entry-to-block invariant the paint layer relies on still holds —
+	// a chunk-less entry simply contributes no block and no layout record.
+	//
+	// Every run member is settled by construction, so a run can only change
+	// when a tool lifecycle event lands, and those already invalidate the entry
+	// cache. Without that, appending a sixth read would have to mutate a block
+	// the append-only paint cache considers immutable.
+	if m.collapsedReadRunFollower(entryIndex) {
+		return
+	}
 	proseW := min(contentW, m.chatProseWidth())
-	memoKey := m.entryMemoKey(entry, contentW, proseW)
+	memoKey := m.entryMemoKey(entryIndex, contentW, proseW)
 	var chunk string
 	hit := false
 	if memoAllowed && memoKey != "" {
@@ -308,7 +321,11 @@ func (m *Model) renderEntryInto(b *strings.Builder, entryIndex, contentW int, me
 		case "assistant":
 			m.renderAssistantMsg(&entryView, entry, contentW)
 		case "tool_group":
-			m.renderToolGroup(&entryView, entry)
+			if run, collapsed := m.collapsedReadRunAt(entryIndex); collapsed {
+				m.renderCollapsedReadRun(&entryView, run)
+			} else {
+				m.renderToolGroup(&entryView, entry)
+			}
 		case "error":
 			m.renderEntryError(&entryView, entry.Content, contentW)
 		case "system":
@@ -741,7 +758,14 @@ func fnv64(parts ...string) uint64 {
 // entryMemoKey builds the composite key capturing every input that affects
 // one entry's rendered chunk. An empty key means the entry cannot be projected
 // safely enough to memoize.
-func (m *Model) entryMemoKey(entry ChatEntry, contentW, proseW int) string {
+// entryMemoKey takes the entry INDEX rather than the entry, because one entry
+// no longer determines its own rendering: a read-run summary is produced by its
+// first member and describes all of them, and only the index locates the run.
+func (m *Model) entryMemoKey(entryIndex, contentW, proseW int) string {
+	if entryIndex < 0 || entryIndex >= len(m.entries) {
+		return ""
+	}
+	entry := m.entries[entryIndex]
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s|%d|%d|%d|%t|%t|%d",
 		entry.Kind, entry.Revision, contentW, proseW, m.isDark, m.toolsCollapsed, m.glyphProfile)
@@ -753,6 +777,14 @@ func (m *Model) entryMemoKey(entry ChatEntry, contentW, proseW int) string {
 			fnv64(entry.Content, "\x00", entry.ThinkingContent),
 			entry.ThinkingCollapsed, entry.RenderedContent != "")
 	case "tool_group":
+		// A run's summary is rendered by its FIRST entry and describes every
+		// member, so a key derived from that one entry's tool goes stale the
+		// moment a fourth read lands and the transcript keeps claiming three.
+		// The run's own shape is the key.
+		if run, collapsed := m.collapsedReadRunAt(entryIndex); collapsed {
+			fmt.Fprintf(&b, "|run%d:%d:%d:%s", run.Length, run.Reads, run.Searches, run.Target)
+			break
+		}
 		toolKey, ok := m.toolGroupMemoKey(entry)
 		if !ok {
 			return ""

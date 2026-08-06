@@ -83,14 +83,14 @@ func TestEntryMemoWarmRenderIsByteIdentical(t *testing.T) {
 
 func TestEntryMemoKeyIncludesReadableProseMeasure(t *testing.T) {
 	m := newTestModel(t)
-	entry := ChatEntry{
+	m.entries = []ChatEntry{{
 		BlockID:  "memo-prose",
 		Revision: 1,
 		Kind:     "user",
 		Content:  strings.Repeat("readable prose ", 20),
-	}
-	wide := m.entryMemoKey(entry, 160, 96)
-	narrow := m.entryMemoKey(entry, 160, 72)
+	}}
+	wide := m.entryMemoKey(0, 160, 96)
+	narrow := m.entryMemoKey(0, 160, 72)
 	if wide == "" || narrow == "" || wide == narrow {
 		t.Fatalf("memo key ignored prose geometry: wide=%q narrow=%q", wide, narrow)
 	}

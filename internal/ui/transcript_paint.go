@@ -327,7 +327,7 @@ func (m *Model) advanceRunningToolReceiptFrame() bool {
 		// Keep the memo in step. Without this the next full render would rebuild
 		// this entry from a key that no longer matches the block on screen.
 		if m.entryMemo != nil {
-			if key := m.entryMemoKey(entry, contentW, proseW); key != "" {
+			if key := m.entryMemoKey(entryIndex, contentW, proseW); key != "" {
 				m.entryMemo[entry.BlockID] = entryRenderMemo{key: key, chunk: chunk}
 			}
 		}
