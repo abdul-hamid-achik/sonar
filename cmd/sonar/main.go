@@ -382,6 +382,18 @@ func run() int {
 	ag.RequireExecutionLedger(true)
 	ag.SetToolsConfig(cfg.Tools)
 	ag.SetContinuationsConfig(cfg.Continuations)
+	// OS-level confinement for shell subprocesses. Requesting it on a platform
+	// with no driver is reported rather than ignored: an operator who edited
+	// sandbox.enabled believes a boundary exists, and silence would let them
+	// keep believing it.
+	ag.SetSandboxPosture(agent.SandboxPosture{
+		Enabled:      cfg.Sandbox.Enabled,
+		AllowNetwork: cfg.Sandbox.AllowNetwork,
+	})
+	if cfg.Sandbox.Enabled && !ag.SandboxActive() {
+		fmt.Fprintln(os.Stderr,
+			"sandbox: enabled in config but this platform has no confinement driver; commands run unconfined")
+	}
 	ag.SetRouter(router)
 	// No expert consultation. It selects several distinct models from a local
 	// multi-model inventory and runs them side by side; sonar reaches hosted

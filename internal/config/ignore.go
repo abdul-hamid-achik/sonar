@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/abdul-hamid-achik/sonar/internal/safeio"
@@ -163,6 +164,36 @@ func IgnorePolicyLayers(content string) (workspacePolicy string, hasHostDefaults
 	return workspacePolicy, true
 }
 
+// hostSecretComponents are the path components the non-overridable secret
+// policy denies. Each is matched against ONE path component, never a whole
+// path, so a name is denied wherever it appears in the tree.
+//
+// This is the single list. HostSecretPathIgnored evaluates it, and
+// HostSecretComponents hands it to the OS sandbox so a confined subprocess is
+// refused by the kernel on exactly the names the path checks refuse. Two lists
+// would drift, and the half that drifted would be the half nobody tested.
+var hostSecretComponents = []string{
+	".env", ".env.*", ".npmrc", ".netrc", "credentials", ".aws", ".ssh",
+	"*.pem", "*.key", "id_rsa*", "id_ed25519*", "*.p12", "*.keystore",
+}
+
+// HostSecretComponents returns the deny list as component globs.
+func HostSecretComponents() []string {
+	return append([]string(nil), hostSecretComponents...)
+}
+
+// HostSecretPublicLeaves returns the exact names admitted despite matching a
+// denied component, and only as the FINAL component of a path. A directory
+// named .env.example never makes its descendants readable.
+func HostSecretPublicLeaves() []string {
+	leaves := make([]string, 0, len(publicEnvTemplateNames))
+	for name := range publicEnvTemplateNames {
+		leaves = append(leaves, name)
+	}
+	sort.Strings(leaves)
+	return leaves
+}
+
 // HostSecretPathIgnored reports whether path is denied by sonar's
 // non-overridable secret policy. Conventional environment templates are exact
 // leaf-file exceptions only: a repository may still exclude them, and a
@@ -177,20 +208,17 @@ func HostSecretPathIgnored(path string) bool {
 		if part == "" || part == "." {
 			continue
 		}
-		if strings.HasPrefix(part, ".env.") {
-			_, publicTemplate := publicEnvTemplateNames[part]
-			if !publicTemplate || i != len(parts)-1 {
-				return true
+		for _, pattern := range hostSecretComponents {
+			matched, _ := filepath.Match(pattern, part)
+			if !matched {
+				continue
 			}
-			continue
-		}
-		if part == ".env" || part == ".npmrc" || part == ".netrc" || part == "credentials" || part == ".aws" || part == ".ssh" {
+			// The leaf exception applies only to the last component, and only
+			// to an exact template name.
+			if _, publicTemplate := publicEnvTemplateNames[part]; publicTemplate && i == len(parts)-1 {
+				continue
+			}
 			return true
-		}
-		for _, pattern := range []string{"*.pem", "*.key", "id_rsa*", "id_ed25519*", "*.p12", "*.keystore"} {
-			if matched, _ := filepath.Match(pattern, part); matched {
-				return true
-			}
 		}
 	}
 	return false

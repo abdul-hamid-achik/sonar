@@ -50,6 +50,7 @@ type Config struct {
 	Continuations ContinuationsConfig `yaml:"continuations,omitempty"`
 	Experts       ExpertsConfig       `yaml:"experts,omitempty"`
 	Privacy       PrivacyConfig       `yaml:"privacy,omitempty"`
+	Sandbox       SandboxConfig       `yaml:"sandbox,omitempty"`
 	Credentials   CredentialsConfig   `yaml:"credentials,omitempty"`
 	UI            UIConfig            `yaml:"ui,omitempty"`
 }
@@ -143,6 +144,38 @@ type PrivacyConfig struct {
 	// not. Approved subprocesses can still access the network; they are an
 	// explicit trust boundary surfaced by the tool permission UI.
 	LocalOnly bool `yaml:"local_only"`
+}
+
+// SandboxConfig confines shell subprocesses with the operating system's own
+// primitives — Seatbelt on macOS, bubblewrap on Linux — so that the workspace
+// boundary and the secret policy are enforced by the kernel rather than
+// inferred from a command line.
+//
+// It is a second layer, never a replacement. The scoped-shell catalog reads
+// argv and can refuse `curl` before it runs; the sandbox cannot read intent but
+// binds what a process actually touches, including the workspace code that
+// `go test` and `npm test` execute — which argv inspection is structurally
+// blind to. Neither one subsumes the other.
+//
+// Enabled defaults to false. A sandbox changes which commands SUCCEED, not
+// only which ones are allowed to start: with the network denied, a build that
+// needs to download a module fails, and a security feature that silently
+// breaks builds is one an operator turns off wholesale. Turning it on should
+// be a decision someone made, not a surprise they diagnose.
+type SandboxConfig struct {
+	// Enabled confines every shell subprocess this host starts. On a platform
+	// with no confinement driver it has no effect and startup says so, rather
+	// than reporting a boundary that is not there.
+	Enabled bool `yaml:"enabled"`
+
+	// AllowNetwork lets confined commands reach the network.
+	//
+	// Denying it costs inference nothing: sonar's provider calls are made by
+	// the sonar process, never by a confined child. What it costs is
+	// `npm install` and `go mod download` — both of which already require an
+	// interactive approval, so the usual answer is to leave this false and
+	// approve those individually.
+	AllowNetwork bool `yaml:"allow_network"`
 }
 
 type AgentsConfig struct {

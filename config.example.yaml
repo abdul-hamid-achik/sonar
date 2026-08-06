@@ -85,6 +85,32 @@ ui:
 privacy:
   local_only: true
 
+# OS-level confinement for shell subprocesses: Seatbelt on macOS, bubblewrap on
+# Linux. It is a second layer under the scoped-shell catalog, never a
+# replacement for it.
+#
+# The catalog reads a command line, so it can refuse `curl` before it runs and
+# is structurally blind to what a program does once started — `go test ./...`
+# and `npm test` execute workspace code, and a workspace script can open a
+# socket or read a file no argv ever named. The sandbox cannot read intent, but
+# it binds what a process actually touches. Neither one subsumes the other.
+#
+# What it enforces: reads of the host secret paths are denied, writes are denied
+# outside the workspace and the toolchain caches, and network access is denied.
+# What it does not: the workspace stays writable, so a confined `rm -rf .` still
+# destroys uncommitted work. Approvals remain the only thing that stops that.
+#
+# Off by default because it changes which commands SUCCEED, not only which are
+# allowed to start — with the network denied, a build that needs to download a
+# module fails. Turn it on deliberately rather than discover it.
+sandbox:
+  enabled: false
+  # Confined commands reach the network. Leave false: sonar's own provider
+  # calls are made by the sonar process, never by a confined child, so denying
+  # this costs inference nothing. It costs `npm install` and `go mod download`,
+  # which already require an interactive approval of their own.
+  allow_network: false
+
 # Provider-loop budgets are independent so interactive turns stay concise while
 # AUTO has room to inspect, implement, and verify without a premature stop.
 tools:

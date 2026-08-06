@@ -72,7 +72,11 @@ type Agent struct {
 	// approvalPosture is process-local approval UX policy (e.g. accept
 	// workspace edits without per-call prompts). It never broadens deny
 	// policies or skip-approvals host posture.
-	approvalPosture     ApprovalPosture
+	approvalPosture ApprovalPosture
+	// sandboxPosture is process-local OS confinement for shell subprocesses.
+	// It is orthogonal to authority: authority decides whether a command may
+	// start, confinement decides what it can touch once it has.
+	sandboxPosture      SandboxPosture
 	toolsConfig         config.ToolsConfig
 	continuationsConfig config.ContinuationsConfig
 	logger              *log.Logger

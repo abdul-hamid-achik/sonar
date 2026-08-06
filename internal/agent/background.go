@@ -261,7 +261,14 @@ func newBackgroundRegistry() *backgroundRegistry {
 
 var errBackgroundRegistryClosed = errors.New("the session is shutting down; no new background process was started")
 
-func (r *backgroundRegistry) start(command, workDir string, env []string) (*backgroundProcess, error) {
+// confineFunc wraps a prepared command in the host's confinement, or returns
+// it unchanged when confinement is off. The registry takes it as a parameter
+// rather than reaching for the Agent so that a background start cannot
+// accidentally run under a weaker boundary than the identical foreground one —
+// the two paths now differ in nothing but backgrounding.
+type confineFunc func(*exec.Cmd) error
+
+func (r *backgroundRegistry) start(command, workDir string, env []string, confine confineFunc) (*backgroundProcess, error) {
 	r.mu.Lock()
 	if r.closed {
 		r.mu.Unlock()
@@ -294,6 +301,11 @@ func (r *backgroundRegistry) start(command, workDir string, env []string) (*back
 	cmd.Stdin = nil
 	cmd.Stdout = &proc.stdout
 	cmd.Stderr = &proc.stderr
+	if confine != nil {
+		if err := confine(cmd); err != nil {
+			return nil, fmt.Errorf("background command was not confined: %w", err)
+		}
+	}
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
@@ -432,7 +444,7 @@ func (a *Agent) closeBackgroundShells() {
 // and returns the host receipt the model reads. Authorization already happened
 // on the ordinary `bash` path before this is reached.
 func (a *Agent) startBackgroundShellCommand(command string) (string, bool) {
-	proc, err := a.backgroundShells().start(command, a.activeWorkDir(), sanitizedEnv())
+	proc, err := a.backgroundShells().start(command, a.activeWorkDir(), sanitizedEnv(), a.confineShellCommand)
 	if err != nil {
 		// Start failure means the shell never executed: this is an answered
 		// failure, not an unknown outcome.

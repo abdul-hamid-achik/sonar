@@ -85,6 +85,15 @@ func (a *Agent) handleBash(parent context.Context, args map[string]any) (string,
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
+	// Confinement is applied last, after every field the host owns is set, so
+	// that wrapping cannot change what the command inherits. A wrap failure is
+	// reported rather than run unconfined: the operator asked for a boundary,
+	// and quietly not applying one is the failure mode this package exists to
+	// avoid.
+	if err := a.confineShellCommand(cmd); err != nil {
+		return fmt.Sprintf("error: command was not run because it could not be confined: %v", err), true
+	}
+
 	err := cmd.Run()
 
 	output := stdout.String()
