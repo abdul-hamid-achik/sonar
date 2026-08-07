@@ -20,15 +20,28 @@ and cut down: the agent loop, tool dispatch, permission model, durable goals,
 session store, and MCP surface came across intact; the local-first inference
 machinery did not.
 
-sonar has no website and no `docs/` tree. `README.md` and
-`config.example.yaml` are the documentation. A `docs/` inherited from upstream
-lived here until it was removed — every page described a different product and
-told the reader to install it. Wrong documentation is worse than none, so if a
-doc tree returns, it is written for sonar or it does not ship.
+`docs/` is an Astro Starlight site, written for sonar and deployed to Vercel.
+It returned under the condition the earlier one failed: a `docs/` inherited from
+upstream lived here until it was removed, because every page described a
+different product and told the reader to install it.
+
+So it ships with the thing that makes "written for sonar" checkable. Nothing
+compares two prose files — the same reason `internal/drift` exists — so
+`internal/docs` reads every page and fails the Go suite when the site names a
+slash command the registry does not have or a setting `config.Config` does not
+define. It cannot check whether prose is TRUE; it checks the class of error that
+actually happened, which is a page naming a thing that is simply not there. The
+site's own scaffold shipped an `AGENTS.md`, a `CLAUDE.md` and a `README.md`
+describing the template; all three were deleted on arrival for the same reason.
+
+`README.md` is still the front door for someone evaluating sonar, and
+`config.example.yaml` is still the reference for settings — it is checked in
+beside the code it describes, so a page here points at it rather than copying it.
 
 Keep tracked files free of maintainer-specific paths, usernames, host names,
 and private tool inventories. Examples use neutral defaults such as
-`~/.config/sonar/env`. ADRs live outside this repository.
+`~/.config/sonar/env`. Product notes, planning, and ADRs live outside this
+repository, in `~/notes/projects/sonar`.
 
 ## Build and development
 
@@ -199,8 +212,12 @@ usually belongs to exactly one of them.
 - **skill/** — Skill discovery and activation from sonar and shared `~/.agents`
   directories.
 - **command/** — Canonical slash-command registry and hidden aliases.
+- **speech/** — Host synthesizer and microphone as subprocesses. Receives
+  finished sentences; it does not decide what to say.
 - **drift/** — Compares this repository against `local-agent` on a pinned list
   of packages that must stay identical.
+- **docs/** — Test-only. Compares the published site against the command
+  registry and the config type, so a page cannot name what does not exist.
 - **ui/** — Bubble Tea v2 smart parent, Bubbles children, transient overlays,
   Glamour rendering.
 
@@ -243,6 +260,182 @@ minutes and nothing explained why.
 cancellation but continues past a host refusal, so the model sees the refusal
 and takes another route. A timeout can only ever withhold permission, never
 grant it.
+
+### Voice
+
+Four things here are load-bearing and each was learned by getting it wrong.
+
+**A provider segment is not a turn.** `StreamDone` fires at every model
+response — once per tool round, once per AUTO continuation, and once more when
+a capped request charges an unaccounted reservation. Anything reset there is
+reset several times per turn: the language verdict was, so a turn with tool
+calls re-decided its language at every round and the short segments that carry
+no function words fell back to the host default, reading Spanish answers in an
+English voice. The spoken position is per stream buffer and resets with it in
+`resetTranscriptStreamText`; the language is per turn and resets in
+`beginVoiceTurn`, which an AUTO continuation deliberately does not reach.
+
+**The speaker queues; only `Stop` cuts.** A voice belongs to a process and is
+chosen when that process starts, so two languages mean two processes. Starting
+the second by signalling the first cuts a sentence in half — and since a
+segment end closes the synthesizer's input, every tool call took that path.
+`internal/speech` now serializes utterances through one worker that waits for a
+voice to finish before starting the next. Writing to a synthesizer also blocks
+once its pipe fills, and the caller is Bubble Tea's `Update`, so queuing keeps
+the frame loop off the audio device.
+
+**`say` obeys `[[…]]` from stdin, and every word spoken came from a model.**
+Measured: the same sentence renders 136,996 bytes with `[[slnc 2000]]` in it
+and 49,956 without, so the command is executed rather than read. `[[volm 0]]`
+is a mute that looks like a bug in this package. `escapeSynthesizerCommands`
+breaks the delimiter before anything is written, and the deliberate prosody
+pause is added *after* it — reversing the two hands back the channel that
+escaping just claimed.
+
+**Alerts are the channel that justifies the feature.** Reading an answer aloud
+competes with reading it off the screen and loses. An approval waiting on
+somebody who is not looking has no competing channel at all, so `alerts` is on
+by default and ignores `speak_when`, which every other channel obeys. Alerts
+name what is waiting, never the command — the projection discipline matters
+more here than anywhere, because the sentence has to survive being heard from
+another room.
+
+macOS ships compact voices; the downloadable variants are a different feature
+entirely. `VoiceForLanguage` prefers one when it exists, and the parenthesised-
+name heuristic that demotes the novelty set had to learn not to demote them.
+
+**The harness never opens the microphone; you do.** An approval can be answered
+by speaking, but only in the seconds after somebody pressed the dictation key
+while a prompt was already waiting — the alternative puts the harness in charge
+of when the room is recorded, and this codebase already states that a
+microphone opened by anything other than a deliberate act is a privacy problem
+rather than a convenience. That choice pays twice: the person is at the
+keyboard so they can SEE what they are approving, and the keyboard is one reach
+away so refusing the dangerous cases costs a keypress exactly where a keypress
+is cheap. `voice_approval.go` can only ever produce AllowOnce or Deny — the type
+has no session member to reach — and anything carrying a
+`DestructiveCommandWarning` is refused rather than downgraded. Approving needs a
+distinctive word and denying does not, because the local `base` Whisper reports
+no confidence and the two directions cost different things: a wrong deny is a
+refusal the model routes around, a wrong allow is a command nobody asked for.
+"sí" and "no" are in neither list.
+
+**Voice steering is read-only, and that is a safety boundary rather than a
+scope decision.** "Show me the diff" and "approve it" go through the same
+microphone, the same `base` Whisper model and the same far-field audio; a
+mis-transcription costs a screen in one case and a command in the other. So
+`voice_command.go` matches a closed vocabulary against the WHOLE utterance —
+containing a phrase is not being one, because the rest of the sentence is
+usually a request — and nothing it can reach sends a prompt, answers an
+approval, cancels a turn, or changes a setting that outlives the session.
+Cancelling is absent deliberately: a mis-heard "stop" that kills a two-hour
+AUTO run is expensive, and Escape already stops without a microphone. A test
+pins the reachable set, so a new phrase cannot quietly widen it.
+
+**Order matters in the digest path, and it bought silence once.** `speakDigest`
+dropped the pending narration before projecting the digest — and the projection
+is lossy by design, so a digest that reduces to nothing discarded a queue that
+would have been fine and said nothing in its place. Project first, drop second.
+The same line carries its own language, because "again" three turns later would
+otherwise read a Spanish sentence in whatever voice the current turn is using.
+
+**"Back" means one step out of wherever you are.** The stage yields to viewers,
+so once a detour is open the stage is already inactive — and a `back` that only
+knew how to leave the stage silently did nothing, which is the word most likely
+to be said right after opening a detour. It closes the viewer, then the overlay,
+then the stage.
+
+**A panel may lose its prose, never its exits.** The listening stage trimmed its
+tail on short terminals, which is where `esc`, the dictation key and `/voice
+off` live. It trims from the middle now. This is the same rule as the one below
+about hiding actions, applied to the way out.
+
+**The listening stage is a router, not a viewer.** The first design for it was
+a denser transcript — assistant turns collapsed to their digest, tool cards
+folded to a count. That is still a log, and a log is a thing you read; somebody
+listening wants the present tense and a way to reach one detail, not a
+compressed history of what they already heard. So `voice_stage.go` is one
+centred panel, and every detail surface it names already exists — `alt+d`,
+`alt+o`, `ctrl+f`, `ctrl+t`. It adds no bindings, because the composer stays
+focused on it and a single-letter shortcut would fight typing. The rule it must
+keep: it may hide prose, never an action and never an error.
+
+**There are two drivers, and the hosted one was justified by measurement
+before it was built.** `internal/speech/hosted.go` reaches OpenAI's speech
+endpoint and plays the result through one `ffplay` per run — MP3 frames
+concatenate, measured at 5.904s + 5.808s rendering as exactly 11.712s, so a run
+stays continuous the way `say`'s stdin does. `afplay` cannot: it takes a path
+and has no pipe mode. The driver reports `Needs{}` empty, which is the finding
+rather than an omission. It is off by default and selected with
+`voice.provider: openai`; an unknown provider is an error rather than a silent
+fallback, because somebody who asked for the hosted engine and quietly got the
+local one would hear the exact mispronunciation they were trying to fix.
+
+**A driver declares what it needs; the caller asks rather than assumes.** The
+same sentence was generated through four engines and transcribed back with the
+local Whisper to see which words survived. `say` with Paulina produced "el
+merch … el caché … confit"; with the respelling table, every technical term
+survived. xAI told `language=es-MX` failed the same way — "Merch", "Catch",
+"Diploi", "Geet" — and xAI given `auto` got them all right, as did OpenAI's
+`gpt-4o-mini-tts`.
+
+The pattern is not that hosted is better. It is that **every engine told the
+language applied that language's letter-to-sound rules to the English
+vocabulary, and every engine left to detect it handled the mixture.** So the
+language detector, the per-turn verdict, the per-language voice map and the
+phonetic table are not requirements of reading Spanish aloud — they are
+compensation for one property of `say`, which binds a monolingual voice when
+the process starts. `speech.Needs` says which of them a driver wants, and
+`Model.forDriver` applies only those: passing the respellings to an engine that
+did not need them made it worse, turning "guit" into "gitad".
+
+**Speech is slower than the agent works, and two mechanisms bound that.**
+`internal/speech` drops a queued utterance that waited longer than
+`staleUtteranceAfter` at the moment it would be spoken — alerts are `sticky` and
+finish markers are never dropped, because `Speaking()` answers from the queue.
+And while the answer channel is on, `voiceAnswerHint` asks the model to close
+with one to three sentences written to be heard, carried in an HTML comment so
+the transcript keeps the raw record and renders nothing. `speakDigest` then
+`DropPending()`s the backlog — dropping, never cutting; cutting stays Stop's
+alone — and reads that instead. An extra summarising request was considered and
+rejected: it costs a round trip and a second provider failure surface at exactly
+the moment the listener is waiting for the outcome, while a model that ignores
+an inline hint costs nothing at all.
+
+**The approval alert names its action, and no other alert does.** The rule that
+alerts withhold their subject exists because "go to the screen" is the only safe
+instruction — and that assumes the listener will come. This channel exists for
+the person who will not, for whom "something is waiting" makes the trip
+mandatory just to learn whether it was worth it. It says the host's own bounded
+label plus `spokenPath`, never the command.
+
+**Speech is measurable, so measure it.** `say -o out.aiff` writes uncompressed
+audio, so file size is proportional to duration and a shell loop answers
+questions that otherwise get guessed. It is how the useful facts here were
+found: an emoji nearly doubles an utterance (29,376 bytes for "Listo", 56,512
+for "Listo ✅"), `say` already spells most initialisms correctly — MCP, CPU,
+TLS, XML, LLM and SQL render within 10% of their spaced form, several
+byte-identical — and only API, CLI, TUI, IDE and URL come out 30–50% short,
+which is the signature of being read as a word. The same loop is what stopped a
+list of file extensions being added for nothing: `auto_command.go` reads at 84%
+of "auto command dot go", so the reducer was never needed there.
+
+What the size cannot answer is whether something sounds *right*, which is
+exactly the problem `voice_pronunciation.go` addresses and the reason it is
+built the way it is. A Spanish voice applies Spanish letter-to-sound rules to
+everything, so English vocabulary becomes different words rather than an accent:
+"g" before e is /x/, making "merge" into "MER-je" and "package" into "pa-KA-je";
+"h" is silent; "git" is "jit". The respelling table fixes that, and every entry
+in it is a guess no measurement can confirm — so `voice.pronounce` in the config
+overrides any entry, an empty value removes one, and the Spanish `/voice test`
+line is loaded with the words the table covers. Ship a guess, hand the listener
+the correction.
+
+All four channels reach the synthesizer through `Model.say` and
+`Model.sayNext`, and that is the only reason the respelling is consistent. A
+transformation applied at four call sites out of five is a harness that
+pronounces one word two ways in a turn, and the fifth call site is always the
+one added next.
 
 ### Key interfaces
 

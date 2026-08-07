@@ -4,6 +4,9 @@ A terminal coding agent for hosted models, over the API, with an API key. No loc
 
 MIT licensed. Built on [Charm](https://charm.land) and the [Catwalk](https://github.com/charmbracelet/catwalk) provider catalog.
 
+Full documentation lives in [`docs/`](docs/) — an Astro Starlight site. This
+README stays the front door; the site is where the longer explanations go.
+
 **DeepSeek V4 Flash is the default, not the boundary.** Provider metadata comes from an embedded [Catwalk](https://github.com/charmbracelet/catwalk) snapshot — 40 providers, 1403 models — so selecting `groq`, `cerebras`, or `moonshot` needs a provider name and a key, not code. `ollama` is in that list too and means **Ollama Cloud** (`https://ollama.com/v1`, `OLLAMA_API_KEY`), not a daemon on your machine.
 
 Forked from [`local-agent`](https://github.com/abdul-hamid-achik/local-agent) and cut down. The agent loop, tool dispatch, permission model, durable goals, session store, and MCP surface came across intact; the local-first inference machinery did not.
@@ -86,6 +89,73 @@ setting could take a run past 90 minutes and nothing said why.
 nobody is watching. It **refuses and continues** rather than cancelling: the
 model sees the refusal and takes another route, and the run keeps going. A
 timeout can only ever withhold permission, never grant it.
+
+### Hearing it from the next room
+
+macOS only for now, off by default, `voice.enabled: true` to turn on. Four
+channels, and the interesting one is **alerts**: a tool waiting for approval, a
+long turn that finished, a turn that failed. Those are the things a person
+cannot get any other way — reading an answer aloud competes with reading it off
+the screen and loses, but an approval nobody is looking at stops the run until
+somebody happens to glance over.
+
+Set `voice.speak_when: unfocused` and the answer, reasoning and activity
+channels hold back while you are looking at the transcript, then take over the
+moment you switch windows. Coming back stops the reading, because you are about
+to do it faster. Alerts ignore the setting on purpose.
+
+What you hear is a projection, not the transcript: paths collapse to their
+filename, links become "a link", code fences are never spoken. The same
+sentence measures 12.9 seconds raw and 6.1 projected. Each answer is read in
+its own language, seeded from the language you wrote in so the opening sentence
+is right too.
+
+`/voice on` turns spoken output on for the session — no restart, and off by
+default. `/voice view` opens the listening stage: one centred panel with the
+state, the last line said out loud, and what happened, for a screen you glance
+at rather than read. It is a router, not a viewer — every detail surface it
+names already exists (`alt+d` diffs, `alt+o` output, `ctrl+f` search), `esc`
+returns to the transcript, and it never hides an action or an error.
+
+While the microphone is open you can also steer with a closed set of phrases —
+"otra vez" repeats the last line, "callate" stops it, "mostrame el diff" opens
+the diff, "volver" returns to the transcript. It matches whole utterances only,
+so "mostrame el diff y arreglá el bug" is dictation, and nothing it reaches can
+send a prompt, answer an approval or cancel a turn. A mis-hearing costs you a
+screen, never a command.
+
+If an approval is waiting and you open the microphone yourself, "aprobalo" or
+"denegalo" answers it. sonar never opens the microphone on its own — that stays
+a deliberate act — and voice can only ever allow once or deny: it cannot widen a
+scope, and anything destructive is refused rather than downgraded, because the
+keyboard is one reach away exactly when a mistake is not recoverable.
+
+`/voice status` says what is on and whether this terminal reports focus,
+`/voice voices` says which voice each language would use, and `/voice test`
+speaks a line in each so you can hear one before choosing it. `/voice <channel>
+on|off` retunes the mix for the session. `ctrl+g` or `/voice` dictates into the
+composer instead, through a local transcriber — audio carries who else is in
+the room, which is a different decision from sending text.
+
+A bilingual session is Spanish grammar around English nouns, and a Spanish voice
+reads those nouns with Spanish rules — "merge" becomes "MER-je", "package"
+becomes "pa-KA-je", "git" becomes "jit". Those are different words, not an
+accent, so sonar respells them before speaking. The table is a set of guesses
+that no measurement can settle, which is why `/voice test` speaks a line built
+out of them and `voice.pronounce` overrides any entry that sounds worse.
+
+If that still is not enough, `voice.provider: openai` swaps the local `say` for
+a hosted engine that handles the mixture natively — measured, it returned every
+technical term intact where `say` returned "el merch … el caché … confit". It
+costs money per turn, needs `OPENAI_API_KEY`, and puts about two seconds
+between a sentence and its audio, so it is off by default. Under it no language
+is sent and no respelling is applied: telling an engine the language is what
+makes it read English words with Spanish rules.
+
+One thing worth doing once: macOS ships the **compact** version of every voice,
+and the compact ones are the robotic ones. Downloading the better variant
+(System Settings → Accessibility → Spoken Content → Manage Voices) changes how
+this sounds more than any setting. `/voice status` tells you when you have none.
 
 ## Safety
 

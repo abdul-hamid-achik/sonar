@@ -1,0 +1,46 @@
+---
+title: sonar
+description: A terminal coding agent for hosted models, over the API, with an API key. No local runtime.
+---
+
+A terminal coding agent for hosted models, reached over an API with an API key.
+No local runtime. Go, Charm for the TUI, MCP servers for the extended tool
+surface.
+
+```
+$ sonar
+
+  ◜◝ sonar
+  deepseek-v4-flash · 1M ctx · thinking
+  $0.14/$0.28 per 1M · key: DEEPSEEK_API_KEY
+
+› refactor internal/llm to drop the inventory layer
+```
+
+:::caution[Alpha]
+This is a working harness its author uses daily, not a finished product. It is
+not a sandbox: tools run with your user's permissions, gated by an approval
+model you can loosen. Read [Safety](/safety/) before running it unattended.
+:::
+
+## DeepSeek is the default, not the boundary
+
+Provider metadata comes from an embedded
+[Catwalk](https://github.com/charmbracelet/catwalk) snapshot — 40 providers,
+1403 models — so selecting another one needs a provider name and a key, not
+code. `ollama` is in that list and means **Ollama Cloud**, not a daemon on your
+machine.
+
+Only the OpenAI-compatible dialect and the Anthropic Messages dialect exist
+today. That covers most of the catalog; google and the cloud-credential
+families still need dialects and will not work yet.
+
+## What is different about it
+
+- **Durable goals.** `/goal` gives an objective its own budget, criteria and
+  receipts, and it survives a restart.
+- **Approvals are auditable.** Every prompt names the rule the request tripped,
+  and grants are scoped — one path, one command prefix, one MCP tool — never
+  "allow everything".
+- **It can be listened to.** [Voice](/voice/) reads answers aloud through a
+  projection built for the ear, and dictation goes the other way.

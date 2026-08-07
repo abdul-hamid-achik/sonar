@@ -78,6 +78,20 @@ tasks:
     cmds:
       - glyph run specs/cli_flags.yml specs/cli_skip_approvals.yml specs/cli_json_receipt.yml specs/tui_auto_commands.yml specs/tui_external_read.yml --format md --progress auto --parallel 1
 
+  docs:
+    desc: Serve the documentation site locally (docs/, Astro Starlight)
+    dir: docs
+    cmds:
+      - npm install
+      - npm run dev
+
+  docs-build:
+    desc: Build the documentation site, which is what Vercel runs
+    dir: docs
+    cmds:
+      - npm install
+      - npm run build
+
   glyphrun-contracts:
     desc: Verify every committed Glyphrun contract hash
     cmds:
