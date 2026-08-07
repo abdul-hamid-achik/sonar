@@ -20,6 +20,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
+      # Linux confinement is bubblewrap. Without it sandbox.Available() is
+      # false, every confined-admission and sandbox unit test skips, and the
+      # suite cannot prove the boundary the product claims on this platform.
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
@@ -68,6 +74,12 @@ jobs:
       # only fix that keeps the snapshots byte-identical to a developer's run.
       - name: Restore branch name for deterministic session chrome
         run: git checkout -B main --no-track HEAD
+
+      # tui_sandbox proves confinement through a real AUTO turn. On Linux that
+      # requires bwrap; without it SandboxActive stays false, sh leak.sh stays
+      # approval-gated, and the spec times out waiting for "Confinement held".
+      - name: Install bubblewrap
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap
 
       - name: Set up Go for Glyphrun
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0

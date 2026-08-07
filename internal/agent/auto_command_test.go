@@ -1283,6 +1283,17 @@ func TestPackageRunScriptsAreScopedToLocalVerification(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("AUTO shell catalog requires a POSIX shell")
 	}
+	// Classification is about script names, not about which package managers
+	// happen to be installed. CI runners have npm but not pnpm or bun; without
+	// host-owned stubs LookPath refuses those executables before the script
+	// name is ever read, and the test fails for ambient PATH rather than policy.
+	hostBin := t.TempDir()
+	for _, name := range []string{"npm", "pnpm", "yarn", "bun"} {
+		if err := os.WriteFile(filepath.Join(hostBin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatalf("install host executable %s: %v", name, err)
+		}
+	}
+	t.Setenv("PATH", hostBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	ag := New(nil, nil, 4096)
 	ag.SetWorkDir(t.TempDir())
 

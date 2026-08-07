@@ -193,6 +193,13 @@ func TestStopDropsTheBacklog(t *testing.T) {
 // [[volm 0]] is a mute, and both look like a bug in here rather than a sentence
 // somebody generated.
 func TestTheModelCannotDriveTheSynthesizer(t *testing.T) {
+	// The control channel this pins is say's. Until a Linux synthesizer is
+	// wired, escapeSynthesizerCommands is a no-op there and there is nothing to
+	// prove — asserting against a no-op would pin the absence of a driver
+	// rather than the presence of a boundary.
+	if escapeSynthesizerCommands("[[x]]") == "[[x]]" {
+		t.Skip("no synthesizer control channel on this platform")
+	}
 	synthesizer, log := recordingSynthesizer(t, "")
 	speaker := newSpeaker(withVoices(synthesizer, map[string]string{"es": "vozES"}))
 	defer speaker.Close()

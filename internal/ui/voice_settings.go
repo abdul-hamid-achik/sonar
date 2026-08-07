@@ -239,6 +239,15 @@ func (m *Model) reopenVoice() (string, bool) {
 		return "", false
 	}
 	previous := m.voice
+	// Policy-only state: tests (and any host that installed channel policy
+	// without a process) have no synthesizer to rebuild. The config mutation
+	// already took; rolling it back because Available() is false would make
+	// every setting command fail on a machine without say, and would make the
+	// nil-speaker fixture contradict the claim that the policy can be
+	// exercised without claiming an audio device.
+	if previous.speaker == nil {
+		return "", true
+	}
 	previous.speaker.Close()
 	m.voice = nil
 	m.voiceConfig = previous.config
