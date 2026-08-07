@@ -24,6 +24,11 @@ func Available() bool {
 	return err == nil && info != ""
 }
 
+// networkNamespaceAvailable is always true on macOS: Seatbelt applies the
+// network denial in the same profile as the filesystem rules, so there is no
+// separate capability to probe.
+func networkNamespaceAvailable() bool { return true }
+
 func wrapCommand(policy Policy, name string, args []string) (string, []string, error) {
 	profile, err := seatbeltProfile(policy)
 	if err != nil {

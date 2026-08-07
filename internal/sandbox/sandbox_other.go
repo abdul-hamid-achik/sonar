@@ -8,6 +8,8 @@ package sandbox
 // a promise the host cannot keep.
 func Available() bool { return false }
 
+func networkNamespaceAvailable() bool { return false }
+
 func wrapCommand(Policy, string, []string) (string, []string, error) {
 	return "", nil, ErrUnsupported
 }

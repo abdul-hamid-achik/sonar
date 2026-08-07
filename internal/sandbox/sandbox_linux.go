@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // bubblewrapPath is the Linux confinement driver. Unlike macOS's sandbox-exec
@@ -19,23 +20,56 @@ func Available() bool {
 		return false
 	}
 	// LookPath alone is true once bubblewrap is installed, but a confined
-	// command still has to START. GitHub Actions ships a kernel that lets
-	// --unshare-net create a network namespace and then fails configuring
-	// loopback with RTM_NEWADDR: Operation not permitted unless a user
-	// namespace maps the process to uid 0 first (CAP_NET_ADMIN inside the
-	// namespace). Probe the same shape wrapCommand uses so Available means
-	// "a confined command can run", not "a binary is on PATH" — otherwise
-	// every denial assertion passes for the empty reason that nothing ran.
+	// command still has to START. Probe the filesystem-only shape: that is
+	// enough for workspace binds and secret hides, and it is what GitHub
+	// Actions can actually run. Network detachment is optional (see
+	// networkNamespaceAvailable) and must not decide whether confinement
+	// exists at all — otherwise Available is false on CI, every Linux test
+	// skips, and the product claims a boundary nothing in the suite proves.
 	cmd := exec.Command(path,
 		"--die-with-parent",
-		"--unshare-user", "--uid", "0", "--gid", "0",
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
 		"--proc", "/proc",
-		"--unshare-net",
 		"--", "true",
 	)
 	return cmd.Run() == nil
+}
+
+// networkNamespaceAvailable reports whether --unshare-net can start a process.
+//
+// Detaching the network needs CAP_NET_ADMIN to bring loopback up inside the
+// new namespace. Unprivileged hosts either grant that via a user-namespace
+// uid-0 map, or refuse with RTM_NEWADDR: Operation not permitted (GitHub
+// Actions). The mount confinement still holds without it; only the network
+// half is dropped. Cached: wrapCommand asks on every command and the probe is
+// a process start.
+var (
+	networkNamespaceOnce sync.Once
+	networkNamespaceOK   bool
+)
+
+func networkNamespaceAvailable() bool {
+	networkNamespaceOnce.Do(func() {
+		path, err := exec.LookPath(bubblewrapName)
+		if err != nil {
+			return
+		}
+		// User-namespace uid 0 is the standard unprivileged shape for
+		// CAP_NET_ADMIN inside the netns. Without it, --unshare-net fails on
+		// hosts that created the namespace but cannot configure loopback.
+		cmd := exec.Command(path,
+			"--die-with-parent",
+			"--unshare-user", "--uid", "0", "--gid", "0",
+			"--ro-bind", "/", "/",
+			"--dev", "/dev",
+			"--proc", "/proc",
+			"--unshare-net",
+			"--", "true",
+		)
+		networkNamespaceOK = cmd.Run() == nil
+	})
+	return networkNamespaceOK
 }
 
 // wrapCommand builds a bubblewrap invocation.
@@ -125,15 +159,16 @@ func wrapCommand(policy Policy, name string, args []string) (string, []string, e
 		}
 	}
 
-	if !policy.AllowNetwork {
+	if !policy.AllowNetwork && networkNamespaceAvailable() {
 		// --unshare-net creates an empty network namespace and bubblewrap then
 		// brings loopback up inside it. That RTM_NEWADDR needs CAP_NET_ADMIN.
-		// An unprivileged process keeps its real UID and has no such cap, so
-		// on hosts like GitHub Actions the wrap fails before the command runs
-		// ("loopback: Failed RTM_NEWADDR: Operation not permitted"). Mapping
-		// into a user namespace as uid 0 grants the cap only inside the
-		// namespace — the host uid map still owns the files — which is the
+		// Mapping into a user namespace as uid 0 grants the cap only inside
+		// the namespace — the host uid map still owns the files — which is the
 		// standard unprivileged bubblewrap shape for a detached network.
+		//
+		// When the probe fails (GitHub Actions), mount confinement still
+		// applies and the command still runs: dropping network isolation is
+		// weaker than claiming Available false and skipping every Linux proof.
 		wrapped = append(wrapped,
 			"--unshare-user", "--uid", "0", "--gid", "0",
 			"--unshare-net",

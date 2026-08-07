@@ -131,6 +131,14 @@ func TestConfinementHoldsAgainstTheRealKernel(t *testing.T) {
 	})
 
 	t.Run("network is denied", func(t *testing.T) {
+		// Network detachment is optional on Linux: hosts that cannot configure
+		// loopback inside an unprivileged netns (GitHub Actions) still get
+		// mount confinement, and Available stays true. Skipping here keeps the
+		// suite honest about what this host can prove. macOS always reports
+		// true — Seatbelt applies the denial in the same profile.
+		if !networkNamespaceAvailable() {
+			t.Skip("host cannot detach the network namespace")
+		}
 		// Resolution and connection are both blocked; asserting on the absence
 		// of a successful body keeps this independent of which one fails first
 		// and of whether the machine is online at all.
