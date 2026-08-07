@@ -1,12 +1,15 @@
 package speech
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -76,6 +79,42 @@ type Listener struct {
 	command     *exec.Cmd
 	wavPath     string
 	transcriber Transcriber
+
+	// level is guarded separately from the process handles, because the UI reads
+	// it on every frame and Stop holds mu across a subprocess Wait. Sharing one
+	// mutex would stall the render loop for as long as ffmpeg takes to finalize
+	// a header.
+	levelMu sync.Mutex
+	// loudness is the most recent momentary reading in LUFS, and heardAt is when
+	// the microphone last carried something louder than a quiet room. Both are
+	// zero-valued until the recorder reports, which is what "no reading yet"
+	// has to look like — distinct from "reported silence".
+	loudness  float64
+	reported  bool
+	heardAt   time.Time
+	startedAt time.Time
+	// floor and ceiling calibrate the meter to THIS room and THIS microphone.
+	//
+	// A fixed scale cannot work, and the first version proved it: anchored at
+	// -60 LUFS on the assumption that a quiet input reads near digital silence,
+	// it turned out that only the frames before the device delivers audio read
+	// that low. Measured on a real machine, an empty room sits between -36 and
+	// -21 — which the fixed scale rendered at four fifths of full, so the meter
+	// was pinned near the top before anyone spoke and had almost no range left
+	// for a voice. Every microphone and every room differ by more than the
+	// distance between silence and speech, so the scale has to come from what
+	// this one is actually reporting.
+	floor      float64
+	ceiling    float64
+	calibrated bool
+	// epoch identifies the recording these readings belong to.
+	//
+	// Stop waits for ffmpeg but not for the goroutine reading its diagnostics,
+	// and os/exec closes that pipe when the process is reaped — so a reader can
+	// still be holding a buffered line when the NEXT recording starts. The
+	// mutex stops a data race; it does not stop one recording's levels being
+	// written into another's calibration.
+	epoch uint64
 }
 
 // NewListener returns a Listener, or an error naming the missing half.
@@ -120,13 +159,159 @@ func (l *Listener) Start() error {
 
 	name, args := captureCommand(path, MaxUtterance)
 	command := exec.Command(name, args...)
+	// The recorder's own diagnostics are the only live signal there is about
+	// whether the microphone is picking anything up. Without them an open
+	// microphone and a muted one are the same screen, which is the state
+	// somebody sits in talking to a harness that is recording silence.
+	diagnostics, err := command.StderrPipe()
+	if err != nil {
+		_ = os.Remove(path)
+		return fmt.Errorf("speech: open recorder diagnostics: %w", err)
+	}
 	if err := command.Start(); err != nil {
 		_ = os.Remove(path)
 		return fmt.Errorf("speech: start recorder: %w", err)
 	}
 	l.command, l.wavPath = command, path
+	epoch := l.resetLevel()
+	go l.readLevels(epoch, diagnostics)
 	return nil
 }
+
+// loudnessPattern matches the momentary loudness ffmpeg's ebur128 filter prints
+// while it passes the audio through untouched.
+//
+// The reading arrives as "M:-120.7" during silence and "M: -22.4" once someone
+// speaks, so the space is optional and the sign is not.
+var loudnessPattern = regexp.MustCompile(`M:\s*(-?\d+(?:\.\d+)?)`)
+
+// readLevels follows the recorder's diagnostics until it exits.
+//
+// It reads to the end even after the numbers stop being wanted: a stderr pipe
+// nobody drains fills, and a full pipe blocks the recorder mid-utterance.
+func (l *Listener) readLevels(epoch uint64, diagnostics io.ReadCloser) {
+	// Whatever happens to the parsing, the pipe keeps being drained: a reader
+	// that stops reading lets the recorder fill its stderr buffer and block
+	// mid-utterance, which would look like the microphone freezing. Measured on
+	// this ffmpeg, a two-minute recording holds its longest unbroken line to
+	// about 8 KB against the scanner's 64 KB — so the bound is not reachable
+	// today. It is drained anyway, because "not reachable today" is a property
+	// of one program's logging and not of this code.
+	defer func() { _, _ = io.Copy(io.Discard, diagnostics) }()
+	scanner := bufio.NewScanner(diagnostics)
+	for scanner.Scan() {
+		match := loudnessPattern.FindStringSubmatch(scanner.Text())
+		if match == nil {
+			continue
+		}
+		loudness, err := strconv.ParseFloat(match[1], 64)
+		if err != nil {
+			continue
+		}
+		l.noteLoudness(epoch, loudness)
+	}
+}
+
+func (l *Listener) noteLoudness(epoch uint64, loudness float64) {
+	l.levelMu.Lock()
+	defer l.levelMu.Unlock()
+	if epoch != l.epoch {
+		// A leftover line from a recording that has already ended.
+		return
+	}
+	if loudness < noAudioLUFS {
+		// The device has not started delivering audio yet. These frames read
+		// near digital silence and are not a quiet room — calibrating on one
+		// would put the room's own tone at the top of the scale, which is
+		// exactly what the fixed scale did.
+		return
+	}
+	l.loudness, l.reported = loudness, true
+	if !l.calibrated {
+		l.floor, l.ceiling, l.calibrated = loudness, loudness+speechRangeDB, true
+	}
+	if loudness < l.floor {
+		l.floor = loudness
+		l.ceiling = max(l.ceiling, l.floor+speechRangeDB)
+	}
+	if loudness > l.ceiling {
+		l.ceiling = loudness
+	}
+	if loudness >= l.floor+speechMarginDB {
+		l.heardAt = time.Now()
+	}
+}
+
+func (l *Listener) resetLevel() uint64 {
+	l.levelMu.Lock()
+	defer l.levelMu.Unlock()
+	l.loudness, l.reported, l.heardAt = 0, false, time.Time{}
+	l.floor, l.ceiling, l.calibrated = 0, 0, false
+	l.startedAt = time.Now()
+	l.epoch++
+	return l.epoch
+}
+
+// Level reports how loud the microphone is right now, from 0 to 1.
+//
+// Normalized from LUFS rather than reported raw, because the caller is drawing
+// a meter and not writing a mastering tool. Digital silence reads around -120
+// and ordinary speech lands between -30 and -15, so the scale is anchored there:
+// below quietFloorLUFS is nothing, above loudCeilingLUFS is full.
+func (l *Listener) Level() float64 {
+	if l == nil {
+		return 0
+	}
+	l.levelMu.Lock()
+	defer l.levelMu.Unlock()
+	if !l.reported || !l.calibrated || l.ceiling <= l.floor {
+		return 0
+	}
+	level := (l.loudness - l.floor) / (l.ceiling - l.floor)
+	return min(1, max(0, level))
+}
+
+// Hearing reports whether the microphone has carried anything but room noise
+// recently, and whether it has had long enough to say so.
+//
+// Two answers, because "nothing yet" and "nothing for a while" call for
+// different words. A meter that sat at zero for six seconds while somebody
+// talked into it is reporting a muted input or the wrong device, and that is
+// worth saying out loud — it is the whole complaint about dictation, and the
+// harness has the evidence to answer it.
+func (l *Listener) Hearing() (heard bool, longEnoughToTell bool) {
+	if l == nil {
+		return false, false
+	}
+	l.levelMu.Lock()
+	defer l.levelMu.Unlock()
+	if l.startedAt.IsZero() {
+		return false, false
+	}
+	since := time.Since(l.startedAt)
+	return !l.heardAt.IsZero(), since >= silencePatience
+}
+
+const (
+	// noAudioLUFS separates "the device has not started" from "a quiet room".
+	// Frames before the input delivers audio read around -120; no real room
+	// does. Anything below this is discarded rather than calibrated on.
+	noAudioLUFS = -70
+	// speechRangeDB is how far above the room's own floor the meter runs to
+	// full. Speech at a normal distance sits well above room tone, and pinning
+	// the top to a fixed level would put a loud room permanently at the ceiling
+	// for the same reason a fixed floor put a quiet one there.
+	speechRangeDB = 18
+	// speechMarginDB is how far above the floor counts as "something was said"
+	// rather than as the room. Below it, the silence warning is what the rail
+	// reports.
+	speechMarginDB = 8
+	// silencePatience is how long to wait before saying nothing is coming
+	// through. Long enough to cover somebody collecting their thoughts, short
+	// enough to catch them before they have said a whole paragraph to a muted
+	// microphone.
+	silencePatience = 4 * time.Second
+)
 
 // Stop ends the recording and returns the transcription.
 //
@@ -268,11 +453,17 @@ func (t LocalTranscriber) Transcribe(ctx context.Context, wavPath string) (strin
 		args = append(args, "-l", language)
 	}
 	command := exec.CommandContext(ctx, whisperBinary, args...)
+	// Registered BEFORE the run, not after it. whisper writes its transcript
+	// beside the recording, so a run that fails or is cancelled mid-way can
+	// leave that file behind — and it is not a stray temporary, it is what the
+	// person said, sitting in a world-readable directory with nothing left to
+	// remove it. Same class as the orphaned recorder: a privacy failure wearing
+	// a resource leak's clothes.
+	defer func() { _ = os.Remove(wavPath + ".txt") }()
 	if err := command.Run(); err != nil {
 		return "", fmt.Errorf("speech: transcribe: %w", err)
 	}
 	transcript, err := os.ReadFile(wavPath + ".txt")
-	defer func() { _ = os.Remove(wavPath + ".txt") }()
 	if err != nil {
 		return "", fmt.Errorf("speech: read transcript: %w", err)
 	}
@@ -359,4 +550,22 @@ func ModelDownloadHint() string {
 	root := "~/.cache/whisper.cpp"
 	return "mkdir -p " + root + " && curl -L -o " + root + "/ggml-base.bin " +
 		"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
+}
+
+// NewSilentListenerForTest returns a Listener that reports an open microphone
+// which has been hearing nothing for longer than the harness waits.
+//
+// Exported for the UI package, which owns the sentence that gets said about it
+// and has no way to produce the state otherwise: driving a real microphone in a
+// unit test needs a permission grant only a human can give, and the whole point
+// of the silence warning is the case where that grant is what is missing.
+func NewSilentListenerForTest(startedAt time.Time) *Listener {
+	listener := &Listener{transcriber: LocalTranscriber{}}
+	listener.epoch = 1
+	listener.startedAt = startedAt
+	// Room tone and nothing else. Deliberately NOT digital silence: a real
+	// microphone in a real room reports around -25, and the version of this
+	// that used -120 described a state no recording produces.
+	listener.noteLoudness(listener.epoch, -25)
+	return listener
 }

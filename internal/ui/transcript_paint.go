@@ -1434,6 +1434,10 @@ func (m *Model) appendTranscriptStreamText(value string) {
 // response's length or prefix.
 func (m *Model) resetTranscriptStreamText() {
 	m.streamBuf.Reset()
+	// The answer channel's position is an index into this buffer, so it is only
+	// meaningful for as long as the buffer is. Emptying one without the other is
+	// what let an answer be read out a second time.
+	m.forgetSpokenAnswer()
 	incrementTranscriptPaintGeneration(&m.transcriptPaint.streamSourceEpoch)
 	incrementTranscriptPaintGeneration(&m.transcriptPaint.streamSourceRev)
 	m.transcriptPaint.streamSourceTracked = true

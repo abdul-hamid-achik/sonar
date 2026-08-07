@@ -43,6 +43,45 @@ func synthesizerCommand(voice string, rate int) (string, []string, error) {
 	return sayPath, args, nil
 }
 
+// escapeSynthesizerCommands takes `say`'s control channel away from the model.
+//
+// `say` interprets embedded commands delimited by [[ and ]] — anywhere in its
+// input, including on stdin, which is the path every sentence here takes.
+// Measured: "Uno. [[slnc 2000]] Dos." rendered 136,996 bytes against 49,956
+// for the same words without it, so the command is obeyed and not read out.
+//
+// Everything spoken passes through a model, so those brackets are model-
+// controlled. [[slnc 60000]] leaves the harness silent for a minute, [[volm 0]]
+// mutes it, [[rate 5]] makes it unusable — and each of those looks like a bug
+// in this package rather than a sentence the model wrote. It is not code
+// execution, but it is the same class the sanitizeTerminal* helpers exist for:
+// content reaching a control channel it was never meant to address.
+//
+// Breaking the opener is enough, and it is the smallest edit that works: a lone
+// bracket is not a delimiter, and no synthesizer pronounces either form, so
+// what a listener hears is unchanged.
+func escapeSynthesizerCommands(text string) string {
+	if !strings.Contains(text, "[[") && !strings.Contains(text, "]]") {
+		return text
+	}
+	text = strings.ReplaceAll(text, "[[", "[ [")
+	return strings.ReplaceAll(text, "]]", "] ]")
+}
+
+// sentencePause is what separates one sentence from the next.
+//
+// `say` runs consecutive lines together with barely a beat between them, which
+// is fine for one sentence and exhausting across a whole answer: without a gap
+// there is nowhere to notice that a thought ended, and a listener who missed
+// one sentence has already lost the next. 200ms is about a spoken comma —
+// enough to hear the seam, short enough that nobody waits for it.
+//
+// It is a command, so it must be added AFTER escapeSynthesizerCommands. The
+// order is the entire reason that function exists: prepending our own bracket
+// to text that still carries the model's would hand the channel over at exactly
+// the moment we meant to claim it.
+func sentencePause() string { return "[[slnc 200]] " }
+
 // signalSynthesizer asks the synthesizer to stop and lets it exit.
 //
 // SIGTERM rather than SIGKILL, for the reason a cancelled `git commit` taught
@@ -63,9 +102,20 @@ func signalSynthesizer(command *exec.Cmd) {
 // model expects; feeding anything else costs a resample nobody sees.
 func captureCommand(destination string, limit time.Duration) (string, []string) {
 	return "ffmpeg", []string{
-		"-hide_banner", "-loglevel", "error",
+		// info rather than error: the ebur128 filter below reports the input
+		// level through the ordinary log, and at "error" those lines never
+		// appear. The extra output is a handful of lines about the stream, and
+		// only the level readings are parsed.
+		"-hide_banner", "-loglevel", "info",
 		"-f", "avfoundation", "-i", ":default",
 		"-t", captureLimitSeconds(limit),
+		// ebur128 passes the audio through untouched and prints a momentary
+		// loudness reading a few times a second. That reading is the only
+		// evidence anywhere in the pipeline that the microphone is picking
+		// something up, and without it an open mic and a muted one look the
+		// same. Verified not to alter the recording: the file is still
+		// 16kHz mono s16.
+		"-af", "ebur128",
 		"-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
 		"-y", destination,
 	}

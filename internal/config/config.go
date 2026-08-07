@@ -197,6 +197,20 @@ type SandboxConfig struct {
 // noise — the same sentence measures 12.9 seconds spoken raw and 6.1 projected,
 // and the difference is a URL and a file path being spelled out. The screen
 // keeps the complete record; the speaker gets what can be acted on.
+// When speech is allowed to happen at all. Two values, because "unfocused" is
+// the interesting one and everything else is a variation on always.
+const (
+	SpeakWhenAlways    = "always"
+	SpeakWhenUnfocused = "unfocused"
+)
+
+// SpeaksWhileFocused reports whether the answer channel may speak with the
+// terminal in the foreground. An unrecognised value reads as "always": a typo
+// in a presentation setting must not silence a feature that was turned on.
+func (v VoiceConfig) SpeaksWhileFocused() bool {
+	return strings.ToLower(strings.TrimSpace(v.SpeakWhen)) != SpeakWhenUnfocused
+}
+
 type VoiceConfig struct {
 	// Enabled turns speech on. A host with no synthesizer says so at startup
 	// rather than staying quiet and letting the setting look broken.
@@ -209,8 +223,42 @@ type VoiceConfig struct {
 	// Activity speaks what the harness is doing — "reading", "running tests" —
 	// never the path it is doing it to.
 	Activity bool `yaml:"activity"`
+	// Alerts speaks the handful of moments that need a person: a tool waiting
+	// for approval, a turn that finished, a turn that failed.
+	//
+	// On by default, and the one channel worth defending. Reading an answer
+	// aloud competes with reading it off the screen, which is faster — but an
+	// approval nobody is looking at blocks until someone happens to glance over,
+	// and a long AUTO run that ended is a thing you learn by checking. Those are
+	// what a listener actually cannot get any other way.
+	Alerts bool `yaml:"alerts"`
+	// SpeakWhen bounds speech to when the terminal is in the background:
+	// "always" (the default) or "unfocused".
+	//
+	// The case for "unfocused" is the whole reason to have a voice in a coding
+	// tool. While you are looking at the transcript, a voice reading it out is
+	// behind you and in the way; the moment you switch windows it becomes the
+	// only way to know anything. Focus reporting is what tells the two apart.
+	//
+	// Not every terminal reports focus, and tmux needs it turned on. When
+	// nothing has ever reported, this fails toward speaking: a setting whose
+	// unsupported case is silence would look exactly like the feature being
+	// broken. `/voice status` says whether this terminal has reported.
+	SpeakWhen string `yaml:"speak_when,omitempty"`
+	// Provider names the synthesizer: "say" (the default, local and free) or
+	// "openai" (hosted, needs OPENAI_API_KEY and costs per turn).
+	//
+	// The hosted one exists because of a measurement: read aloud through `say`,
+	// a Spanish sentence carrying English technical words comes out as
+	// different words — "merge" becomes "MER-je", "git" becomes "jit" — and a
+	// hosted engine that detects the language itself handles the mixture. It is
+	// off by default because it adds a second vendor, a key, and about two
+	// seconds between a sentence and its audio.
+	Provider string `yaml:"provider,omitempty"`
 	// Voice names a synthesizer voice for every language. Empty uses the system
-	// default; `say -v ?` lists what this machine has.
+	// default; `say -v ?` lists what this machine has. Under the hosted
+	// provider it names one of that provider's voices instead (nova by
+	// default), and no language is passed at all.
 	Voice string `yaml:"voice,omitempty"`
 	// Voices names a voice per ISO language code — {es: Paulina, en: Samantha}.
 	//
@@ -223,6 +271,21 @@ type VoiceConfig struct {
 	// Rate is words per minute. Zero uses a default faster than the system's,
 	// because a coding session is listened to while working.
 	Rate int `yaml:"rate,omitempty"`
+	// Pronounce respells words for one language's voice, per ISO language code —
+	// {es: {deploy: diplói}}.
+	//
+	// A voice carries one language's letter-to-sound rules and applies them to
+	// everything. That turns the vocabulary of a coding session into different
+	// words rather than into an accent: Spanish reads "g" before e as /x/, so
+	// "merge" comes out "MER-je" and "package" comes out "pa-KA-je". sonar ships
+	// a table for Spanish; this overrides any entry in it, and an empty value
+	// removes one.
+	//
+	// It exists because the table could not be verified the way the rest of this
+	// feature was. Audio length is measurable and answered every other question
+	// here; whether a respelling SOUNDS closer is a judgement only the listener
+	// can make. `/voice test` speaks a line that exercises it.
+	Pronounce map[string]map[string]string `yaml:"pronounce,omitempty"`
 	// Input configures dictation. It is a separate half: hearing and speaking
 	// have independent drivers, and a host can have one without the other.
 	Input VoiceInputConfig `yaml:"input,omitempty"`
@@ -493,6 +556,17 @@ func defaults() Config {
 			NumCtx: 16384,
 		},
 		Model: modelCfg,
+		// Voice is off as a whole, and once it is on these are what speak. They
+		// are defaults rather than zero values because the config is unmarshalled
+		// over this struct, and a bool has no way to say "absent": before this,
+		// `voice: {enabled: true}` and nothing else produced a synthesizer that
+		// was asked for, started, and never said a word — the exact failure the
+		// startup notice was written to prevent, arriving one layer lower.
+		Voice: VoiceConfig{
+			Answer:    true,
+			Alerts:    true,
+			SpeakWhen: SpeakWhenAlways,
+		},
 		Agents: AgentsConfig{
 			Dir:      "",
 			AutoLoad: true,

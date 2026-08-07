@@ -87,7 +87,16 @@ func isSmallModel(modelName string) bool {
 // Zero values are safe: nil slices, empty strings, and 0 budget all produce
 // the same output as the legacy wrapper chain's defaults.
 type systemPromptOptions struct {
-	ModePrefix     string
+	ModePrefix string
+	// VoiceHint asks the model to close with a line written to be HEARD.
+	//
+	// Sent only while the answer channel is actually speaking, and re-evaluated
+	// every dispatch, so turning the channel off stops requesting one on the
+	// next turn. It shares the mode prefix's slot in the template rather than
+	// claiming a new one: both are turn-scoped instructions that sit above the
+	// standing prompt, and adding a positional argument to two templates to
+	// separate them would buy nothing a reader can see.
+	VoiceHint      string
 	Tools          []llm.ToolDef
 	SkillContent   string
 	SkillCatalog   string
@@ -200,6 +209,9 @@ func resolveBoundedPromptSections(ctx context.Context, opts systemPromptOptions)
 	var modePrefixSection string
 	if modePrefix != "" {
 		modePrefixSection = "\n" + modePrefix + "\n"
+	}
+	if hint := strings.TrimSpace(opts.VoiceHint); hint != "" {
+		modePrefixSection += "\n" + hint + "\n"
 	}
 
 	return boundedPromptSections{

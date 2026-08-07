@@ -40,6 +40,7 @@ type Agent struct {
 	registry             *mcp.Registry
 	messages             []llm.Message
 	skillContent         string
+	voiceHint            string
 	skillLoader          SkillLoader
 	loadedCtx            string
 	numCtx               int
@@ -616,6 +617,14 @@ func restoreConversationSummaryOwnership(messages []llm.Message) []llm.Message {
 }
 
 // SetSkillContent sets the combined content of active skills.
+// SetVoiceHint installs the turn-scoped instruction that asks for a closing
+// line written to be heard. Empty removes it.
+func (a *Agent) SetVoiceHint(hint string) {
+	a.mu.Lock()
+	a.voiceHint = hint
+	a.mu.Unlock()
+}
+
 func (a *Agent) SetSkillContent(content string) {
 	a.mu.Lock()
 	a.skillContent = content

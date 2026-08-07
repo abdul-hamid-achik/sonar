@@ -114,6 +114,7 @@ func (t *turnRuntime) rebuildSystem(ctx context.Context) {
 		ModePrefix:    t.modePrefix,
 		Tools:         t.tools,
 		SkillContent:  t.a.skillContent,
+		VoiceHint:     t.a.voiceHint,
 		SkillCatalog:  t.skillCatalog,
 		LoadedContext: t.loadedContext,
 		MemStore:      t.a.memoryStore,

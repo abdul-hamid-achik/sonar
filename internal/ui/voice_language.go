@@ -40,10 +40,19 @@ var (
 		"de": true, "del": true, "que": true, "por": true, "para": true, "con": true,
 		"pero": true, "porque": true, "cuando": true, "donde": true, "esto": true,
 		"eso": true, "esta": true, "este": true, "está": true, "están": true,
-		"hay": true, "ser": true, "está_": true, "más": true, "muy": true,
+		"hay": true, "ser": true, "más": true, "muy": true,
 		"también": true, "así": true, "ahora": true, "todo": true, "todos": true,
 		"cada": true, "sobre": true, "entre": true, "hasta": true, "desde": true,
 		"sin": true, "ya": true, "sí": true, "qué": true, "cómo": true,
+		// Added after measuring the detector against real output. "Hay 3 tests
+		// fallando en TestSpokenLanguage, TestVoiceAnswer y TestAlerts." scored
+		// one — "hay" — and came back undecided, because the two words carrying
+		// the rest of the Spanish were the ones missing here. Identifiers make
+		// technical prose thin in function words, so the common short ones are
+		// where the evidence has to come from.
+		"y": true, "es": true, "se": true, "lo": true, "al": true,
+		"les": true, "nos": true, "otro": true, "otra": true, "puede": true,
+		"tiene": true, "hacer": true, "mismo": true, "vez": true,
 	}
 	spokenEnglishMarkers = map[string]bool{
 		"the": true, "of": true, "and": true, "to": true, "is": true, "it": true,
@@ -54,8 +63,21 @@ var (
 		"because": true, "when": true, "where": true, "more": true, "also": true,
 		"now": true, "each": true, "about": true, "between": true, "until": true,
 		"since": true, "without": true, "already": true, "how": true,
+		// Same measurement, other side. "Check your DEEPSEEK_API_KEY env var,
+		// e.g. in ~/.config/sonar/env." scored one. None of these exists as a
+		// Spanish word, which is the only test a marker has to pass.
+		"your": true, "in": true, "if": true, "not": true, "should": true,
+		"these": true, "those": true, "then": true, "than": true, "does": true,
 	}
 )
+
+// spokenDetectableLanguages is every language spokenLanguage can return.
+//
+// Single-sourced so the /voice panel reports on exactly what the detector can
+// decide. A panel listing a language nothing would ever choose is a promise the
+// harness cannot keep, and one omitting a language it does choose hides the
+// setting that would fix a wrong voice.
+func spokenDetectableLanguages() []string { return []string{"es", "en"} }
 
 // spokenLanguage reports "es", "en", or "" when the text does not say.
 func spokenLanguage(text string) string {

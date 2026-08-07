@@ -28,6 +28,17 @@ func synthesizerCommand(string, int) (string, []string, error) {
 
 func signalSynthesizer(*exec.Cmd) {}
 
+// escapeSynthesizerCommands has nothing to escape until this platform names a
+// synthesizer. It is not a no-op by default: whichever driver is wired here
+// will have its own control channel — espeak-ng reads SSML on request and its
+// own markup otherwise — and returning the text unchanged is correct only for
+// a driver that has none. Whoever wires one owns this function too.
+func escapeSynthesizerCommands(text string) string { return text }
+
+// sentencePause is likewise the driver's to define; espeak-ng spells the same
+// idea as an SSML <break>.
+func sentencePause() string { return "" }
+
 // captureCommand records from ALSA, which is the one recorder present on a
 // stock Linux without a desktop audio stack. It is unverified on a real host —
 // this project has no Linux machine to try it on — so CaptureAvailable's
@@ -35,9 +46,20 @@ func signalSynthesizer(*exec.Cmd) {}
 // loudly at record time rather than silently producing nothing.
 func captureCommand(destination string, limit time.Duration) (string, []string) {
 	return "ffmpeg", []string{
-		"-hide_banner", "-loglevel", "error",
+		// info rather than error: the ebur128 filter below reports the input
+		// level through the ordinary log, and at "error" those lines never
+		// appear. The extra output is a handful of lines about the stream, and
+		// only the level readings are parsed.
+		"-hide_banner", "-loglevel", "info",
 		"-f", "alsa", "-i", "default",
 		"-t", captureLimitSeconds(limit),
+		// ebur128 passes the audio through untouched and prints a momentary
+		// loudness reading a few times a second. That reading is the only
+		// evidence anywhere in the pipeline that the microphone is picking
+		// something up, and without it an open mic and a muted one look the
+		// same. Verified not to alter the recording: the file is still
+		// 16kHz mono s16.
+		"-af", "ebur128",
 		"-ar", "16000", "-ac", "1", "-sample_fmt", "s16",
 		"-y", destination,
 	}

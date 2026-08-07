@@ -51,6 +51,13 @@ func VoiceForLanguage(language, configured string) string {
 		// accident is "Albert", a novelty voice nobody would choose.
 		return ""
 	}
+	// Ahead of the standard list, not after it: a downloaded variant is the same
+	// voice rendered better, and someone installed it on purpose. Checking later
+	// would never see it, because the compact "Paulina" is still installed too
+	// and the list would match her first.
+	if enhanced := highQualityVoice(language); enhanced != "" {
+		return enhanced
+	}
 	if preferred := preferredVoice(language); preferred != "" {
 		return preferred
 	}
@@ -80,6 +87,68 @@ func VoiceForLanguage(language, configured string) string {
 		}
 	}
 	return fallback
+}
+
+// isHighQualityVoice reports whether a name is a downloaded variant rather than
+// the compact voice macOS ships in the box.
+//
+// This matters twice. The compact voices are the robotic ones — the difference
+// between compact Paulina and her downloaded variant is the single largest
+// change in how this feature sounds, and it costs a download rather than a line
+// of code. And the rule above this one would otherwise get it backwards:
+// "Paulina (Enhanced)" is parenthesised, so the novelty-set heuristic demoted
+// exactly the voice someone had gone out of their way to install.
+//
+// The suffix is what macOS shows in Manage Voices. It could not be verified
+// against a machine with one installed — this one has none of the 184 it lists
+// — so a name that matches nothing simply leaves every other rule as it was.
+func isHighQualityVoice(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.Contains(lower, "(enhanced)") || strings.Contains(lower, "(premium)")
+}
+
+// highQualityVoice returns a downloaded variant for a language, preferring the
+// host's own region the same way every other rule here does.
+func highQualityVoice(language string) string {
+	var fallback string
+	for _, voice := range hostVoices() {
+		if !isHighQualityVoice(voice.name) ||
+			!strings.HasPrefix(strings.ToLower(voice.locale), language) {
+			continue
+		}
+		if region := hostRegion(); region != "" && strings.HasSuffix(voice.locale, "_"+region) {
+			return voice.name
+		}
+		if fallback == "" {
+			fallback = voice.name
+		}
+	}
+	return fallback
+}
+
+// HostVoiceNames lists what this machine has installed, for a surface that
+// wants to say how many rather than reproduce the list.
+func HostVoiceNames() []string {
+	installed := hostVoices()
+	names := make([]string, 0, len(installed))
+	for _, voice := range installed {
+		names = append(names, voice.name)
+	}
+	return names
+}
+
+// HasHighQualityVoices reports whether this host has downloaded any of them.
+//
+// Asked by the diagnostics rather than acted on here: "you are listening to the
+// compact voice, here is where the better one lives" is advice, and advice
+// belongs where someone went looking for it.
+func HasHighQualityVoices() bool {
+	for _, voice := range hostVoices() {
+		if isHighQualityVoice(voice.name) {
+			return true
+		}
+	}
+	return false
 }
 
 // standardVoices are the speech voices macOS ships per language, in preference

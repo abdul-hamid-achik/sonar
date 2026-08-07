@@ -69,9 +69,10 @@ func (m *Model) handleStreamThinking(msg StreamThinkingMsg, cmds []tea.Cmd) []te
 
 // handleStreamDone records the settled token counts for one model response.
 func (m *Model) handleStreamDone(msg StreamDoneMsg) {
-	// A turn rarely ends on a period, and a final clause held back forever is
-	// the one sentence a listener most wanted.
-	m.speakTurnEnd(m.streamBuf.String())
+	// A model response rarely ends on a period, and a final clause held back
+	// forever is the one sentence a listener most wanted. This is a SEGMENT
+	// boundary, not the turn's: the loop ends one here at every tool round.
+	m.speakSegmentEnd(m.streamBuf.String())
 	if thinking := strings.TrimSpace(m.thinkBuf.String()); thinking != "" {
 		m.speakReasoning(thinking)
 	}
@@ -364,6 +365,10 @@ func (m *Model) handleAgentDone(msg AgentDoneMsg, cmds []tea.Cmd) []tea.Cmd {
 		m.cancel = nil
 	}
 	m.lastTurnDuration = m.turnElapsed()
+	// The turn is over, so this is the boundary the alert channel reports — and
+	// the one place the whole turn's outcome is known. Bounded by how long it
+	// ran: announcing a four-second answer says nothing the answer did not.
+	m.speakTurnOutcome(m.lastTurnDuration, msg.Err != nil && !turnCancelled, turnCancelled)
 	m.state = StateIdle
 	// After the first successful turn, upgrade the provisional first-line title
 	// with a short background model naming job (workspace + user + assistant).

@@ -116,6 +116,11 @@ func (m *Model) sendToAgentTurnPresentedWithAttachments(
 	m.turnToolStartIndex = len(m.toolEntries)
 	m.recalcViewportHeight()
 	m.resetTranscriptStreamText()
+	// The one turn boundary the voice channels get. An AUTO continuation does
+	// not come through here, which is the point: it is a new segment, not a new
+	// turn, and re-deciding the language at each one is what read Spanish
+	// answers in an English voice.
+	m.beginVoiceTurn(text)
 
 	if visible {
 		m.entries = append(m.entries, ChatEntry{
@@ -171,6 +176,10 @@ func (m *Model) sendToAgentTurnPresentedWithAttachments(
 		return m.failPresentedTurnBeforeRun(text, message, visible)
 	}
 	m.agent.SetModeContext(cfg.SystemPromptPrefix, cfg.ToolPolicy)
+	// Asked for per dispatch, because whether anything is listening is a
+	// per-dispatch fact: /voice answer off must stop requesting a spoken close
+	// on the next turn, not on the next restart.
+	m.agent.SetVoiceHint(m.voiceTurnHint())
 	m.agent.SetAuthorityMode(agentAuthorityMode(authority))
 	if m.sessionID > 0 && m.sessionStore != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
