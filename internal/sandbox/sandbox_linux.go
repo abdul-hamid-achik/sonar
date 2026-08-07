@@ -14,8 +14,28 @@ import (
 const bubblewrapName = "bwrap"
 
 func Available() bool {
-	_, err := exec.LookPath(bubblewrapName)
-	return err == nil
+	path, err := exec.LookPath(bubblewrapName)
+	if err != nil {
+		return false
+	}
+	// LookPath alone is true once bubblewrap is installed, but a confined
+	// command still has to START. GitHub Actions ships a kernel that lets
+	// --unshare-net create a network namespace and then fails configuring
+	// loopback with RTM_NEWADDR: Operation not permitted unless a user
+	// namespace maps the process to uid 0 first (CAP_NET_ADMIN inside the
+	// namespace). Probe the same shape wrapCommand uses so Available means
+	// "a confined command can run", not "a binary is on PATH" — otherwise
+	// every denial assertion passes for the empty reason that nothing ran.
+	cmd := exec.Command(path,
+		"--die-with-parent",
+		"--unshare-user", "--uid", "0", "--gid", "0",
+		"--ro-bind", "/", "/",
+		"--dev", "/dev",
+		"--proc", "/proc",
+		"--unshare-net",
+		"--", "true",
+	)
+	return cmd.Run() == nil
 }
 
 // wrapCommand builds a bubblewrap invocation.
@@ -106,7 +126,18 @@ func wrapCommand(policy Policy, name string, args []string) (string, []string, e
 	}
 
 	if !policy.AllowNetwork {
-		wrapped = append(wrapped, "--unshare-net")
+		// --unshare-net creates an empty network namespace and bubblewrap then
+		// brings loopback up inside it. That RTM_NEWADDR needs CAP_NET_ADMIN.
+		// An unprivileged process keeps its real UID and has no such cap, so
+		// on hosts like GitHub Actions the wrap fails before the command runs
+		// ("loopback: Failed RTM_NEWADDR: Operation not permitted"). Mapping
+		// into a user namespace as uid 0 grants the cap only inside the
+		// namespace — the host uid map still owns the files — which is the
+		// standard unprivileged bubblewrap shape for a detached network.
+		wrapped = append(wrapped,
+			"--unshare-user", "--uid", "0", "--gid", "0",
+			"--unshare-net",
+		)
 	}
 
 	// Keep the working directory the caller chose. bubblewrap resets it to /
