@@ -20,20 +20,35 @@ func Available() bool {
 		return false
 	}
 	// LookPath alone is true once bubblewrap is installed, but a confined
-	// command still has to START. Probe the filesystem-only shape: that is
-	// enough for workspace binds and secret hides, and it is what GitHub
-	// Actions can actually run. Network detachment is optional (see
+	// command still has to START. Probe the mount-only shape wrapCommand
+	// uses (user-namespace uid 0, no --unshare-net): that is enough for
+	// workspace binds and secret hides. Network detachment is optional (see
 	// networkNamespaceAvailable) and must not decide whether confinement
 	// exists at all — otherwise Available is false on CI, every Linux test
 	// skips, and the product claims a boundary nothing in the suite proves.
-	cmd := exec.Command(path,
+	//
+	// User-namespace uid 0 is intentional even without --unshare-net: some
+	// hosts refuse unprivileged mount namespaces unless the process is mapped
+	// that way, and wrapCommand always uses the same shape so Available and
+	// the real wrap cannot disagree.
+	return bwrapProbe(path, false) == nil
+}
+
+// bwrapProbe runs a minimal confined true. withNetwork adds the unshare-net
+// half; without it, only the mount namespace is exercised.
+func bwrapProbe(path string, withNetwork bool) error {
+	args := []string{
 		"--die-with-parent",
+		"--unshare-user", "--uid", "0", "--gid", "0",
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
 		"--proc", "/proc",
-		"--", "true",
-	)
-	return cmd.Run() == nil
+	}
+	if withNetwork {
+		args = append(args, "--unshare-net")
+	}
+	args = append(args, "--", "true")
+	return exec.Command(path, args...).Run()
 }
 
 // networkNamespaceAvailable reports whether --unshare-net can start a process.
@@ -57,17 +72,9 @@ func networkNamespaceAvailable() bool {
 		}
 		// User-namespace uid 0 is the standard unprivileged shape for
 		// CAP_NET_ADMIN inside the netns. Without it, --unshare-net fails on
-		// hosts that created the namespace but cannot configure loopback.
-		cmd := exec.Command(path,
-			"--die-with-parent",
-			"--unshare-user", "--uid", "0", "--gid", "0",
-			"--ro-bind", "/", "/",
-			"--dev", "/dev",
-			"--proc", "/proc",
-			"--unshare-net",
-			"--", "true",
-		)
-		networkNamespaceOK = cmd.Run() == nil
+		// hosts that created the namespace but cannot configure loopback
+		// (RTM_NEWADDR: Operation not permitted on GitHub Actions).
+		networkNamespaceOK = bwrapProbe(path, true) == nil
 	})
 	return networkNamespaceOK
 }
@@ -93,6 +100,10 @@ func networkNamespaceAvailable() bool {
 func wrapCommand(policy Policy, name string, args []string) (string, []string, error) {
 	wrapped := []string{
 		"--die-with-parent",
+		// User-namespace uid 0 matches Available's probe: unprivileged hosts
+		// that need a mapped root for mount ops get the same shape as hosts
+		// that do not, and the host uid map still owns the files written.
+		"--unshare-user", "--uid", "0", "--gid", "0",
 		// Read-only view of the host, then the writable holes on top of it.
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
@@ -161,18 +172,11 @@ func wrapCommand(policy Policy, name string, args []string) (string, []string, e
 
 	if !policy.AllowNetwork && networkNamespaceAvailable() {
 		// --unshare-net creates an empty network namespace and bubblewrap then
-		// brings loopback up inside it. That RTM_NEWADDR needs CAP_NET_ADMIN.
-		// Mapping into a user namespace as uid 0 grants the cap only inside
-		// the namespace — the host uid map still owns the files — which is the
-		// standard unprivileged bubblewrap shape for a detached network.
-		//
-		// When the probe fails (GitHub Actions), mount confinement still
-		// applies and the command still runs: dropping network isolation is
-		// weaker than claiming Available false and skipping every Linux proof.
-		wrapped = append(wrapped,
-			"--unshare-user", "--uid", "0", "--gid", "0",
-			"--unshare-net",
-		)
+		// brings loopback up inside it. When the probe fails (GitHub Actions),
+		// mount confinement still applies without this flag: dropping network
+		// isolation is weaker than claiming Available false and skipping every
+		// Linux proof. The user-namespace half is already in wrapped above.
+		wrapped = append(wrapped, "--unshare-net")
 	}
 
 	// Keep the working directory the caller chose. bubblewrap resets it to /
