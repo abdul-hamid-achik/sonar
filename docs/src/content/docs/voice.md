@@ -84,3 +84,27 @@ per-turn charge, and about two seconds between a sentence and its audio.
 
 Run `/voice test` to hear each language before choosing, and `/voice voices` to
 see which voice each one would use.
+
+## Tuning it from the session
+
+Every setting is reachable by the name it has in the config file, so what you
+type while tuning and what you write down afterwards are the same word:
+
+```
+/voice provider say|openai
+/voice speak_when always|unfocused
+/voice rate 195
+/voice voice Samantha          # one voice for everything
+/voice voice es Paulina        # one language only
+/voice voice es                # forget that language's entry
+/voice pronounce deploy dipló  # say it this way
+/voice pronounce deploy        # say it as written
+```
+
+These are settings only an ear can judge, so the loop has to close in one
+sitting: change it, `/voice test`, listen, change it again.
+
+Nothing is persisted. Tuning by ear produces a state nobody should inherit by
+accident on the next launch, so the session stays a session — and `/voice
+status` prints the config block that would reproduce it, for when an experiment
+becomes a decision.

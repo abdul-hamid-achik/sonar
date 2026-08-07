@@ -413,6 +413,9 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 	case command.ActionVoiceTest:
 		return m.reportVoiceTest()
 
+	case command.ActionVoiceSetting:
+		return m.setVoiceSetting(result.Data)
+
 	case command.ActionVoiceStage:
 		return m.toggleVoiceStage()
 

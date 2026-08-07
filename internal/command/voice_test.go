@@ -28,6 +28,14 @@ func TestVoiceCommandRoutesEveryForm(t *testing.T) {
 		{args: []string{"doctor"}, action: ActionVoiceStatus},
 		{args: []string{"voices"}, action: ActionVoiceVoices},
 		{args: []string{"test"}, action: ActionVoiceTest},
+		{args: []string{"provider", "openai"}, action: ActionVoiceSetting, data: "provider openai"},
+		{args: []string{"speak_when", "unfocused"}, action: ActionVoiceSetting, data: "speak_when unfocused"},
+		{args: []string{"rate", "195"}, action: ActionVoiceSetting, data: "rate 195"},
+		{args: []string{"voice", "es", "Paulina"}, action: ActionVoiceSetting, data: "voice es Paulina"},
+		{args: []string{"pronounce", "deploy", "dipló"}, action: ActionVoiceSetting, data: "pronounce deploy dipló"},
+		// A setting with no value still routes: the UI answers with its usage
+		// rather than the parser guessing what was meant.
+		{args: []string{"pronounce"}, action: ActionVoiceSetting, data: "pronounce"},
 		{args: []string{"answer", "off"}, action: ActionVoiceChannel, data: "answer off"},
 		{args: []string{"alerts", "on"}, action: ActionVoiceChannel, data: "alerts on"},
 		// Case is the user's, not the parser's.

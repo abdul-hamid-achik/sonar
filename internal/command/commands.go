@@ -960,7 +960,7 @@ func RegisterBuiltins(r *Registry) {
 		Name:        "voice",
 		Aliases:     []string{"listen", "mic"},
 		Description: "Dictate into the composer, or inspect and tune spoken output",
-		Usage:       "/voice [on|off|view|status|voices|test|<channel> on|off]",
+		Usage:       "/voice [on|off|view|status|voices|test|provider|speak_when|rate|voice|pronounce|<channel> on|off]",
 		Handler: func(_ *Context, args []string) Result {
 			if len(args) == 0 {
 				return Result{Action: ActionVoiceInput}
@@ -974,6 +974,15 @@ func RegisterBuiltins(r *Registry) {
 				return Result{Action: ActionVoiceTest}
 			case "view", "stage", "screen":
 				return Result{Action: ActionVoiceStage}
+			case "provider", "speak_when", "speakwhen", "rate", "voice", "pronounce":
+				// Settings, as opposed to the channel toggles below. The UI owns
+				// what each one accepts — it is the side that has to rebuild a
+				// synthesizer when one changes — so the arguments travel as a
+				// verb and a remainder rather than being validated twice.
+				return Result{
+					Action: ActionVoiceSetting,
+					Data:   strings.Join(append([]string{verb}, args[1:]...), " "),
+				}
 			case "on", "off":
 				// The master switch. It is a verb rather than a channel because
 				// it decides whether there is a synthesizer at all, and because

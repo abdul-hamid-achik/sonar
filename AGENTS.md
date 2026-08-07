@@ -304,6 +304,17 @@ macOS ships compact voices; the downloadable variants are a different feature
 entirely. `VoiceForLanguage` prefers one when it exists, and the parenthesised-
 name heuristic that demotes the novelty set had to learn not to demote them.
 
+**`/voice` tunes the session; the config file records the decision.** Every
+setting is reachable by its config-file name — provider, speak_when, rate,
+voice, pronounce — because these are settings only an ear can judge and a loop
+that requires editing a file and restarting is one nobody closes. Nothing is
+persisted even though `runtimepref` would make it easy: the session is where you
+find out what sounds right, and a mid-experiment state inherited on the next
+launch is a setting nobody chose. `voiceSettingsYAML` prints the block to paste
+instead. Changing the provider, rate or voice reopens the speaker — a driver
+binds those at construction — and the turn's language, position and digest
+survive it, because they belong to the conversation rather than to the device.
+
 **The harness never opens the microphone; you do.** An approval can be answered
 by speaking, but only in the seconds after somebody pressed the dictation key
 while a prompt was already waiting — the alternative puts the harness in charge

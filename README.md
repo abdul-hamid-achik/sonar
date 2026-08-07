@@ -130,6 +130,12 @@ a deliberate act — and voice can only ever allow once or deny: it cannot widen
 scope, and anything destructive is refused rather than downgraded, because the
 keyboard is one reach away exactly when a mistake is not recoverable.
 
+Everything is tunable from the session, by the same name it has in the config
+file: `/voice provider say|openai`, `/voice speak_when always|unfocused`,
+`/voice rate 195`, `/voice voice es Paulina`, `/voice pronounce deploy dipló`.
+Nothing is persisted — tuning by ear produces a state nobody should inherit by
+accident — so `/voice status` prints the config block that would reproduce it.
+
 `/voice status` says what is on and whether this terminal reports focus,
 `/voice voices` says which voice each language would use, and `/voice test`
 speaks a line in each so you can hear one before choosing it. `/voice <channel>

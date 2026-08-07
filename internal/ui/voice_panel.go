@@ -87,6 +87,7 @@ func (m *Model) voiceChannelReport() string {
 			report.WriteString("    speak_when: unfocused — this window is in the background\n")
 		}
 	}
+	fmt.Fprintf(&report, "    %-3s %-10s %s\n", "", "provider", m.effectiveProvider())
 	if speech.Available() && !speech.HasHighQualityVoices() {
 		// The single largest change available to how this feature sounds, and it
 		// is a download rather than a line of code. Nothing else in sonar would
