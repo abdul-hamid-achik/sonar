@@ -219,6 +219,11 @@ const (
 	ActionShowContextDoctor             // Open the animated context-usage overlay
 	ActionVoiceInput                    // Open or close the microphone and dictate into the composer
 	ActionVoiceStatus                   // Report every part of the voice pipeline and what is missing
+	ActionVoiceVoices                   // Report which voice each language would be read in
+	ActionVoiceTest                     // Speak one line in each language that would be used
+	ActionVoiceChannel                  // Switch one spoken channel (Data = "<channel> on|off")
+	ActionVoiceEnable                   // Turn spoken output on or off for the session (Data = "on"|"off")
+	ActionVoiceStage                    // Open or close the centred listening panel
 )
 
 // Registry holds all registered slash commands.

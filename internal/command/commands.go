@@ -959,17 +959,40 @@ func RegisterBuiltins(r *Registry) {
 	r.Register(&Command{
 		Name:        "voice",
 		Aliases:     []string{"listen", "mic"},
-		Description: "Open the microphone and dictate into the composer (same as alt+v)",
-		Usage:       "/voice [status]",
+		Description: "Dictate into the composer, or inspect and tune spoken output",
+		Usage:       "/voice [on|off|view|status|voices|test|<channel> on|off]",
 		Handler: func(_ *Context, args []string) Result {
 			if len(args) == 0 {
 				return Result{Action: ActionVoiceInput}
 			}
-			switch strings.ToLower(args[0]) {
+			switch verb := strings.ToLower(args[0]); verb {
 			case "status", "check", "doctor":
 				return Result{Action: ActionVoiceStatus}
+			case "voices":
+				return Result{Action: ActionVoiceVoices}
+			case "test", "sample", "preview":
+				return Result{Action: ActionVoiceTest}
+			case "view", "stage", "screen":
+				return Result{Action: ActionVoiceStage}
+			case "on", "off":
+				// The master switch. It is a verb rather than a channel because
+				// it decides whether there is a synthesizer at all, and because
+				// "on"/"off" alone is what anybody types first.
+				return Result{Action: ActionVoiceEnable, Data: verb}
 			default:
-				return Result{Error: "usage: /voice [status]"}
+				// Anything else is read as a channel name. The UI owns the list
+				// of channels — it owns the settings they switch — so an unknown
+				// name is answered there rather than duplicated into a second
+				// list here that would drift from it.
+				if len(args) != 2 {
+					return Result{Error: "usage: /voice <channel> on|off — try /voice status to see them"}
+				}
+				switch state := strings.ToLower(args[1]); state {
+				case "on", "off":
+					return Result{Action: ActionVoiceChannel, Data: verb + " " + state}
+				default:
+					return Result{Error: "usage: /voice " + verb + " on|off"}
+				}
 			}
 		},
 	})

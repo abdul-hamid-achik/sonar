@@ -153,6 +153,10 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		m.agent.ClearHistory()
 		m.entries = nil
 		m.toolEntries = nil
+		// The listening stage shows the last thing said out loud, and a cleared
+		// conversation has not said anything. Leaving it would put a sentence
+		// about work that is no longer on screen at the centre of the panel.
+		m.voiceLastDigest, m.voiceLastDigestLanguage = "", ""
 		m.resetConversationSession()
 		m.invalidateEntryCache()
 		if result.Text != "" {
@@ -402,6 +406,22 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 
 	case command.ActionVoiceStatus:
 		return m.reportVoiceStatus()
+
+	case command.ActionVoiceVoices:
+		return m.reportVoiceVoices()
+
+	case command.ActionVoiceTest:
+		return m.reportVoiceTest()
+
+	case command.ActionVoiceStage:
+		return m.toggleVoiceStage()
+
+	case command.ActionVoiceEnable:
+		return m.setVoiceEnabled(result.Data == "on")
+
+	case command.ActionVoiceChannel:
+		channel, state, _ := strings.Cut(result.Data, " ")
+		return m.setVoiceChannel(channel, state == "on")
 
 	case command.ActionSwitchTheme:
 		return m.applyTheme(result.Data)
