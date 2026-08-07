@@ -85,13 +85,13 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 	// rail even from a running turn, whose progress is one line below anyway.
 	case m.listeningForVoice():
 		return workingActivity{
-			// Both ways in are named, and esc is named first because it is the
-			// only one that works in every terminal. alt+v does not exist until
-			// the terminal is told Option means Alt, and a leader key can claim
-			// it even then — a hint that offers only alt+v tells someone whose
-			// terminal ate it that the microphone cannot be closed.
+			// The detail is built rather than written: it names the binding this
+			// build actually has, and it changes to say so when the microphone
+			// has been open long enough to be sure it is hearing nothing. A hint
+			// naming a key is useless to someone whose real problem is a muted
+			// input.
 			label: "Listening", compactLabel: "Listening",
-			detail: "esc cancels · alt+v or /voice stops", cancellable: false,
+			detail: m.voiceListeningDetail(), cancellable: false,
 		}, true
 	case m.transcribingVoice():
 		return workingActivity{
@@ -202,7 +202,7 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 	case m.speakingAloud():
 		return workingActivity{
 			label: "Speaking", compactLabel: "Speaking",
-			detail: "any key stops", cancellable: false,
+			detail: "typing stops it", cancellable: false,
 		}, true
 	default:
 		return workingActivity{}, false
@@ -371,6 +371,14 @@ func (m *Model) renderWorkingLine() string {
 					motion = motionStyle.Render(glyphEllipsis(m.glyphProfile))
 				}
 			}
+		} else if meter := m.voiceMeter(m.voiceMeterCells()); meter != "" {
+			// An open microphone spends the motion cells on a level meter rather
+			// than on a pulse. The pulse would animate identically for a muted
+			// input, a wrong device and a permission never granted — which is
+			// precisely the state somebody sits in talking to a harness that is
+			// recording silence. This moves only when the microphone hears
+			// something, so a flat meter is information rather than a stall.
+			motion = meter
 		} else if pulse := m.sonarPulseGlyph(); pulse != "" {
 			// Every active phase that is not a wait: a tool running, a stream
 			// arriving, a session restoring. The waiting phase keeps the trace
@@ -552,7 +560,15 @@ func (m *Model) renderWorkingLine() string {
 	}
 	var lead string
 	var textWidth int
-	if motionWidth <= contentAccentColumns {
+	if wave := m.workingPulseWave(motion); wave != "" {
+		// The pulse fills the chrome the grid already reserves — accent cell plus
+		// the two pad cells — instead of sitting alone in column 1 with a gap on
+		// either side. The text origin is unchanged: this is the same
+		// contentLeftColumns the Prefix below would have produced, painted rather
+		// than left blank.
+		lead = wave
+		textWidth = max(1, m.chatPaneWidth()-grid.OriginX())
+	} else if motionWidth <= contentAccentColumns {
 		lead = grid.Prefix(accentMotion)
 		textWidth = max(1, m.chatPaneWidth()-lipgloss.Width(lead))
 	} else {
@@ -728,4 +744,21 @@ func formatBudgetSpan(d time.Duration) string {
 		return fmt.Sprintf("%dh", int(hours))
 	}
 	return fmt.Sprintf("%dh%02dm", int(hours), int(minutes))
+}
+
+// workingPulseWave returns the multi-cell pulse when it is what the rail should
+// paint, and "" when the motion cell already holds something better.
+//
+// Guarded on the motion the caller resolved rather than re-deriving it: the
+// waiting phase owns those cells with a trace that carries a fact, and an open
+// microphone owns them with a level meter that carries a measurement. Both
+// outrank identity, which is all the pulse is.
+func (m *Model) workingPulseWave(motion string) string {
+	if m == nil || m.reducedMotion || m.glyphProfile == GlyphASCII {
+		return ""
+	}
+	if motion != m.sonarPulseGlyph() {
+		return ""
+	}
+	return m.sonarPulseWave()
 }

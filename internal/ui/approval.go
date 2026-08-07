@@ -1015,7 +1015,16 @@ func (m *Model) handleToolApprovalRequest(msg ToolApprovalMsg) {
 		}
 		return
 	}
-	if err := m.openApproval(msg); err != nil {
+	if err := m.openApproval(msg); err == nil {
+		// Said only once the prompt is really open. A run stopped on an approval
+		// nobody is looking at is the one thing in this harness that cannot
+		// resolve itself, and it is the reason the alert channel exists.
+		//
+		// It names the action, which no other alert does. Someone in another
+		// room told only that SOMETHING is waiting has to come and look to find
+		// out whether it was worth coming for.
+		m.speakApprovalNeeded(spokenApprovalAction(msg.Preview))
+	} else {
 		if msg.Response != nil {
 			msg.Response <- permission.Refuse("approval_preview_unavailable", err.Error())
 		}

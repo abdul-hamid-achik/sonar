@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/abdul-hamid-achik/sonar/internal/command"
 	"github.com/abdul-hamid-achik/sonar/internal/speech"
@@ -96,22 +97,42 @@ func TestListeningHintNamesAStopThatAlwaysWorks(t *testing.T) {
 		t.Fatal("precondition: a Listener-less state should not report listening")
 	}
 
-	// The copy itself is what this pins, since driving a real microphone in a
-	// unit test is not available.
-	source, err := os.ReadFile("activity.go")
-	if err != nil {
-		t.Fatalf("read activity.go: %v", err)
-	}
-	body := string(source)
-	start := strings.Index(body, `label: "Listening"`)
-	if start < 0 {
-		t.Fatal("the Listening activity is gone; this test needs rewriting")
-	}
-	hint := body[start:min(start+200, len(body))]
+	// The hint itself, not the source that writes it. It used to be a literal
+	// scanned out of activity.go, which could only ever check that SOME string
+	// mentioned escape — and the string it checked has since become one branch
+	// of two, with the other one deliberately naming no keys at all.
+	hint := m.voiceListeningDetail()
 	if !strings.Contains(hint, "esc") {
 		t.Fatalf("the listening hint does not name escape: %q", hint)
 	}
-	if !strings.Contains(hint, "/voice") {
-		t.Fatalf("the listening hint names no terminal-independent stop: %q", hint)
+	// And it names the binding this build has, rather than a key someone wrote
+	// down once. alt+v was in this string for as long as it was the binding and
+	// for a while after it stopped arriving at all.
+	if key := m.voiceInputKeyHint(); key == "" || !strings.Contains(hint, key) {
+		t.Fatalf("the listening hint does not name this build's key %q: %q", key, hint)
+	}
+	if keys := m.keys.VoiceInput.Keys(); len(keys) == 0 || strings.HasPrefix(keys[0], "alt+") {
+		t.Fatalf("the primary dictation key is an alt chord a stock macOS terminal composes away: %q", keys)
+	}
+}
+
+// silentListener stands in for an open microphone carrying nothing.
+func silentListener(t *testing.T) *speech.Listener {
+	t.Helper()
+	return speech.NewSilentListenerForTest(time.Now().Add(-30 * time.Second))
+}
+
+// A microphone that has heard nothing stops offering keys and names the reason.
+//
+// This is the whole complaint about dictation: somebody talks, nothing happens,
+// and every pixel on screen says it is working. The recorder knows — it reports
+// its input level — so the rail can answer instead of animating.
+func TestAMicrophoneThatHearsNothingSaysSo(t *testing.T) {
+	m := newTestModel(t)
+	m.voiceInput = &voiceInputState{listener: silentListener(t)}
+
+	hint := m.voiceListeningDetail()
+	if !strings.Contains(hint, "hearing nothing") {
+		t.Fatalf("a silent microphone still offered keys: %q", hint)
 	}
 }

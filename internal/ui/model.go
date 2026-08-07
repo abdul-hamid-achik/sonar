@@ -149,12 +149,32 @@ type Model struct {
 	// restored session starts calm and nothing has to be persisted.
 	// voice owns spoken output when it is enabled and the host can honour it.
 	voice *voiceState
+	// voiceConfig is what the operator configured, held whether or not voice is
+	// currently on. It is what /voice on builds from.
+	voiceConfig config.VoiceConfig
+	// voiceStage is whether the centred listening panel owns the screen, and
+	// voiceLastDigest is the last thing said out loud — kept across turns
+	// because the panel's job is to still be readable after one ends.
+	voiceStage      bool
+	voiceLastDigest string
+	// voiceLastDigestLanguage is the language that line was read in, carried
+	// with it so a later "again" does not read it in the current turn's voice.
+	voiceLastDigestLanguage string
 	// voiceInput owns the microphone. Separate from voice because hearing and
 	// speaking are independent capabilities with independent drivers: a host
 	// can have one without the other.
 	voiceInput         *voiceInputState
 	voiceInputModel    string
 	voiceInputLanguage string
+	// terminalFocused is whether this window is in the foreground, and
+	// terminalFocusReported is whether the terminal has ever said so.
+	//
+	// Two fields rather than one, because "not focused" and "cannot tell" call
+	// for opposite behaviour and a single bool would conflate them: a terminal
+	// that never reports focus would look permanently backgrounded and speak
+	// over everything, or permanently foregrounded and never speak at all.
+	terminalFocused       bool
+	terminalFocusReported bool
 	// sonarPulseFrame is the emit-side animation beat. It advances on the
 	// activity spinner's tick and never on one of its own.
 	sonarPulseFrame uint64
@@ -721,13 +741,26 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 	case VoiceTranscriptMsg:
 		return m, m.handleVoiceTranscript(msg)
 
+	case tea.FocusMsg:
+		m.noteTerminalFocus(true)
+
+	case tea.BlurMsg:
+		m.noteTerminalFocus(false)
+
 	case tea.KeyPressMsg:
-		// Any key silences speech, before the key is even routed. Interruption
-		// cancels and never queues: someone typing while the harness is talking
-		// has stopped listening, and audio that keeps going is talking over
-		// them. This is the gap every existing implementation of this leaves
-		// open, and it costs one line here to close.
-		m.silenceVoice()
+		// Keys that mean "I am taking over" silence speech, before the key is
+		// even routed. Interruption cancels and never queues: someone typing
+		// while the harness is talking has stopped listening, and audio that
+		// keeps going is talking over them.
+		//
+		// Moving around the transcript is not taking over. Every key used to
+		// silence, which meant PgUp to re-read the paragraph above killed the
+		// sentence you were re-reading it to follow — and the mouse wheel, which
+		// arrives as a different message, did not, so the same gesture had two
+		// answers depending on how you scrolled.
+		if keyInterruptsSpeech(msg) {
+			m.silenceVoice()
+		}
 		if cmd, handled := m.handleKeyPress(msg); handled {
 			return m, cmd
 		}
@@ -996,9 +1029,19 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 	// Update sub-components.
 	if m.composerEditable() {
 		hadOverflowCue := m.renderComposerOverflowCue() != ""
+		// A chord this terminal swallowed arrives as the character it composed
+		// instead. Checked before the composer takes it, because the check is
+		// "was the draft empty", and one keystroke later it is not.
+		optionHint := ""
+		if key, isKey := msg.(tea.KeyPressMsg); isKey {
+			optionHint = m.noticeForOptionComposedKey(key.String())
+		}
 		var cmd tea.Cmd
 		m.input, cmd = m.input.Update(msg)
 		cmds = append(cmds, cmd)
+		if optionHint != "" {
+			cmds = append(cmds, m.setFooterNotice(noticeInfo, optionHint, 8*time.Second))
+		}
 
 		// Auto-grow textarea based on content.
 		m.syncInputHeight()

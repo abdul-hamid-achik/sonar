@@ -27,6 +27,12 @@ func (m *Model) View() tea.View {
 	if m.terminalInputResumeActive() {
 		return m.renderTerminalInputResumeView()
 	}
+	// The listening stage replaces the transcript rather than sitting over it.
+	// An overlay implies something to return to underneath; here the panel IS
+	// the screen for as long as somebody is listening rather than reading.
+	if m.voiceStageActive() {
+		return m.renderVoiceStageView()
+	}
 
 	// Session header + conversation + footer share one geometry snapshot.
 	// Infrequent controls remain overlays over these stable base rectangles.
@@ -178,7 +184,22 @@ func (m *Model) View() tea.View {
 // cells not owned by a component (including resize gaps) without padding the
 // rendered content or changing any ContentGrid geometry.
 func (m *Model) applyViewTheme(view *tea.View) {
-	if m == nil || view == nil || noColor {
+	if m == nil || view == nil {
+		return
+	}
+	// Ask the terminal to say when this window gains and loses focus.
+	//
+	// The only consumer is speech: under voice.speak_when: unfocused the spoken
+	// channels yield while someone is reading the transcript and take over once
+	// they switch away, and focus is the one signal that separates those. It is
+	// requested unconditionally rather than when voice is on, because the view
+	// is rebuilt every frame and a mode that toggled the terminal's reporting
+	// state mid-session is a worse thing to own than an event nobody reads.
+	//
+	// Terminals that do not support it simply never send one, which the voice
+	// gate treats as "cannot tell" rather than as backgrounded.
+	view.ReportFocus = true
+	if noColor {
 		return
 	}
 	view.BackgroundColor = newSemanticPalette(m.isDark, m.themeID).Background

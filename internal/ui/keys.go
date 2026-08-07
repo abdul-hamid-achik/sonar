@@ -70,8 +70,30 @@ func DefaultKeyMap() KeyMap {
 		// also claim it first. Someone whose terminal eats the chord needs the
 		// other way in printed next to it, not in a footnote.
 		VoiceInput: key.NewBinding(
-			key.WithKeys("alt+v"),
-			key.WithHelp("alt+v", "open the mic / close and transcribe · /voice also"),
+			// ctrl+g, and the letter names nothing — which is the point, because
+			// every letter that DID name it is claimed by something that eats it.
+			//
+			// alt+v was the original and it never arrived. On a stock macOS
+			// terminal Option is not Meta: Option+V composes "√" and inserts it in
+			// the composer, so the binding was invisible, un-actionable, and
+			// indistinguishable from dictation being broken. Every alt+<letter>
+			// chord in this map has the same problem; the others are all
+			// secondary gestures with a menu or a command behind them, and this
+			// one was the only way in.
+			//
+			// So it has to be a control chord, and the free ones are what is left
+			// after the claims: ctrl+a and ctrl+b are screen's and tmux's
+			// prefixes, ctrl+s and ctrl+q are flow control that can wedge a
+			// terminal, ctrl+z suspends, ctrl+w and ctrl+k are readline's
+			// word-kill and line-kill, ctrl+x is an editor prefix, and ctrl+r is
+			// deliberately kept free elsewhere in this file because it is
+			// reverse-history-search everywhere. ctrl+g is the remainder, and
+			// nothing wants it: in readline it aborts, which no surface here uses.
+			//
+			// alt+v stays as a second key for terminals told that Option is Meta.
+			// It costs nothing and it is what anyone who learned it will press.
+			key.WithKeys("ctrl+g", "alt+v"),
+			key.WithHelp("ctrl+g", "open the mic / close and transcribe · /voice also"),
 		),
 		Quit: key.NewBinding(
 			key.WithKeys("ctrl+c"),

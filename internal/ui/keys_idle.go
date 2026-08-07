@@ -69,7 +69,8 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 
 	case key.Matches(msg, m.keys.Cancel):
 		// An open microphone owns Escape before anything else does. It is the
-		// only stop that works in every terminal — alt+v may never arrive and
+		// only stop that works in every terminal — the toggle chord may be
+		// claimed by a multiplexer and
 		// /voice needs the composer, which is awkward while dictating into it —
 		// and discarding is the right default for a key that means "undo this":
 		// someone hitting escape mid-sentence wants the recording gone, not
@@ -88,6 +89,26 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		}
 		if (m.state == StateStreaming || m.state == StateWaiting) && m.cancel != nil {
 			m.cancel()
+			return nil, true
+		}
+		// The listening stage leaves LAST, after every other meaning of Escape.
+		//
+		// It claimed the key first at one point, which is the obvious reading —
+		// it is the whole screen, so closing it is what "close this" means. It
+		// is also wrong twice. A turn running while the panel is up is exactly
+		// the run somebody is watching from across the room, and stopping it
+		// matters more than putting the transcript back. And an open microphone
+		// is worse: Escape's job there is to discard the recording, and a panel
+		// that swallowed it would leave the room being captured while the screen
+		// changed.
+		//
+		// So it is the fallback, which also makes the gesture consistent: one
+		// Escape means "undo the most urgent thing", and leaving a panel is
+		// never the most urgent thing.
+		if m.voiceStageActive() {
+			m.voiceStage = false
+			m.refreshTranscript()
+			return nil, true
 		}
 
 	case key.Matches(msg, m.keys.Help):

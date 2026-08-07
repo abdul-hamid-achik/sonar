@@ -45,6 +45,17 @@ type voiceInputState struct {
 	// transcribing is true between stopping the microphone and the text
 	// arriving, which is a distinct thing for the rail to say.
 	transcribing bool
+	// levels is the rolling input-level history the meter draws. See
+	// voice_meter.go: it is the only evidence on screen that the microphone is
+	// hearing a voice rather than recording a muted input.
+	levels []float64
+	// approvalAtStart is the request that was on screen when recording began.
+	//
+	// Transcription takes seconds, and an approval can be answered from the
+	// keyboard and replaced by the next one while it runs. Without this, words
+	// spoken about request A resolved request B — a grant for something the
+	// speaker never saw. Empty when nothing was waiting.
+	approvalAtStart string
 }
 
 // VoiceTranscriptMsg carries a finished transcription back to the parent.
@@ -126,6 +137,17 @@ func (m *Model) startVoiceInput() tea.Cmd {
 	if err := m.voiceInput.listener.Start(); err != nil {
 		return m.setFooterNotice(noticeWarning, voiceUnavailableNotice(err), 6*time.Second)
 	}
+	// The request this recording is about, captured before a word is spoken.
+	if m.pendingApproval != nil {
+		m.voiceInput.approvalAtStart = m.pendingApproval.RequestID
+	} else {
+		m.voiceInput.approvalAtStart = ""
+	}
+	// The meter starts empty. Without this, a new recording opened with the
+	// PREVIOUS one's bars still on screen and rendered them as if they were
+	// current — a meter showing a phrase nobody had said yet, which is the one
+	// thing this surface exists not to do.
+	m.voiceInput.levels = nil
 	m.voiceInput.token++
 	token := m.voiceInput.token
 	return tea.Tick(voiceListenTimeout, func(time.Time) tea.Msg {
@@ -169,6 +191,27 @@ func (m *Model) handleVoiceTranscript(msg VoiceTranscriptMsg) tea.Cmd {
 	text := strings.TrimSpace(sanitizeTerminalSingleLine(msg.Text))
 	if text == "" {
 		return m.setFooterNotice(noticeInfo, "Heard nothing.", 2*time.Second)
+	}
+	// A closed vocabulary of read-only steering is checked first, and only
+	// against the WHOLE utterance. "Mostrame el diff" opens the diff; "mostrame
+	// el diff y arreglá el bug" is dictation, because the second half is a
+	// request and swallowing it would drop what somebody asked for.
+	//
+	// Nothing here can send a prompt, answer an approval or cancel a turn. See
+	// voice_command.go: a mis-transcription costs a screen nobody wanted, which
+	// is the only class of mistake this microphone is allowed to make.
+	// An approval waiting on screen is the only thing that widens what a spoken
+	// utterance can do, and it widens it only because YOU opened the microphone
+	// with a key while it was there. The harness never opens one on its own; see
+	// voice_approval.go for why that decision shapes the rest.
+	if m.pendingApproval != nil &&
+		m.pendingApproval.RequestID == m.voiceInput.approvalAtStart {
+		if answered := m.answerApprovalByVoice(text); answered != nil {
+			return answered
+		}
+	}
+	if spoken := voiceCommandFor(text); spoken != voiceCommandNone {
+		return m.runVoiceCommand(spoken)
 	}
 	// Inserted, never sent. Dictation mis-hears, and the speaker reads what
 	// arrived before it becomes a request.
@@ -264,12 +307,12 @@ func (m *Model) reportVoiceStatus() tea.Cmd {
 	// pipeline stays silent with nothing explaining it.
 	switch {
 	case !m.voiceActive():
-		report.WriteString("\n  Spoken output is off. Set voice.enabled: true in your config.")
-	case !m.voice.config.Answer:
-		report.WriteString("\n  Spoken output is on, but the answer channel is off (voice.answer).")
+		report.WriteString("\n  Spoken output is off. Run /voice on to turn it on for this session,\n  or set voice.enabled: true to have it on from the start.")
+	default:
+		report.WriteString("\n" + m.voiceChannelReport())
 	}
 	if broken == 0 {
-		report.WriteString("\n  Dictation is ready: /voice or alt+v opens the microphone.")
+		report.WriteString("\n  Dictation is ready: " + m.voiceInputKeyHint() + " or /voice opens the microphone.")
 	}
 	m.entries = append(m.entries, ChatEntry{
 		Kind: "system", Content: sanitizeTerminalMultiline(report.String()),

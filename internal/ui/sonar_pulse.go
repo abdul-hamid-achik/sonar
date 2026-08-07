@@ -1,6 +1,10 @@
 package ui
 
-import "charm.land/lipgloss/v2"
+import (
+	"strings"
+
+	"charm.land/lipgloss/v2"
+)
 
 // Sonar pulse: the emit half of the harness's own metaphor.
 //
@@ -22,8 +26,11 @@ import "charm.land/lipgloss/v2"
 //
 //   - No new clock. The frame advances on the spinner tick the activity phase
 //     already owns, so nothing here can drift from or outlive that phase.
-//   - One terminal cell per frame, verified by test, so adopting it cannot
-//     change layout geometry.
+//   - One terminal cell per frame at every call site but one, verified by
+//     test, so adopting it cannot change layout geometry. The exception is the
+//     activity rail, where sonarPulseWave fills the chrome the ContentGrid
+//     already reserves — accent plus pad — without moving the text origin by a
+//     column. See that function for why.
 //   - Shape carries the pulse and color only reinforces it, so NO_COLOR and
 //     monochrome terminals read the same three beats.
 //   - Reduced motion renders nothing and the counter never advances; the
@@ -64,6 +71,68 @@ var sonarPulseBeats = [sonarPulseFrames]string{"•", "◦", "·"}
 // them by SHAPE, which survives a monochrome terminal, where two colors of the
 // same dot would not.
 var sonarListenBeats = [sonarPulseFrames]string{"·", "◦", "•"}
+
+// sonarPulseWave is the pulse spread across the rail's whole chrome — accent
+// cell plus the two pad cells — or "" when a single glyph is what the caller
+// should use.
+//
+// It exists because one bullet in column 1 reads as detached and undersized: the
+// ContentGrid puts two pad cells between the accent column and the label, so the
+// indicator sits alone with a gap on either side. Neither documented decision
+// that produced that is wrong. Content must start at OriginX, and the bullet
+// family was chosen over the geometric circles for a measured optical reason —
+// the geometric glyphs are drawn centered on their own box and sit high beside
+// text, which is why they read as pasted in.
+//
+// So nothing moves. The pad cells were always chrome; they were simply empty.
+// Filling them with the SAME three beats at successive phases turns a mutating
+// dot into a ping that travels, which is both larger and closer to the words
+// without the label shifting by a single column. What it costs is one line of
+// this file's own discipline: the pulse is one cell everywhere else, and up to
+// contentLeftColumns inside the rail.
+//
+// Direction carries the same meaning it always did. Work and speech run
+// outward, the emit beat departing the label; listening runs inward, an echo
+// converging on it.
+func (m *Model) sonarPulseWave() string {
+	if m == nil || m.reducedMotion || m.glyphProfile == GlyphASCII {
+		return ""
+	}
+	palette := outputSemanticPalette(m.isDark, m.themeID)
+	inward := m.listeningForVoice()
+	speaking := m.speakingAloud()
+
+	var wave strings.Builder
+	for cell := 0; cell < contentLeftColumns; cell++ {
+		// The phase of this cell: outward walks the emit beat from the cell
+		// beside the label towards column 1, inward walks it the other way.
+		var beat int
+		if inward {
+			beat = ((cell-int(m.sonarPulseFrame))%sonarPulseFrames + sonarPulseFrames) % sonarPulseFrames
+		} else {
+			beat = ((contentLeftColumns-1-cell-int(m.sonarPulseFrame))%sonarPulseFrames + sonarPulseFrames) % sonarPulseFrames
+		}
+		glyphs := sonarPulseBeats
+		if inward {
+			glyphs = sonarListenBeats
+		}
+		colour := palette.Dim
+		switch {
+		case inward:
+			// An open microphone is a state a person must notice without going
+			// looking, so every cell wears the warning role rather than cycling.
+			colour = palette.Warning
+		case speaking:
+			colour = palette.Special
+		case beat == 0:
+			colour = palette.Accent
+		case beat == 1:
+			colour = palette.Accent2
+		}
+		wave.WriteString(lipgloss.NewStyle().Foreground(colour).Render(glyphs[beat]))
+	}
+	return wave.String()
+}
 
 // sonarPulseGlyph is the current frame, or "" when this terminal or this
 // moment should keep the existing motion.
@@ -120,6 +189,18 @@ func (m *Model) sonarPulseGlyph() string {
 func (m *Model) advanceSonarPulse() bool {
 	if m == nil || m.reducedMotion {
 		return false
+	}
+	if m.sampleVoiceLevel() {
+		// An open microphone opts out of the divider, and it is the one state
+		// that should. Everywhere else the animation is decoration over work the
+		// user cannot influence, so three identical frames are pure waste; here
+		// the movement IS the information — it is the only evidence that the
+		// microphone is picking up a voice rather than recording a muted input —
+		// and a meter that answers at three frames a second reads as lag rather
+		// than as level.
+		m.sonarPulseTick++
+		m.sonarPulseFrame++
+		return true
 	}
 	m.sonarPulseTick++
 	if m.sonarPulseTick%sonarPulseTickDivider != 0 {
