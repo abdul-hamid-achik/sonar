@@ -21,6 +21,7 @@ type WorkspaceRulesExport struct {
 	SourceWorkspace string   `json:"source_workspace,omitempty"`
 	BashPrefixes    []string `json:"bash_prefixes,omitempty"`
 	MCPTools        []string `json:"mcp_tools,omitempty"`
+	MCPServers      []string `json:"mcp_servers,omitempty"`
 	WritePaths      []string `json:"write_paths,omitempty"`
 }
 
@@ -32,13 +33,14 @@ func (r WorkspaceRules) ExportDocument() WorkspaceRulesExport {
 		SourceWorkspace: r.Workspace,
 		BashPrefixes:    append([]string(nil), r.BashPrefixes...),
 		MCPTools:        append([]string(nil), r.MCPTools...),
+		MCPServers:      append([]string(nil), r.MCPServers...),
 		WritePaths:      append([]string(nil), r.WritePaths...),
 	}
 }
 
 // RuleCount returns the number of durable entries in the export.
 func (e WorkspaceRulesExport) RuleCount() int {
-	return len(e.BashPrefixes) + len(e.MCPTools) + len(e.WritePaths)
+	return len(e.BashPrefixes) + len(e.MCPTools) + len(e.MCPServers) + len(e.WritePaths)
 }
 
 // Validate checks export shape before import.
@@ -56,6 +58,11 @@ func (e WorkspaceRulesExport) Validate() error {
 	for _, tool := range e.MCPTools {
 		if _, ok := NormalizeMCPToolName(tool); !ok {
 			return fmt.Errorf("invalid MCP tool in export: %q", tool)
+		}
+	}
+	for _, server := range e.MCPServers {
+		if _, ok := NormalizeMCPServerName(server); !ok {
+			return fmt.Errorf("invalid MCP server in export: %q", server)
 		}
 	}
 	for _, path := range e.WritePaths {
@@ -178,6 +185,19 @@ func (s *WorkspaceRulesStore) Import(workspace string, doc WorkspaceRulesExport,
 				break
 			}
 			rules.MCPTools = append(rules.MCPTools, normalized)
+			added++
+		}
+	}
+	for _, server := range doc.MCPServers {
+		normalized, ok := NormalizeMCPServerName(server)
+		if !ok {
+			continue
+		}
+		if !containsString(rules.MCPServers, normalized) {
+			if len(rules.MCPServers) >= maxMCPServers {
+				break
+			}
+			rules.MCPServers = append(rules.MCPServers, normalized)
 			added++
 		}
 	}

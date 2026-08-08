@@ -59,6 +59,7 @@ func (m *Model) buildCommandContext() *command.Context {
 		rules := m.agent.WorkspaceRulesSnapshot()
 		ctx.WorkspaceBashPrefixes = append([]string(nil), rules.BashPrefixes...)
 		ctx.WorkspaceMCPTools = append([]string(nil), rules.MCPTools...)
+		ctx.WorkspaceMCPServers = append([]string(nil), rules.MCPServers...)
 		ctx.WorkspaceWritePaths = append([]string(nil), rules.WritePaths...)
 	}
 	switch {
@@ -784,6 +785,46 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "No matching durable bash prefix."})
 		default:
 			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "Removed durable bash prefix."})
+		}
+		m.refreshTranscript()
+		m.resumeFollow()
+		return nil
+
+	case command.ActionPermissionsAllowMCPServer:
+		if m.agent == nil {
+			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: "Agent is unavailable."})
+			m.refreshTranscript()
+			m.resumeFollow()
+			return nil
+		}
+		rules, err := m.agent.AddWorkspaceMCPServer(result.Data)
+		if err != nil {
+			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
+		} else {
+			m.entries = append(m.entries, ChatEntry{
+				Kind:    "system",
+				Content: fmt.Sprintf("Saved whole-server MCP allow for this workspace (%d total). Approval only — effect classification is unchanged.", len(rules.MCPServers)),
+			})
+		}
+		m.refreshTranscript()
+		m.resumeFollow()
+		return nil
+
+	case command.ActionPermissionsForgetMCPServer:
+		if m.agent == nil {
+			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: "Agent is unavailable."})
+			m.refreshTranscript()
+			m.resumeFollow()
+			return nil
+		}
+		_, removed, err := m.agent.RemoveWorkspaceMCPServer(result.Data)
+		switch {
+		case err != nil:
+			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
+		case !removed:
+			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "No matching whole-server MCP allow."})
+		default:
+			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "Removed whole-server MCP allow."})
 		}
 		m.refreshTranscript()
 		m.resumeFollow()

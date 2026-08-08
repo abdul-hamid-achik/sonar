@@ -514,9 +514,15 @@ func (m *Model) submitInput() tea.Cmd {
 	if text == "" && len(m.pendingImages) > 0 {
 		text = "Analyze the attached image."
 	}
+	if text == "" && m.iterationLimitContinue {
+		// The previous turn stopped at its iteration ceiling; a bare enter is
+		// the advertised gesture to resume that exact work.
+		text = "Continue exactly where the previous turn stopped."
+	}
 	if text == "" {
 		return nil
 	}
+	m.iterationLimitContinue = false
 	if m.readScopeOpRunning || m.readScopePrompt != nil {
 		return nil
 	}

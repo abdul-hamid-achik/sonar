@@ -90,6 +90,9 @@ func (a *Agent) buildApprovalPreview(ctx context.Context, mode AuthorityMode, tc
 		preview.ActionLabel = boundApprovalLabel(def.DisplayName)
 		preview.Consequence = mcpApprovalConsequence(def.Behavior)
 	}
+	if server := a.mcpServerNamespaceForCall(tc); server != "" {
+		preview.MCPServer = server
+	}
 	pathArg := func(key string, destructive bool) string {
 		raw, _ := tc.Arguments[key].(string)
 		if raw == "" {
@@ -347,6 +350,10 @@ func sessionMCPToolGrantKey(workspace, toolName string) string {
 	return workspace + "\x00" + toolName + "\x00" + permissionpkg.ScopeSessionMCPTool + "\x00"
 }
 
+func sessionMCPServerGrantKey(workspace, namespace string) string {
+	return workspace + "\x00" + "mcp" + "\x00" + permissionpkg.ScopeSessionMCPServer + "\x00" + namespace
+}
+
 // sessionToolScopeEligible reports whether a tool may receive a process-local
 // session-wide tool grant. Only workspace edit built-ins qualify.
 func sessionToolScopeEligible(toolName string) bool {
@@ -413,6 +420,15 @@ func (a *Agent) hasSessionApproval(request permissionpkg.ApprovalRequest) bool {
 			return true
 		}
 	}
+
+	// session_mcp_server: every tool of the host-derived effective namespace.
+	// The namespace travels in the preview, derived by the host at request
+	// build with its gateway knowledge — matching must not re-parse the name.
+	if namespace := strings.TrimSpace(request.Preview.MCPServer); namespace != "" {
+		if _, ok := a.approvalGrants[sessionMCPServerGrantKey(workspace, namespace)]; ok {
+			return true
+		}
+	}
 	return false
 }
 
@@ -434,6 +450,9 @@ func (a *Agent) rememberSessionApproval(request permissionpkg.ApprovalRequest) {
 	}
 	if request.Scope.Kind == permissionpkg.ScopeSessionBashPrefix {
 		key = sessionBashPrefixGrantKey(request.Scope.Workspace, request.Scope.Resource)
+	}
+	if request.Scope.Kind == permissionpkg.ScopeSessionMCPServer && request.Scope.Resource != "" {
+		key = sessionMCPServerGrantKey(request.Scope.Workspace, request.Scope.Resource)
 	}
 	a.mu.Lock()
 	if a.approvalGrants == nil {
@@ -483,6 +502,13 @@ func applySessionScope(request *permissionpkg.ApprovalRequest, scopeKind string)
 		}
 		request.Scope.Kind = permissionpkg.ScopeSessionMCPTool
 		request.Scope.Resource = ""
+	case permissionpkg.ScopeSessionMCPServer:
+		namespace, ok := permissionpkg.NormalizeMCPServerName(request.Preview.MCPServer)
+		if !ok {
+			return
+		}
+		request.Scope.Kind = permissionpkg.ScopeSessionMCPServer
+		request.Scope.Resource = namespace
 	}
 }
 
@@ -500,7 +526,10 @@ func (a *Agent) hasWorkspaceRuleApproval(tc llm.ToolCall) bool {
 		command, _ := tc.Arguments["command"].(string)
 		return rules.AllowsBash(command)
 	case sessionMCPToolScopeEligible(tc.Name):
-		return rules.AllowsMCPTool(tc.Name)
+		if rules.AllowsMCPTool(tc.Name) {
+			return true
+		}
+		return rules.AllowsMCPServer(a.mcpServerNamespaceForCall(tc))
 	case sessionPathScopeEligible(tc.Name):
 		path, _ := tc.Arguments["path"].(string)
 		if strings.TrimSpace(path) == "" {
@@ -662,6 +691,49 @@ func (a *Agent) RemoveWorkspaceMCPTool(tool string) (permissionpkg.WorkspaceRule
 		return permissionpkg.WorkspaceRules{}, false, err
 	}
 	rules, removed, err := store.RemoveMCPTool(workspace, tool)
+	if err != nil {
+		return permissionpkg.WorkspaceRules{}, false, err
+	}
+	a.mu.Lock()
+	a.workspaceRules = rules
+	a.approvalHostVersion++
+	a.mu.Unlock()
+	return rules, removed, nil
+}
+
+// AddWorkspaceMCPServer persists a durable whole-server allow for one
+// effective namespace. Approval-only, like the config-level all_servers.
+func (a *Agent) AddWorkspaceMCPServer(server string) (permissionpkg.WorkspaceRules, error) {
+	workspace, err := a.checkpointWorkspaceID()
+	if err != nil {
+		return permissionpkg.WorkspaceRules{}, err
+	}
+	store, err := a.ensureWorkspaceRulesStore()
+	if err != nil {
+		return permissionpkg.WorkspaceRules{}, err
+	}
+	rules, err := store.AddMCPServer(workspace, server)
+	if err != nil {
+		return permissionpkg.WorkspaceRules{}, err
+	}
+	a.mu.Lock()
+	a.workspaceRules = rules
+	a.approvalHostVersion++
+	a.mu.Unlock()
+	return rules, nil
+}
+
+// RemoveWorkspaceMCPServer removes a durable whole-server allow.
+func (a *Agent) RemoveWorkspaceMCPServer(server string) (permissionpkg.WorkspaceRules, bool, error) {
+	workspace, err := a.checkpointWorkspaceID()
+	if err != nil {
+		return permissionpkg.WorkspaceRules{}, false, err
+	}
+	store, err := a.ensureWorkspaceRulesStore()
+	if err != nil {
+		return permissionpkg.WorkspaceRules{}, false, err
+	}
+	rules, removed, err := store.RemoveMCPServer(workspace, server)
 	if err != nil {
 		return permissionpkg.WorkspaceRules{}, false, err
 	}

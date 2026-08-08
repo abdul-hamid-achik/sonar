@@ -367,6 +367,15 @@ func (m *Model) handleAgentDone(msg AgentDoneMsg, cmds []tea.Cmd) []tea.Cmd {
 		m.cancel()
 		m.cancel = nil
 	}
+	if msg.Err != nil && !turnCancelled && errors.Is(msg.Err, agent.ErrMaxIterations) {
+		// The interactive counterpart of AUTO's segment chaining: the ceiling
+		// is a checkpoint, not a wall. Enter on the empty composer resumes.
+		m.iterationLimitContinue = true
+		m.entries = append(m.entries, ChatEntry{
+			Kind:    "system",
+			Content: "Iteration limit reached mid-work. Press enter on the empty composer to continue where it left off, or type a new instruction.",
+		})
+	}
 	m.lastTurnDuration = m.turnElapsed()
 	// The turn is over, so this is the boundary the alert channel reports — and
 	// the one place the whole turn's outcome is known. Bounded by how long it

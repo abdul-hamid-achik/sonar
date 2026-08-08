@@ -441,10 +441,15 @@ func (a *Agent) RunTurnWithOptions(ctx context.Context, out Output, turnID strin
 		}
 		return checkpoint
 	}
-	limitErr := fmt.Errorf("reached max iterations (%d)", rt.maxIters)
+	limitErr := fmt.Errorf("%w (%d)", ErrMaxIterations, rt.maxIters)
 	out.Error(limitErr.Error())
 	return limitErr
 }
+
+// ErrMaxIterations marks a turn that ended at its iteration ceiling with work
+// possibly unfinished. AUTO chains a new segment when its checkpoint allows;
+// interactive hosts use this to offer the human the same continuation.
+var ErrMaxIterations = errors.New("reached max iterations")
 
 type builtinToolResult struct {
 	content string

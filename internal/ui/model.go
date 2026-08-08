@@ -405,6 +405,10 @@ type Model struct {
 	pendingApproval    *ToolApprovalMsg
 	approvalState      *ApprovalState
 	queuedFollowUp     *queuedFollowUp
+	// iterationLimitContinue arms enter-on-empty-composer to continue the
+	// work an interactive turn left unfinished at its iteration ceiling.
+	// AUTO chains segments automatically; here the human is the chain link.
+	iterationLimitContinue bool
 	turnMessagesBefore []llm.Message
 	turnPromptFloor    agent.ContextPromptFloor
 	turnPrompt         string

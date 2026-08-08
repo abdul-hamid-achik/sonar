@@ -12,7 +12,7 @@ import (
 // handlePendingApprovalKey resolves keyboard input while a tool approval is
 // pending. Pending tool approval owns the keyboard before every other overlay.
 // Decisions remain typed so a host failure cannot be reported as a human
-// denial. Wider scopes (a/p/w) are only honored when offered for the tool.
+// denial. Wider scopes (a/p/w/e) are only honored when offered for the tool.
 func (m *Model) handlePendingApprovalKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	resumeActivity := false
 	switch {
@@ -34,7 +34,8 @@ func (m *Model) handlePendingApprovalKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		// Exact-request session grant: same tool + same canonical arguments only.
 		m.resolvePendingApproval(permission.AllowSession())
 		resumeActivity = true
-	case strings.EqualFold(msg.String(), "a"), strings.EqualFold(msg.String(), "p"), strings.EqualFold(msg.String(), "w"):
+	case strings.EqualFold(msg.String(), "a"), strings.EqualFold(msg.String(), "p"),
+		strings.EqualFold(msg.String(), "w"), strings.EqualFold(msg.String(), "e"):
 		keyName := strings.ToLower(msg.String())
 		if choice, ok := m.approvalChoiceByKey(keyName); ok {
 			m.resolvePendingApprovalWithScope(approvalResponseForScope(choice.ScopeKind), choice.ScopeKind)

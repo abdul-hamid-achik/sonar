@@ -23,6 +23,11 @@ There is no "allow everything". Each choice binds exactly one thing:
 | session | this same request again, for this session |
 | tool / path / prefix | one tool, one path, or one command prefix, for this session |
 | workspace | the same, saved durably for this workspace |
+| server | every tool from the call's MCP server, saved durably — the first prompt from a server can be its last |
+
+The server grant is approval-only: it answers the ask, it never reclassifies
+the call's effect. Manage it with `/permissions allow-server <name>` and
+`forget-server <name>`.
 
 For MCP, the config can also grant trust at the server level: `all` /
 `all_servers` run a whole (downstream) server unattended in AUTO while NORMAL

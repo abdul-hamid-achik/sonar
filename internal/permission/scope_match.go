@@ -538,6 +538,17 @@ func NormalizeMCPToolName(name string) (string, bool) {
 	return name, true
 }
 
+// NormalizeMCPServerName requires one bare effective server namespace — the
+// subject of a whole-server grant. It deliberately rejects the reserved __
+// delimiter so a namespaced tool name cannot be stored as a server.
+func NormalizeMCPServerName(name string) (string, bool) {
+	name = strings.TrimSpace(name)
+	if name == "" || len(name) > maxMCPServerBytes || strings.Contains(name, " ") || strings.Contains(name, "__") {
+		return "", false
+	}
+	return name, true
+}
+
 // PathGrantMatches compares canonical absolute paths for session_path grants.
 func PathGrantMatches(requestPath, grantedPath string) bool {
 	requestPath = filepath.Clean(strings.TrimSpace(requestPath))

@@ -17,20 +17,25 @@ const (
 	workspaceRulesVersion = 2
 	maxBashPrefixes       = 64
 	maxMCPTools           = 64
+	maxMCPServers         = 32
 	maxWritePaths         = 128
 	maxPrefixBytes        = 256
 	maxMCPToolBytes       = 256
+	maxMCPServerBytes     = 96
 	maxWritePathBytes     = 1024
 )
 
 // WorkspaceRules is the durable, workspace-scoped allow list for bash patterns,
-// exact MCP tool names, and exact write paths. It never grants remove/move
-// globally and is never loaded from a repository path (user config only).
+// exact MCP tool names, whole MCP server namespaces, and exact write paths. It
+// never grants remove/move globally and is never loaded from a repository path
+// (user config only). A server entry is approval-only: it answers the ask, it
+// never reclassifies the call's effect.
 type WorkspaceRules struct {
 	Version      int      `json:"version"`
 	Workspace    string   `json:"workspace"`
 	BashPrefixes []string `json:"bash_prefixes,omitempty"` // literal prefixes or trailing globs
 	MCPTools     []string `json:"mcp_tools,omitempty"`
+	MCPServers   []string `json:"mcp_servers,omitempty"` // effective server namespaces (gateway downstreams included)
 	WritePaths   []string `json:"write_paths,omitempty"` // workspace-relative paths for write/edit/mkdir
 	UpdatedAt    string   `json:"updated_at,omitempty"`
 }
@@ -254,6 +259,61 @@ func (s *WorkspaceRulesStore) RemoveMCPTool(workspace, tool string) (WorkspaceRu
 	return rules, true, nil
 }
 
+// AddMCPServer appends an effective MCP server namespace and saves.
+func (s *WorkspaceRulesStore) AddMCPServer(workspace, server string) (WorkspaceRules, error) {
+	server, ok := NormalizeMCPServerName(server)
+	if !ok {
+		return WorkspaceRules{}, fmt.Errorf("invalid MCP server %q (one namespace, no __)", server)
+	}
+	rules, err := s.Load(workspace)
+	if err != nil {
+		return WorkspaceRules{}, err
+	}
+	for _, existing := range rules.MCPServers {
+		if existing == server {
+			return rules, nil
+		}
+	}
+	if len(rules.MCPServers) >= maxMCPServers {
+		return WorkspaceRules{}, fmt.Errorf("MCP server limit (%d) reached", maxMCPServers)
+	}
+	rules.MCPServers = append(rules.MCPServers, server)
+	sort.Strings(rules.MCPServers)
+	if err := s.Save(rules); err != nil {
+		return WorkspaceRules{}, err
+	}
+	return rules, nil
+}
+
+// RemoveMCPServer deletes a server allow when present.
+func (s *WorkspaceRulesStore) RemoveMCPServer(workspace, server string) (WorkspaceRules, bool, error) {
+	server, ok := NormalizeMCPServerName(server)
+	if !ok {
+		return WorkspaceRules{}, false, fmt.Errorf("invalid MCP server %q", server)
+	}
+	rules, err := s.Load(workspace)
+	if err != nil {
+		return WorkspaceRules{}, false, err
+	}
+	next := rules.MCPServers[:0]
+	removed := false
+	for _, existing := range rules.MCPServers {
+		if existing == server {
+			removed = true
+			continue
+		}
+		next = append(next, existing)
+	}
+	rules.MCPServers = next
+	if !removed {
+		return rules, false, nil
+	}
+	if err := s.Save(rules); err != nil {
+		return WorkspaceRules{}, false, err
+	}
+	return rules, true, nil
+}
+
 // AddWritePath appends a workspace-relative path grant for write/edit/mkdir.
 func (s *WorkspaceRulesStore) AddWritePath(workspace, path string) (WorkspaceRules, error) {
 	workspace, err := canonicalizeWorkspace(workspace)
@@ -357,6 +417,20 @@ func (r WorkspaceRules) AllowsMCPTool(tool string) bool {
 	return false
 }
 
+// AllowsMCPServer reports a whole-server allow for one effective namespace.
+func (r WorkspaceRules) AllowsMCPServer(server string) bool {
+	server = strings.TrimSpace(server)
+	if server == "" {
+		return false
+	}
+	for _, allowed := range r.MCPServers {
+		if allowed == server {
+			return true
+		}
+	}
+	return false
+}
+
 // AllowsWritePath reports a durable path grant for write/edit/mkdir.
 func (r WorkspaceRules) AllowsWritePath(workspace, absolutePath string) bool {
 	for _, granted := range r.WritePaths {
@@ -412,6 +486,25 @@ func sanitizeWorkspaceRules(rules WorkspaceRules, workspace string) WorkspaceRul
 	}
 	sort.Strings(tools)
 	rules.MCPTools = tools
+
+	servers := make([]string, 0, len(rules.MCPServers))
+	seenServer := make(map[string]struct{}, len(rules.MCPServers))
+	for _, server := range rules.MCPServers {
+		normalized, ok := NormalizeMCPServerName(server)
+		if !ok {
+			continue
+		}
+		if _, dup := seenServer[normalized]; dup {
+			continue
+		}
+		seenServer[normalized] = struct{}{}
+		servers = append(servers, normalized)
+		if len(servers) >= maxMCPServers {
+			break
+		}
+	}
+	sort.Strings(servers)
+	rules.MCPServers = servers
 
 	paths := make([]string, 0, len(rules.WritePaths))
 	seenPath := make(map[string]struct{}, len(rules.WritePaths))

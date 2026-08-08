@@ -23,6 +23,7 @@ const (
 	permissionsRevokeSession
 	permissionsForgetBash
 	permissionsForgetMCP
+	permissionsForgetMCPServer
 	permissionsForgetPath
 )
 
@@ -131,7 +132,7 @@ func (m *Model) permissionsPanelItems() []permissionsItem {
 		value:       "slash",
 		description: "Use /permissions import [--replace] <path>",
 	})
-	ruleTotal := len(rules.BashPrefixes) + len(rules.MCPTools) + len(rules.WritePaths)
+	ruleTotal := len(rules.BashPrefixes) + len(rules.MCPTools) + len(rules.MCPServers) + len(rules.WritePaths)
 	items = append(items, permissionsItem{
 		action: permissionsClearRules, title: "Clear workspace rules",
 		value:       fmt.Sprintf("%d", ruleTotal),
@@ -148,6 +149,12 @@ func (m *Model) permissionsPanelItems() []permissionsItem {
 		items = append(items, permissionsItem{
 			action: permissionsForgetMCP, title: "MCP rule",
 			value: tool, description: "Remove this durable MCP tool allow", data: tool,
+		})
+	}
+	for _, server := range rules.MCPServers {
+		items = append(items, permissionsItem{
+			action: permissionsForgetMCPServer, title: "MCP server rule",
+			value: server, description: "Remove this whole-server allow (every tool, approval only)", data: server,
 		})
 	}
 	for _, path := range rules.WritePaths {
@@ -270,6 +277,19 @@ func (m *Model) activatePermissionsItem(item permissionsItem) tea.Cmd {
 			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "No matching MCP rule."})
 		} else {
 			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "Removed durable MCP rule."})
+		}
+		m.refreshTranscript()
+		m.refreshPermissionsPanel()
+	case permissionsForgetMCPServer:
+		if m.agent == nil {
+			return nil
+		}
+		if _, removed, err := m.agent.RemoveWorkspaceMCPServer(item.data); err != nil {
+			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
+		} else if !removed {
+			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "No matching MCP server rule."})
+		} else {
+			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "Removed whole-server MCP rule."})
 		}
 		m.refreshTranscript()
 		m.refreshPermissionsPanel()

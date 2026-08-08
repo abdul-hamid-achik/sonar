@@ -3,11 +3,14 @@ package ui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/abdul-hamid-achik/sonar/internal/agent"
 )
 
 func TestComposerRemainsEditableDuringOrdinaryTurn(t *testing.T) {
@@ -255,5 +258,35 @@ func TestGoalTurnDoesNotExposeOrdinaryFollowUpQueue(t *testing.T) {
 	m = updated.(*Model)
 	if got := m.input.Value(); got != "" {
 		t.Fatalf("goal turn accepted hidden composer input: %q", got)
+	}
+}
+
+func TestIterationLimitArmsEnterToContinue(t *testing.T) {
+	m := newTestModel(t)
+	m.state = StateStreaming
+
+	_ = m.handleAgentDone(AgentDoneMsg{
+		Err: fmt.Errorf("%w (10)", agent.ErrMaxIterations),
+	}, nil)
+
+	if !m.iterationLimitContinue {
+		t.Fatal("iteration-limit turn did not arm the continue gesture")
+	}
+	found := false
+	for _, entry := range m.entries {
+		if entry.Kind == "system" && strings.Contains(entry.Content, "enter on the empty composer") {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("no system entry advertises the continue gesture")
+	}
+
+	// A cancelled turn must not arm it.
+	m2 := newTestModel(t)
+	m2.state = StateStreaming
+	_ = m2.handleAgentDone(AgentDoneMsg{Err: context.Canceled}, nil)
+	if m2.iterationLimitContinue {
+		t.Fatal("cancelled turn armed the continue gesture")
 	}
 }

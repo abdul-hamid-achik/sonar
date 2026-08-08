@@ -80,6 +80,7 @@ type Context struct {
 	// Durable workspace rules (user config; not repository files).
 	WorkspaceBashPrefixes []string
 	WorkspaceMCPTools     []string
+	WorkspaceMCPServers   []string
 	WorkspaceWritePaths   []string
 }
 
@@ -207,9 +208,11 @@ const (
 	ActionPermissionsRevoke             // Revoke session grants for one tool (Data = tool; empty = all)
 	ActionPermissionsAllowBash          // Persist workspace bash prefix/pattern (Data = pattern)
 	ActionPermissionsAllowMCP           // Persist exact MCP tool allow (Data = tool)
+	ActionPermissionsAllowMCPServer     // Persist whole-server MCP allow (Data = namespace)
 	ActionPermissionsAllowPath          // Persist write/edit/mkdir path (Data = path)
 	ActionPermissionsForgetBash         // Remove workspace bash prefix (Data = prefix)
 	ActionPermissionsForgetMCP          // Remove exact MCP tool allow (Data = tool)
+	ActionPermissionsForgetMCPServer    // Remove whole-server MCP allow (Data = namespace)
 	ActionPermissionsForgetPath         // Remove write path allow (Data = path)
 	ActionPermissionsExport             // Export durable rules (Data = path; empty = default)
 	ActionPermissionsImport             // Import durable rules (Data = path[|replace])

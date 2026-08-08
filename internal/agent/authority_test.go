@@ -1009,3 +1009,64 @@ func TestAnnotatedReadOnlyContractFailsClosed(t *testing.T) {
 		}
 	}
 }
+
+func TestMCPServerGrantCoversEveryToolOfTheNamespace(t *testing.T) {
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+	ag.SetTrustedLocalMCPServers([]config.ServerConfig{{Name: "mcphub", Command: "mcphub"}})
+
+	call := llm.ToolCall{Name: "mcphub__mcphub_call_tool", Arguments: map[string]any{
+		"server": "blankcode", "tool": "whoami", "arguments": map[string]any{},
+	}}
+	preview := ag.buildApprovalPreview(context.Background(), AuthorityNormal, call, "hash-a")
+	if preview.MCPServer != "blankcode" {
+		t.Fatalf("preview.MCPServer = %q, want the downstream namespace", preview.MCPServer)
+	}
+
+	request := permission.ApprovalRequest{
+		ToolName: call.Name, Args: call.Arguments, Preview: preview,
+		Scope: permission.ApprovalScope{Workspace: "ws"},
+	}
+	applySessionScope(&request, permission.ScopeSessionMCPServer)
+	if request.Scope.Kind != permission.ScopeSessionMCPServer || request.Scope.Resource != "blankcode" {
+		t.Fatalf("scope = %+v, want session_mcp_server/blankcode", request.Scope)
+	}
+	ag.rememberSessionApproval(request)
+
+	// A DIFFERENT tool from the same downstream is covered by the one grant.
+	other := llm.ToolCall{Name: "mcphub__mcphub_call_tool", Arguments: map[string]any{
+		"server": "blankcode", "tool": "get_progress", "arguments": map[string]any{},
+	}}
+	otherRequest := permission.ApprovalRequest{
+		ToolName: other.Name, Args: other.Arguments,
+		Preview: ag.buildApprovalPreview(context.Background(), AuthorityNormal, other, "hash-b"),
+		Scope:   permission.ApprovalScope{Workspace: "ws"},
+	}
+	if !ag.hasSessionApproval(otherRequest) {
+		t.Fatal("second tool from the granted server still asks")
+	}
+
+	// A different downstream does not inherit the grant.
+	alien := llm.ToolCall{Name: "mcphub__mcphub_call_tool", Arguments: map[string]any{
+		"server": "filesystem", "tool": "whoami", "arguments": map[string]any{},
+	}}
+	alienRequest := permission.ApprovalRequest{
+		ToolName: alien.Name, Args: alien.Arguments,
+		Preview: ag.buildApprovalPreview(context.Background(), AuthorityNormal, alien, "hash-c"),
+		Scope:   permission.ApprovalScope{Workspace: "ws"},
+	}
+	if ag.hasSessionApproval(alienRequest) {
+		t.Fatal("ungranted server inherited the grant")
+	}
+
+	// The durable workspace rule takes the same subject.
+	ag.mu.Lock()
+	ag.workspaceRules = permission.WorkspaceRules{MCPServers: []string{"blankcode"}}
+	ag.mu.Unlock()
+	if !ag.hasWorkspaceRuleApproval(other) {
+		t.Fatal("durable server rule did not cover the call")
+	}
+	if ag.hasWorkspaceRuleApproval(alien) {
+		t.Fatal("durable server rule leaked to another server")
+	}
+}

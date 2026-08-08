@@ -212,7 +212,13 @@ type ApprovalPreview struct {
 	// string rather than an index because the UI must never re-split a command
 	// the host already split: two splitters agree until they do not, and a
 	// marker on the wrong segment is worse than none.
-	CommandSegments   string
+	CommandSegments string
+	// MCPServer is the call's effective server namespace — the gateway's
+	// downstream for proxied calls, the server itself otherwise — derived by
+	// the host with its gateway knowledge, never re-parsed by the UI. It is
+	// the subject a whole-server grant binds to; empty means no such grant
+	// can be offered (for example, an inexact lazy target).
+	MCPServer         string
 	Path              string
 	SourcePath        string
 	DestinationPath   string
@@ -255,6 +261,11 @@ const (
 	// ScopeSessionMCPTool grants one exact namespaced MCP tool (any args) for
 	// the rest of the process. Resource is empty. Process-local only.
 	ScopeSessionMCPTool = "session_mcp_tool"
+	// ScopeSessionMCPServer grants every tool of one effective server
+	// namespace (gateway downstreams included) for the rest of the process.
+	// Resource is the namespace. Approval-only: it answers the ask and never
+	// reclassifies the call's effect. Process-local only.
+	ScopeSessionMCPServer = "session_mcp_server"
 
 	// SessionPathFamily is the grant-key tool slot for path-scoped session
 	// grants so write, edit, and mkdir share one path approval.
@@ -265,6 +276,7 @@ const (
 	// corresponding process-local session scope.
 	DurableBashPrefix = "workspace_bash_prefix"
 	DurableMCPTool    = "workspace_mcp_tool"
+	DurableMCPServer  = "workspace_mcp_server"
 	DurableWritePath  = "workspace_write_path"
 )
 
@@ -272,7 +284,7 @@ const (
 func KnownSessionScopeKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
 	case "", ScopeExactRequest, ScopeSessionTool, ScopeSessionPath,
-		ScopeSessionBashPrefix, ScopeSessionMCPTool:
+		ScopeSessionBashPrefix, ScopeSessionMCPTool, ScopeSessionMCPServer:
 		return true
 	default:
 		return false
@@ -355,6 +367,17 @@ func AllowSessionMCPTool() ApprovalResponse {
 		Allowed:   true,
 		Always:    true,
 		ScopeKind: ScopeSessionMCPTool,
+	}
+}
+
+// AllowSessionMCPServer returns a session grant for every tool of the call's
+// effective server namespace. Approval-only; effect class is untouched.
+func AllowSessionMCPServer() ApprovalResponse {
+	return ApprovalResponse{
+		Decision:  DecisionAllowSession,
+		Allowed:   true,
+		Always:    true,
+		ScopeKind: ScopeSessionMCPServer,
 	}
 }
 

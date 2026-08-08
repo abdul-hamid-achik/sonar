@@ -289,6 +289,44 @@ func (a *Agent) trustedMCPContract(call llm.ToolCall) (mcpAuthorityContract, boo
 	return mcpAuthorityContract{}, false
 }
 
+// mcpServerNamespaceForCall names the call's effective server namespace — the
+// subject a whole-server grant binds to. For a trusted MCPHub gateway the
+// namespace is the downstream target (from the eager three-part name or the
+// exact lazy arguments; an inexact lazy target yields "", so no server grant
+// can cover a call whose destination the host cannot pin). For everything
+// else it is the connected server itself. Returns "" for non-MCP names.
+func (a *Agent) mcpServerNamespaceForCall(tc llm.ToolCall) string {
+	if tc.Name == "" || strings.TrimSpace(tc.Name) != tc.Name {
+		return ""
+	}
+	parts := strings.Split(tc.Name, "__")
+	if len(parts) < 2 {
+		return ""
+	}
+	head := parts[0]
+	server, trusted := a.trustedMCPServer(head)
+	if !trusted || server.gateway != config.MCPTrustGatewayMCPHub {
+		if len(parts) == 2 {
+			return head
+		}
+		return ""
+	}
+	switch {
+	case len(parts) == 2 && parts[1] == "mcphub_call_tool":
+		downstream, _, exact := exactLazyMCPHubTarget(tc.Arguments)
+		if !exact {
+			return ""
+		}
+		return downstream
+	case len(parts) == 3:
+		return parts[1]
+	case len(parts) == 2:
+		return head
+	default:
+		return ""
+	}
+}
+
 // serverTrustApprovalContract is the approval-only grant behind `all` and
 // `all_servers`: auto under AUTO authority, effectful class. authorityAutoApproves
 // reaches its non-read branch, which requires AuthorityAutoScoped — so NORMAL

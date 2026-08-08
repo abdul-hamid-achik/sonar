@@ -534,6 +534,16 @@ func RegisterBuiltins(r *Registry) {
 					return Result{Error: "usage: /permissions forget-mcp <server__tool>"}
 				}
 				return Result{Action: ActionPermissionsForgetMCP, Data: strings.TrimSpace(args[1])}
+			case "allow-server":
+				if len(args) != 2 {
+					return Result{Error: "usage: /permissions allow-server <server>  (every tool, approval only)"}
+				}
+				return Result{Action: ActionPermissionsAllowMCPServer, Data: strings.TrimSpace(args[1])}
+			case "forget-server":
+				if len(args) != 2 {
+					return Result{Error: "usage: /permissions forget-server <server>"}
+				}
+				return Result{Action: ActionPermissionsForgetMCPServer, Data: strings.TrimSpace(args[1])}
 			case "allow-path":
 				if len(args) < 2 {
 					return Result{Error: "usage: /permissions allow-path <path>"}
@@ -1190,9 +1200,10 @@ func formatPermissionsStatus(ctx *Context) string {
 		b.WriteString("Revoke with: /permissions revoke [tool] · clear all: /permissions clear\n")
 	}
 	b.WriteString("\n")
-	if len(ctx.WorkspaceBashPrefixes) == 0 && len(ctx.WorkspaceMCPTools) == 0 && len(ctx.WorkspaceWritePaths) == 0 {
+	if len(ctx.WorkspaceBashPrefixes) == 0 && len(ctx.WorkspaceMCPTools) == 0 &&
+		len(ctx.WorkspaceMCPServers) == 0 && len(ctx.WorkspaceWritePaths) == 0 {
 		b.WriteString("Workspace rules: none\n")
-		b.WriteString("Add with: /permissions allow-bash <pattern> · allow-mcp <server__tool> · allow-path <path>\n")
+		b.WriteString("Add with: /permissions allow-bash <pattern> · allow-mcp <server__tool> · allow-server <server> · allow-path <path>\n")
 	} else {
 		b.WriteString("Workspace rules (durable for this workspace):\n")
 		if len(ctx.WorkspaceBashPrefixes) == 0 {
@@ -1211,6 +1222,12 @@ func formatPermissionsStatus(ctx *Context) string {
 				fmt.Fprintf(&b, "    - %s\n", tool)
 			}
 		}
+		if len(ctx.WorkspaceMCPServers) != 0 {
+			b.WriteString("  MCP servers (every tool, approval only):\n")
+			for _, server := range ctx.WorkspaceMCPServers {
+				fmt.Fprintf(&b, "    - %s\n", server)
+			}
+		}
 		if len(ctx.WorkspaceWritePaths) == 0 {
 			b.WriteString("  write paths: none\n")
 		} else {
@@ -1219,7 +1236,7 @@ func formatPermissionsStatus(ctx *Context) string {
 				fmt.Fprintf(&b, "    - %s\n", path)
 			}
 		}
-		b.WriteString("Remove with: /permissions forget-bash · forget-mcp · forget-path · clear-rules\n")
+		b.WriteString("Remove with: /permissions forget-bash · forget-mcp · forget-server · forget-path · clear-rules\n")
 	}
 	b.WriteString("\n")
 	b.WriteString("Portable transfer: /permissions export [path] · /permissions import [--replace] <path>\n")

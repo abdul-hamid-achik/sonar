@@ -158,6 +158,19 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 			CompactLabel: saveCompact,
 			ScopeKind:    permission.DurableMCPTool,
 		})
+		// Whole-server grant, only when the host could pin the call's
+		// effective namespace. One press makes the first prompt from a
+		// server the last one for this workspace.
+		if server := strings.TrimSpace(preview.MCPServer); server != "" {
+			serverHint := compactApprovalHint(server, 24)
+			choices = append(choices, approvalChoice{
+				Decision:     permission.DecisionAllowSession,
+				Key:          "e",
+				Label:        "save every tool from this server · " + serverHint,
+				CompactLabel: "server · " + serverHint,
+				ScopeKind:    permission.DurableMCPServer,
+			})
+		}
 	}
 	return choices
 }
@@ -289,7 +302,8 @@ func (m *Model) resolvePendingApproval(response permission.ApprovalResponse) {
 
 func (m *Model) resolvePendingApprovalWithScope(response permission.ApprovalResponse, scopeKind string) {
 	anchor := m.captureApprovalTranscriptAnchor()
-	if scopeKind == permission.DurableBashPrefix || scopeKind == permission.DurableMCPTool || scopeKind == permission.DurableWritePath {
+	if scopeKind == permission.DurableBashPrefix || scopeKind == permission.DurableMCPTool ||
+		scopeKind == permission.DurableMCPServer || scopeKind == permission.DurableWritePath {
 		if err := m.persistWorkspaceRuleFromApproval(scopeKind); err != nil {
 			m.entries = append(m.entries, ChatEntry{
 				Kind:    "error",
@@ -378,6 +392,10 @@ func approvalResponseForScope(scopeKind string) permission.ApprovalResponse {
 		return permission.AllowSessionBashPrefix()
 	case permission.ScopeSessionMCPTool, permission.DurableMCPTool:
 		return permission.AllowSessionMCPTool()
+	case permission.ScopeSessionMCPServer, permission.DurableMCPServer:
+		// Durable save is applied by the UI first; the agent also receives a
+		// process-local server grant so THIS session stops asking immediately.
+		return permission.AllowSessionMCPServer()
 	case permission.DurableWritePath:
 		// Durable path save + process-local path grant for this turn.
 		return permission.AllowSessionPath()
@@ -416,6 +434,13 @@ func (m *Model) persistWorkspaceRuleFromApproval(scopeKind string) error {
 		return err
 	case permission.DurableMCPTool:
 		_, err := m.agent.AddWorkspaceMCPTool(m.pendingApproval.ToolName)
+		return err
+	case permission.DurableMCPServer:
+		server := strings.TrimSpace(m.pendingApproval.Preview.MCPServer)
+		if server == "" {
+			return fmt.Errorf("approval names no effective MCP server")
+		}
+		_, err := m.agent.AddWorkspaceMCPServer(server)
 		return err
 	case permission.DurableWritePath:
 		path := m.pendingApproval.Preview.Path
@@ -971,6 +996,11 @@ func approvalScopeLabel(scope permission.ApprovalScope) string {
 		return "Bash prefix · this process"
 	case permission.ScopeSessionMCPTool:
 		return "This MCP tool · any args · this process"
+	case permission.ScopeSessionMCPServer:
+		if resource := strings.TrimSpace(scope.Resource); resource != "" {
+			return "Every tool from " + compactApprovalHint(resource, 32) + " · this process"
+		}
+		return "Every tool from this server · this process"
 	default:
 		return "This request only"
 	}
