@@ -33,6 +33,13 @@ func (m *Model) View() tea.View {
 	if m.voiceStageActive() {
 		return m.renderVoiceStageView()
 	}
+	// The subagents view is the same shape: watching parallel workers is a
+	// full-attention activity, so the view takes the whole screen — children
+	// as tabs, the selected one's transcript below — rather than a modal
+	// squeezed over a conversation nobody is reading meanwhile.
+	if m.overlay == OverlaySubagents && m.subagentsPanelState != nil {
+		return m.renderSubagentsView()
+	}
 
 	// Session header + conversation + footer share one geometry snapshot.
 	// Infrequent controls remain overlays over these stable base rectangles.
@@ -103,8 +110,6 @@ func (m *Model) View() tea.View {
 			overlay = m.renderContextDoctor()
 		case OverlayRuntimeStatus:
 			overlay = m.renderRuntimeStatus()
-		case OverlaySubagents:
-			overlay = m.renderSubagentsPanel()
 		case OverlayGoalInspector:
 			if m.goalInspectorState != nil {
 				overlay = m.goalInspectorState.View()

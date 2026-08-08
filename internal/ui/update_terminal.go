@@ -257,9 +257,9 @@ func (m *Model) handleMouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
 				m.runtimeStatusState.Viewport, _ = m.runtimeStatusState.Viewport.Update(msg)
 			}
 		case OverlaySubagents:
-			if m.subagentsPanelState != nil {
-				m.subagentsPanelState.Viewport, _ = m.subagentsPanelState.Viewport.Update(msg)
-			}
+			// Full-screen view: recompute geometry rather than nudging the
+			// old viewport, so the tabs and transcript refill the new size.
+			m.refreshSubagentsPanel(true)
 		case OverlayGoalInspector:
 			if m.goalInspectorState != nil {
 				m.goalInspectorState.updateViewport(msg)

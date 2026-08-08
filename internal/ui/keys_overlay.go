@@ -104,9 +104,9 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		case "q":
 			m.closeSubagentsPanel()
 			return tea.ClearScreen, true
-		case "up":
+		case "left", "h":
 			m.moveSubagentSelection(-1)
-		case "down":
+		case "right", "l", "tab":
 			m.moveSubagentSelection(1)
 		default:
 			if m.subagentsPanelState != nil {

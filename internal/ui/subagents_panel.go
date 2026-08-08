@@ -6,21 +6,22 @@ import (
 	"time"
 
 	"charm.land/bubbles/v2/viewport"
-	"charm.land/lipgloss/v2"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
 )
 
-// The subagents panel is the switcher the feature exists for: every child on
-// one screen, arrows to move between them, and the selected child's activity
-// and answer-so-far underneath — present tense while it runs, the settled
-// answer once it stops. It reads live Agent snapshots on every rebuild, so
-// "live" is nothing more than a repaint tick while the panel is open.
+// The subagents view is the switcher the feature exists for: every child on
+// one screen, the selected child's activity and answer-so-far underneath —
+// present tense while it runs, the settled answer once it stops. It reads
+// live Agent snapshots on every rebuild, so "live" is nothing more than a
+// repaint tick while the view is open. It owns the whole screen, like the
+// voice stage, rather than sitting in a modal over a conversation nobody is
+// reading meanwhile.
 //
-// Selection and scroll deliberately use different keys (↑/↓ selects a child,
-// j/k and page keys scroll its transcript) so switching children — the whole
-// point — never fights reading one of them.
+// Selection and scroll deliberately use different axes (←/→ switches a
+// child, ↑/↓ and page keys scroll its transcript) so switching children —
+// the whole point — never fights reading one of them.
 type SubagentsPanelState struct {
 	Viewport viewport.Model
 	Selected int
@@ -70,9 +71,10 @@ func (m *Model) refreshSubagentsPanel(preserveOffset bool) {
 	if preserveOffset {
 		offset = state.Viewport.YOffset()
 	}
-	width := pickerListWidth(m.width)
+	// The view owns the whole screen: tabs row + title above, hints below.
+	width := max(20, m.width-4)
 	content := m.buildSubagentsContent(width)
-	height := min(max(1, lipgloss.Height(content)), max(1, m.height-6))
+	height := max(3, m.height-6)
 	vp := viewport.New(
 		viewport.WithWidth(width),
 		viewport.WithHeight(height),
@@ -137,7 +139,7 @@ func (m *Model) buildSubagentsContent(width int) string {
 	}
 
 	selected := snapshots[state.Selected]
-	b.WriteString(strings.Repeat("─", max(8, min(width-2, 60))))
+	b.WriteString(strings.Repeat("─", max(8, min(width-2, 120))))
 	b.WriteString("\n")
 	prompt := sanitizeTerminalSingleLine(selected.Prompt)
 	if runes := []rune(prompt); len(runes) > 160 {
@@ -174,20 +176,32 @@ func (m *Model) buildSubagentsContent(width int) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
-func (m *Model) renderSubagentsPanel() string {
-	if m.subagentsPanelState == nil {
-		return ""
-	}
+// renderSubagentsView owns the entire screen, like the voice stage: watching
+// parallel workers is a full-attention activity, not a modal over a
+// conversation nobody is reading meanwhile. It may hide prose, never an
+// action and never an error.
+func (m *Model) renderSubagentsView() tea.View {
 	vp := &m.subagentsPanelState.Viewport
-	content := m.styles.OverlayTitle.Render("Subagents") + "\n\n" + vp.View()
+	var b strings.Builder
+	b.WriteString(m.styles.OverlayTitle.Render("Subagents"))
+	b.WriteString("\n\n")
+	b.WriteString(vp.View())
+	b.WriteString("\n")
 	hints := []keyHint{
-		{Key: "esc/q", Action: m.overlayCloseLabel()},
-		{Key: "↑/↓", Action: "switch"},
+		{Key: "esc", Action: "back"},
+		{Key: "←/→", Action: "switch subagent"},
+		{Key: "↑/↓", Action: "scroll"},
 	}
-	if !vp.AtBottom() || vp.YOffset() > 0 {
-		hints = append(hints, keyHint{Key: "j/k", Action: "scroll"})
+	if !vp.AtBottom() {
+		hints = append(hints, keyHint{Key: "↓", Action: "more"})
 	}
-	return m.renderPickerFrame(content, m.renderKeyHints(pickerListWidth(m.width), hints...))
+	b.WriteString(m.renderKeyHints(max(20, m.width-4), hints...))
+
+	view := tea.NewView(b.String())
+	view.AltScreen = true
+	view.WindowTitle = m.windowTitleBase() + " · agents"
+	m.applyViewTheme(&view)
+	return view
 }
 
 func latestSubagentActivity(snapshot agent.SubagentSnapshot) string {
