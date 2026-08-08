@@ -103,6 +103,8 @@ func (m *Model) View() tea.View {
 			overlay = m.renderContextDoctor()
 		case OverlayRuntimeStatus:
 			overlay = m.renderRuntimeStatus()
+		case OverlaySubagents:
+			overlay = m.renderSubagentsPanel()
 		case OverlayGoalInspector:
 			if m.goalInspectorState != nil {
 				overlay = m.goalInspectorState.View()
@@ -157,10 +159,16 @@ func (m *Model) View() tea.View {
 	// sonar tabs without exposing a full private path through terminal
 	// title integrations or window-manager history.
 	windowTitle := m.windowTitleBase()
-	switch m.state {
-	case StateWaiting:
+	switch {
+	case m.windowAttentionRequested():
+		// Blocked on a human decision (or finished unseen). The marker leads
+		// so tab-width truncation cannot hide it, and the suffix replaces
+		// progress text that would otherwise claim the model is still working
+		// while it waits on you.
+		v.WindowTitle = "\u25cf " + windowTitle + " \u00b7 needs you"
+	case m.state == StateWaiting:
 		v.WindowTitle = windowTitle + " \u00b7 thinking..."
-	case StateStreaming:
+	case m.state == StateStreaming:
 		v.WindowTitle = windowTitle + " \u00b7 streaming..."
 	default:
 		switch {

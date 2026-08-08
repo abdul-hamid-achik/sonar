@@ -510,6 +510,11 @@ func (m *Model) voiceMayNarrate() bool {
 func (m *Model) noteTerminalFocus(focused bool) {
 	m.terminalFocusReported = true
 	m.terminalFocused = focused
+	if focused {
+		// Arriving is acknowledging: the tab marker for a finished turn
+		// clears on focus, while prompt-shaped states keep it until answered.
+		m.turnUnseen = false
+	}
 	if focused && m.voiceActive() && !m.voice.config.SpeaksWhileFocused() {
 		m.silenceVoice()
 	}

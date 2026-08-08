@@ -381,13 +381,22 @@ func (m *Model) handleAgentDone(msg AgentDoneMsg, cmds []tea.Cmd) []tea.Cmd {
 	// the one place the whole turn's outcome is known. Bounded by how long it
 	// ran: announcing a four-second answer says nothing the answer did not.
 	m.speakTurnOutcome(m.lastTurnDuration, msg.Err != nil && !turnCancelled, turnCancelled)
+	// The tab marker is the visual sibling of that spoken alert: a turn that
+	// settled while the window was unfocused deserves a glance.
+	if m.terminalFocusReported && !m.terminalFocused && !turnCancelled {
+		m.turnUnseen = true
+	}
 	m.state = StateIdle
-	// After the first successful turn, upgrade the provisional first-line title
-	// with a short background model naming job (workspace + user + assistant).
-	if msg.Err == nil {
-		if cmd := m.scheduleSessionTitleGen(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+	// Upgrade the provisional first-line title with a short background model
+	// naming job (workspace + user + assistant). Deliberately not gated on
+	// msg.Err: sessions whose FIRST turn died — at the iteration ceiling, on a
+	// cancel — are precisely the ones reopened later from the picker, where a
+	// raw prompt line is least useful. Three of the four blankcode sessions
+	// measured on 2026-08-08 kept their provisional titles for this reason.
+	// The schedule itself still refuses when the provider is offline, and a
+	// failed generation keeps the provisional title for the next retry.
+	if cmd := m.scheduleSessionTitleGen(); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 	if msg.Err != nil && !rolledBackPrompt {
 		m.restoreQueuedFollowUp()

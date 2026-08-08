@@ -897,6 +897,12 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		m.openPermissionsPanel()
 		return nil
 
+	case command.ActionSubagentsStatus:
+		m.preemptTranscriptSearch()
+		m.clearViewerModals(false)
+		m.overlayParent = OverlayNone
+		return m.openSubagentsPanel()
+
 	case command.ActionPermissionsAudit:
 		return m.auditWorkspaceApprovals()
 

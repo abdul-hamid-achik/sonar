@@ -294,6 +294,7 @@ type Model struct {
 	providerSwitchCancel     context.CancelFunc
 	modePickerState          *ModePickerState
 	runtimeStatusState       *RuntimeStatusState
+	subagentsPanelState      *SubagentsPanelState
 	planFormState            *PlanFormState
 	goalFormState            *GoalForm
 	goalInspectorState       *GoalInspector
@@ -409,6 +410,9 @@ type Model struct {
 	// work an interactive turn left unfinished at its iteration ceiling.
 	// AUTO chains segments automatically; here the human is the chain link.
 	iterationLimitContinue bool
+	// turnUnseen marks a turn that finished while the window was unfocused;
+	// the tab title carries the attention marker until focus returns.
+	turnUnseen bool
 	turnMessagesBefore []llm.Message
 	turnPromptFloor    agent.ContextPromptFloor
 	turnPrompt         string
@@ -748,6 +752,9 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 
 	case activityHeartbeatMsg:
 		return m, m.handleActivityHeartbeat(msg)
+
+	case subagentsPanelTickMsg:
+		return m, m.handleSubagentsPanelTick()
 
 	case VoiceTranscriptMsg:
 		return m, m.handleVoiceTranscript(msg)
