@@ -79,7 +79,7 @@ type hostedDriver struct {
 // pipeline refuses before opening a microphone: a driver that authenticates on
 // the first sentence reports its failure at the moment somebody was waiting to
 // hear something.
-func newHostedDriver(voice string) (Driver, error) {
+func newHostedDriver(voice, model, endpoint string) (Driver, error) {
 	key := strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
 	if key == "" {
 		return nil, fmt.Errorf("speech: hosted voice needs OPENAI_API_KEY")
@@ -93,10 +93,16 @@ func newHostedDriver(voice string) (Driver, error) {
 	if voice = strings.TrimSpace(voice); voice == "" {
 		voice = hostedVoiceID
 	}
+	if model = strings.TrimSpace(model); model == "" {
+		model = hostedModel
+	}
+	if endpoint = strings.TrimSpace(endpoint); endpoint == "" {
+		endpoint = hostedEndpoint
+	}
 	return &hostedDriver{
-		endpoint: hostedEndpoint,
+		endpoint: endpoint,
 		key:      key,
-		model:    hostedModel,
+		model:    model,
 		voice:    voice,
 		client:   &http.Client{Timeout: hostedRequestTimeout},
 	}, nil

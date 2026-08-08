@@ -32,7 +32,7 @@ func TestTheHostedDriverIsToldNothing(t *testing.T) {
 // hear something.
 func TestTheHostedDriverRefusesBeforeItSpeaks(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
-	if _, err := newHostedDriver(""); err == nil {
+	if _, err := newHostedDriver("", "", ""); err == nil {
 		t.Fatal("a hosted driver was built with no credential")
 	} else if !strings.Contains(err.Error(), "OPENAI_API_KEY") {
 		t.Fatalf("the refusal does not name what is missing: %v", err)

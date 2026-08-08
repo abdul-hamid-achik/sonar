@@ -3,40 +3,88 @@
 package speech
 
 import (
+	"bufio"
 	"os"
 	"os/exec"
+	"strconv"
+	"strings"
+	"syscall"
 	"time"
 )
 
-// Linux and the rest reach a synthesizer through the same subprocess shape, but
-// none is part of a base system the way macOS ships `say`. Reporting false is
-// the honest answer until one is chosen and verified on a real host: a stub
-// that claimed a driver would let a caller enable voice and hear nothing, which
-// is worse than being told the host has none.
+// espeakPath is the synthesizer this platform speaks through: espeak-ng, found
+// on PATH rather than at a fixed location, because no Linux ships one in the
+// base system the way macOS ships `say`.
 //
-// espeak-ng and Piper are the candidates. Piper's upstream archived in October
-// 2025 and its active fork is GPL-3, which is a licensing decision for a
-// distributed binary rather than an implementation detail — so neither is
-// wired here until that call is made.
-func Available() bool { return false }
+// espeak-ng over Piper was a licensing call, not a quality one: Piper's
+// upstream archived in October 2025 and its active fork is GPL-3, which is a
+// decision about a distributed binary rather than an implementation detail.
+// espeak-ng sounds robotic beside it — and beside macOS's compact voices, for
+// that matter — but it is apt-installable, MIT-adjacent (GPL for the binary,
+// invoked here as a subprocess), reads stdin, and honours a rate and a voice,
+// which is every feature this package needs.
+//
+// Wired per its documented behaviour; unverified on a real Linux host, the
+// same honesty captureCommand carries below. Available() gates on the binary
+// actually being present, so a host without it is told so rather than left
+// silent — and `voice.provider: openai` needs none of this.
+const espeakPath = "espeak-ng"
 
-func synthesizerName() string { return "" }
+// espeakDefaultRate is words per minute. espeak-ng defaults to 175; the same
+// observation behind `say`'s 210 applies — a coding session is read while
+// working, and every voice interface that gets used at all runs faster than
+// its default.
+const espeakDefaultRate = 190
 
-func synthesizerCommand(string, int) (string, []string, error) {
-	return "", nil, ErrUnavailable
+func Available() bool {
+	path, err := exec.LookPath(espeakPath)
+	return err == nil && path != ""
 }
 
-func signalSynthesizer(*exec.Cmd) {}
+func synthesizerName() string { return espeakPath }
 
-// escapeSynthesizerCommands has nothing to escape until this platform names a
-// synthesizer. It is not a no-op by default: whichever driver is wired here
-// will have its own control channel — espeak-ng reads SSML on request and its
-// own markup otherwise — and returning the text unchanged is correct only for
-// a driver that has none. Whoever wires one owns this function too.
+func synthesizerCommand(voice string, rate int) (string, []string, error) {
+	if !Available() {
+		return "", nil, ErrUnavailable
+	}
+	if rate <= 0 {
+		rate = espeakDefaultRate
+	}
+	args := []string{"-s", strconv.Itoa(rate)}
+	if voice != "" {
+		// espeak-ng voices are language identifiers ("es", "en-us"), so the
+		// per-language voice map and this flag speak the same vocabulary.
+		args = append(args, "-v", voice)
+	}
+	// No operand: espeak-ng then reads stdin until it closes, the same shape
+	// `say` has — one process per run, sentences flowing in with no gap.
+	return espeakPath, args, nil
+}
+
+// signalSynthesizer asks the synthesizer to stop and lets it exit. SIGTERM
+// rather than SIGKILL for the same reason as on macOS: an uncatchable signal
+// denies the process the chance to release the audio device.
+func signalSynthesizer(command *exec.Cmd) {
+	if command == nil || command.Process == nil {
+		return
+	}
+	if err := command.Process.Signal(syscall.SIGTERM); err != nil {
+		_ = command.Process.Kill()
+	}
+}
+
+// escapeSynthesizerCommands is the identity here, and that is a verified
+// property rather than an omission: espeak-ng only interprets markup under
+// -m (SSML mode), which synthesizerCommand never passes. In plain-text mode
+// there is no control channel for a model's sentence to reach. If -m is ever
+// added, this function must learn to neutralise SSML first — the same
+// ordering rule `say`'s [[ ]] escaping documents.
 func escapeSynthesizerCommands(text string) string { return text }
 
-// sentencePause is likewise the driver's to define; espeak-ng spells the same
-// idea as an SSML <break>.
+// sentencePause has no inline spelling without SSML mode, and turning SSML on
+// to get one would open the control channel escapeSynthesizerCommands just
+// declared closed. espeak-ng inserts its own gap at sentence boundaries;
+// that has to be enough until a listener on a real host says otherwise.
 func sentencePause() string { return "" }
 
 // captureCommand records from ALSA, which is the one recorder present on a
@@ -72,6 +120,34 @@ func interruptRecorder(command *exec.Cmd) {
 	_ = command.Process.Signal(os.Interrupt)
 }
 
-// listHostVoices has nothing to list: Available reports false on this platform,
-// so no synthesizer is driven and no voice name would reach one.
-func listHostVoices() []hostVoice { return nil }
+// listHostVoices parses `espeak-ng --voices`.
+//
+// The format is columns: Pty Language Age/Gender VoiceName File Other. The
+// language column doubles as the locale — espeak-ng names voices by language
+// identifier — so both hostVoice fields come from one line without the
+// column-guessing `say -v ?` needs.
+func listHostVoices() []hostVoice {
+	if !Available() {
+		return nil
+	}
+	output, err := exec.Command(espeakPath, "--voices").Output()
+	if err != nil {
+		return nil
+	}
+	var voices []hostVoice
+	scanner := bufio.NewScanner(strings.NewReader(string(output)))
+	first := true
+	for scanner.Scan() {
+		if first {
+			// Header row.
+			first = false
+			continue
+		}
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 4 {
+			continue
+		}
+		voices = append(voices, hostVoice{name: fields[3], locale: fields[1]})
+	}
+	return voices
+}

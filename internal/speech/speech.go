@@ -107,6 +107,9 @@ type Speaker struct {
 	now func() time.Time
 
 	queue []utterance
+	// droppedStale counts sentences discarded at delivery time for waiting
+	// past staleUtteranceAfter. See DroppedStale.
+	droppedStale int
 	// busy is an utterance taken off the queue and not yet delivered. Speaking
 	// has to count it, or the rail reports silence during the gap between
 	// dequeue and the first byte written.
@@ -135,22 +138,62 @@ func New(voice string, rate int, voices map[string]string) (*Speaker, error) {
 	return NewWithProvider("", voice, rate, voices)
 }
 
+// ProviderNeedsHost reports whether the named provider synthesizes on this
+// machine and therefore needs the host synthesizer probe to pass. Hosted
+// drivers carry their own requirements — a key, a player process — and no
+// host synthesizer at all, so a caller that gates them on Available() refuses
+// voice on exactly the hosts the hosted engine exists to serve. An unknown
+// name answers false so it reaches NewWithProvider's informative error
+// instead of a generic "no synthesizer".
+func ProviderNeedsHost(provider string) bool {
+	switch strings.ToLower(strings.TrimSpace(provider)) {
+	case "", "say", "host", "local":
+		return true
+	default:
+		return false
+	}
+}
+
+// Config carries everything a Speaker's driver binds at construction. The
+// hosted fields are meaningful only under a hosted provider; the local `say`
+// driver has no model or endpoint to name.
+type Config struct {
+	Provider string
+	Voice    string
+	Rate     int
+	Voices   map[string]string
+	// HostedModel overrides the hosted synthesis model (default
+	// gpt-4o-mini-tts). HostedEndpoint overrides the URL — for
+	// OpenAI-compatible gateways and hermetic tests; the credential sent
+	// never changes with it.
+	HostedModel    string
+	HostedEndpoint string
+}
+
 // NewWithProvider returns a Speaker driven by the named provider.
 //
 // An unknown name is an error rather than a silent fallback to the host
 // synthesizer. Somebody who asked for a hosted voice and got the local one
 // would hear the exact failure they were trying to fix, with nothing saying so.
 func NewWithProvider(provider, voice string, rate int, voices map[string]string) (*Speaker, error) {
-	switch strings.ToLower(strings.TrimSpace(provider)) {
-	case "", "say", "host", "local":
-	case "openai":
-		driver, err := newHostedDriver(voice)
-		if err != nil {
-			return nil, err
+	return NewFromConfig(Config{Provider: provider, Voice: voice, Rate: rate, Voices: voices})
+}
+
+// NewFromConfig is NewWithProvider with the hosted overrides along for the
+// ride, so a caller with a config block does not lose fields in transit.
+func NewFromConfig(cfg Config) (*Speaker, error) {
+	provider, voice, rate, voices := cfg.Provider, cfg.Voice, cfg.Rate, cfg.Voices
+	if !ProviderNeedsHost(provider) {
+		switch strings.ToLower(strings.TrimSpace(provider)) {
+		case "openai":
+			driver, err := newHostedDriver(voice, cfg.HostedModel, cfg.HostedEndpoint)
+			if err != nil {
+				return nil, err
+			}
+			return newSpeaker(driver), nil
+		default:
+			return nil, fmt.Errorf("speech: unknown voice provider %q (say, openai)", provider)
 		}
-		return newSpeaker(driver), nil
-	default:
-		return nil, fmt.Errorf("speech: unknown voice provider %q (say, openai)", provider)
 	}
 	if !Available() {
 		return nil, ErrUnavailable
@@ -409,11 +452,28 @@ func (s *Speaker) take() (utterance, int, bool) {
 		if s.stale(next) {
 			// Dropped here rather than at enqueue, because whether a sentence is
 			// too late to say is only knowable at the moment it would be said.
+			// Counted, because a silent drop is indistinguishable from the
+			// feature being broken: /voice status reports the tally so missing
+			// audio has an explanation somewhere.
+			s.droppedStale++
 			continue
 		}
 		s.busy = true
 		return next, s.generation, true
 	}
+}
+
+// DroppedStale reports how many queued sentences were discarded for waiting
+// past staleUtteranceAfter. It exists for /voice status: the drop itself is
+// deliberate policy, but audio that never arrives with nothing anywhere
+// saying why reads as a bug rather than as a decision.
+func (s *Speaker) DroppedStale() int {
+	if s == nil {
+		return 0
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.droppedStale
 }
 
 // stale reports whether an utterance waited long enough to stop being worth
