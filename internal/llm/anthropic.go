@@ -341,8 +341,9 @@ func (c *AnthropicClient) ChatStream(ctx context.Context, opts ChatOptions, fn f
 		Stream:    true,
 	}
 	if system != "" {
-		payload.System = system
+		payload.System = []anthropicContentBlock{{Type: "text", Text: &system}}
 	}
+	applyAnthropicCacheBreakpoints(&payload)
 
 	req, err := c.newRequest(ctx, http.MethodPost, "/v1/messages", payload)
 	if err != nil {
@@ -437,7 +438,15 @@ func (c *AnthropicClient) consumeSSE(ctx context.Context, body io.ReadCloser, fn
 		switch event.Type {
 		case "message_start":
 			if event.Message != nil && event.Message.Usage != nil {
-				promptTokens = event.Message.Usage.InputTokens
+				// input_tokens EXCLUDES the cached portion once caching is
+				// on. The harness's prompt accounting answers "how full is
+				// the window", and a cached token occupies the window exactly
+				// as an uncached one does — so the three parts sum here, or
+				// the context meter would report a near-empty window on every
+				// cache hit.
+				usage := event.Message.Usage
+				promptTokens = usage.InputTokens +
+					usage.CacheCreationInputTokens + usage.CacheReadInputTokens
 			}
 		case "content_block_start":
 			if event.ContentBlock != nil {
@@ -740,12 +749,51 @@ func anthropicStatusError(resp *http.Response, body []byte) error {
 // --- Wire types -------------------------------------------------------
 
 type anthropicMessagesRequest struct {
-	Model     string             `json:"model"`
-	MaxTokens int                `json:"max_tokens"`
-	System    string             `json:"system,omitempty"`
-	Messages  []anthropicMessage `json:"messages"`
-	Tools     []anthropicTool    `json:"tools,omitempty"`
-	Stream    bool               `json:"stream,omitempty"`
+	Model     string `json:"model"`
+	MaxTokens int    `json:"max_tokens"`
+	// System is the block-array form of the top-level system field. The API
+	// accepts a bare string too, but only a block can carry cache_control,
+	// and the system prompt is the most stable prefix a request has.
+	System   []anthropicContentBlock `json:"system,omitempty"`
+	Messages []anthropicMessage      `json:"messages"`
+	Tools    []anthropicTool         `json:"tools,omitempty"`
+	Stream   bool                    `json:"stream,omitempty"`
+}
+
+// anthropicCacheControl marks a prompt-cache breakpoint. Everything up to and
+// including the marked block is cached server-side; a later request whose
+// prefix matches pays the cached rate for it instead of the full input rate.
+type anthropicCacheControl struct {
+	Type string `json:"type"`
+}
+
+func anthropicCacheBreakpoint() *anthropicCacheControl {
+	return &anthropicCacheControl{Type: "ephemeral"}
+}
+
+// applyAnthropicCacheBreakpoints places the three breakpoints an agent loop
+// wants, newest-moving last: the tool schemas (stable for a whole session),
+// the system prompt (stable for a turn), and the final content block of the
+// final message — which is what makes turn N+1 reuse everything turn N sent.
+// The API allows four; three are used so a future need has one in hand.
+// Blocks under the provider's minimum cacheable length are ignored server-side
+// rather than erroring, so no size gauging happens here.
+func applyAnthropicCacheBreakpoints(payload *anthropicMessagesRequest) {
+	if payload == nil {
+		return
+	}
+	if n := len(payload.Tools); n > 0 {
+		payload.Tools[n-1].CacheControl = anthropicCacheBreakpoint()
+	}
+	if n := len(payload.System); n > 0 {
+		payload.System[n-1].CacheControl = anthropicCacheBreakpoint()
+	}
+	if n := len(payload.Messages); n > 0 {
+		message := &payload.Messages[n-1]
+		if b := len(message.Content); b > 0 {
+			message.Content[b-1].CacheControl = anthropicCacheBreakpoint()
+		}
+	}
 }
 
 type anthropicMessage struct {
@@ -776,6 +824,9 @@ type anthropicContentBlock struct {
 
 	// image
 	Source *anthropicImageSource `json:"source,omitempty"`
+
+	// prompt caching. Set only by applyAnthropicCacheBreakpoints.
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
 type anthropicImageSource struct {
@@ -788,6 +839,10 @@ type anthropicTool struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description,omitempty"`
 	InputSchema map[string]any `json:"input_schema"`
+	// prompt caching. Set only by applyAnthropicCacheBreakpoints, on the last
+	// tool: a breakpoint caches everything before it, and tools serialize
+	// ahead of system and messages.
+	CacheControl *anthropicCacheControl `json:"cache_control,omitempty"`
 }
 
 // anthropicStreamEvent is the union of every Messages API SSE event this
@@ -842,6 +897,11 @@ type anthropicStreamDelta struct {
 type anthropicUsage struct {
 	InputTokens  int `json:"input_tokens,omitempty"`
 	OutputTokens int `json:"output_tokens,omitempty"`
+	// Populated once cache_control breakpoints are sent: creation is the
+	// written-this-request portion, read is the reused portion. input_tokens
+	// then covers only what neither field does.
+	CacheCreationInputTokens int `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int `json:"cache_read_input_tokens,omitempty"`
 }
 
 type anthropicErrorBody struct {

@@ -59,7 +59,7 @@ func TestAnthropicSystemPromptIsTopLevelField(t *testing.T) {
 		Messages: []Message{{Role: "user", Content: "hi"}},
 	})
 
-	if body["system"] != "You are a careful coding agent." {
+	if anthropicSystemText(t, body) != "You are a careful coding agent." {
 		t.Fatalf("system = %#v, want top-level system field", body["system"])
 	}
 	messages, ok := body["messages"].([]any)
@@ -93,7 +93,7 @@ func TestAnthropicFoldsMidHistorySystemMessageIntoTopLevelField(t *testing.T) {
 		},
 	})
 
-	system, _ := body["system"].(string)
+	system := anthropicSystemText(t, body)
 	if !strings.Contains(system, "base") || !strings.Contains(system, "recovered context") {
 		t.Fatalf("system = %q, want it to contain both parts", system)
 	}
@@ -101,6 +101,27 @@ func TestAnthropicFoldsMidHistorySystemMessageIntoTopLevelField(t *testing.T) {
 	if len(messages) != 2 {
 		t.Fatalf("messages = %#v, want the system-role entry folded out", messages)
 	}
+}
+
+// anthropicSystemText reads the top-level system field in its block-array
+// form — the shape prompt caching requires, since only a block can carry
+// cache_control.
+func anthropicSystemText(t *testing.T, body map[string]any) string {
+	t.Helper()
+	blocks, ok := body["system"].([]any)
+	if !ok {
+		t.Fatalf("system = %#v, want a block array", body["system"])
+	}
+	var parts []string
+	for _, raw := range blocks {
+		block, ok := raw.(map[string]any)
+		if !ok || block["type"] != "text" {
+			t.Fatalf("system block = %#v, want text blocks", raw)
+		}
+		text, _ := block["text"].(string)
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, "\n\n")
 }
 
 // Required headers: x-api-key (not Authorization: Bearer) and
@@ -353,6 +374,17 @@ func TestAnthropicConvertsToolsOntoTheWire(t *testing.T) {
 				gotTool, ok := got[i].(map[string]any)
 				if !ok {
 					t.Fatalf("tools[%d] = %#v, want an object", i, got[i])
+				}
+				// The last tool carries the prompt-cache breakpoint; every
+				// other tool must not. Strip it before the shape comparison
+				// so this table keeps pinning the tool conversion itself.
+				if i == len(test.want)-1 {
+					if !reflect.DeepEqual(gotTool["cache_control"], map[string]any{"type": "ephemeral"}) {
+						t.Errorf("tools[%d] (last) missing cache breakpoint: %#v", i, gotTool)
+					}
+					delete(gotTool, "cache_control")
+				} else if _, stray := gotTool["cache_control"]; stray {
+					t.Errorf("tools[%d] carries a stray cache breakpoint: %#v", i, gotTool)
 				}
 				if !reflect.DeepEqual(gotTool, normalizeJSON(t, wantTool)) {
 					t.Errorf("tools[%d] = %#v, want %#v", i, gotTool, wantTool)
@@ -872,5 +904,93 @@ func TestNewProviderClientStillSelectsNonAnthropicDialects(t *testing.T) {
 	}
 	if _, ok := xaiClient.(*OpenAICompatibleClient); !ok {
 		t.Fatalf("xai selected %T, want *OpenAICompatibleClient", xaiClient)
+	}
+}
+
+// Three cache breakpoints, in serialization order: the last tool, the system
+// block, and the final content block of the final message. The moving third
+// one is what makes turn N+1 reuse everything turn N sent; the first two pin
+// the prefixes that never change inside a session. Exactly three — the API
+// allows four, and one stays in hand.
+func TestAnthropicPlacesThreeCacheBreakpoints(t *testing.T) {
+	body, _ := captureAnthropicRequest(t, ChatOptions{
+		System: "base prompt",
+		Tools: []ToolDef{
+			{Name: "first"},
+			{Name: "second"},
+		},
+		Messages: []Message{
+			{Role: "user", Content: "hola"},
+			{Role: "assistant", Content: "hola!"},
+			{Role: "user", Content: "seguime contando"},
+		},
+	})
+
+	marked := func(block map[string]any) bool {
+		control, ok := block["cache_control"].(map[string]any)
+		return ok && control["type"] == "ephemeral"
+	}
+
+	tools := body["tools"].([]any)
+	if marked(tools[0].(map[string]any)) || !marked(tools[1].(map[string]any)) {
+		t.Fatalf("tool breakpoints misplaced: %#v", tools)
+	}
+	system := body["system"].([]any)
+	if !marked(system[len(system)-1].(map[string]any)) {
+		t.Fatalf("system block missing its breakpoint: %#v", system)
+	}
+	messages := body["messages"].([]any)
+	for index, raw := range messages {
+		content := raw.(map[string]any)["content"].([]any)
+		last := index == len(messages)-1
+		for b, rawBlock := range content {
+			block := rawBlock.(map[string]any)
+			if last && b == len(content)-1 {
+				if !marked(block) {
+					t.Fatalf("final message block missing its breakpoint: %#v", block)
+				}
+			} else if marked(block) {
+				t.Fatalf("stray breakpoint on message %d block %d: %#v", index, b, block)
+			}
+		}
+	}
+}
+
+// Cached tokens still occupy the context window. input_tokens excludes both
+// cache portions once breakpoints are sent, so the prompt count the harness
+// reports has to be the sum — or every cache hit would render a near-empty
+// context meter over a nearly full window.
+func TestAnthropicPromptCountIncludesCachedTokens(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		frames := []string{
+			`{"type":"message_start","message":{"id":"msg_1","usage":{"input_tokens":7,"cache_creation_input_tokens":100,"cache_read_input_tokens":9000}}}`,
+			`{"type":"content_block_start","index":0,"content_block":{"type":"text"}}`,
+			`{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"ok"}}`,
+			`{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":2}}`,
+			`{"type":"message_stop"}`,
+		}
+		for _, frame := range frames {
+			_, _ = w.Write([]byte("data: " + frame + "\n\n"))
+		}
+	}))
+	defer server.Close()
+
+	client, err := NewAnthropicClient(AnthropicOptions{BaseURL: server.URL, Model: "claude-sonnet-5", APIKey: "k"})
+	if err != nil {
+		t.Fatalf("new client: %v", err)
+	}
+	var promptEvalCount int
+	err = client.ChatStream(context.Background(), ChatOptions{}, func(chunk StreamChunk) error {
+		if chunk.Done {
+			promptEvalCount = chunk.PromptEvalCount
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("chat stream: %v", err)
+	}
+	if promptEvalCount != 9107 {
+		t.Fatalf("prompt tokens = %d, want 7 + 100 + 9000", promptEvalCount)
 	}
 }
