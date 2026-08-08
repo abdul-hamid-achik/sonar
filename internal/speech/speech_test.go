@@ -170,16 +170,23 @@ func TestStopDropsTheBacklog(t *testing.T) {
 		time.Sleep(5 * time.Millisecond)
 	}
 	speaker.SayIn("es", "La segunda.")
-	speaker.SayIn("es", "La tercera.")
+	speaker.SayIn("en", "The third.")
 	speaker.Stop()
 
 	if speaker.Speaking() {
 		t.Fatal("a stopped speaker still reported audio on its way")
 	}
-	// Nothing dropped is ever said late: give the worker room to speak the
-	// backlog if it were going to.
+	// Which same-voice sentences got through before the cut is timing, not
+	// contract: one CI run caught the worker writing the second sentence into
+	// the live Spanish process in the instant before Stop landed, and nothing
+	// synchronizes that race. The English utterance is the deterministic
+	// marker instead: a new language needs a new process, the worker starts
+	// it only after the Spanish voice finishes, and the fake holds that voice
+	// for 30 seconds — so vozEN speaking at all can only mean the backlog
+	// survived Stop. Give the worker room to do exactly that if it were going
+	// to.
 	time.Sleep(200 * time.Millisecond)
-	if spoken := strings.Join(readLog(t, log), "\n"); strings.Contains(spoken, "segunda") || strings.Contains(spoken, "tercera") {
+	if spoken := strings.Join(readLog(t, log), "\n"); strings.Contains(spoken, "vozEN") || strings.Contains(spoken, "third") {
 		t.Fatalf("a cancelled backlog was spoken anyway: %q", spoken)
 	}
 }
