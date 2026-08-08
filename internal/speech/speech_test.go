@@ -240,12 +240,22 @@ func TestTheModelCannotDriveTheSynthesizer(t *testing.T) {
 // package is built to avoid.
 func TestAnAlertJumpsTheQueueButNotTheSentence(t *testing.T) {
 	synthesizer, log := recordingSynthesizer(t, "")
-	speaker := newSpeaker(withVoices(synthesizer, map[string]string{"es": "vozES"}))
+	speaker := newSpeaker(withVoices(synthesizer, map[string]string{"es": "vozES", "en": "vozEN"}))
 	defer speaker.Close()
 
 	// The first sentence has to be in the synthesizer before the rest are
 	// queued, or every one of them is still in the queue and jumping it proves
 	// nothing about what jumping it costs.
+	//
+	// The backlog deliberately switches language. A same-voice backlog races
+	// this test: the worker may stream a queued same-voice sentence into the
+	// live process's stdin in the instant before SayNext lands, and anything
+	// already written is beyond the jump — one CI run caught the alert
+	// legitimately behind the second sentence for exactly that reason. A
+	// different voice needs a different process, which cannot start while the
+	// Spanish one is still open, so the English backlog is provably still in
+	// the queue when the alert jumps it, no matter how the goroutines
+	// interleave.
 	speaker.SayIn("es", "Primera del backlog.")
 	deadline := time.Now().Add(10 * time.Second)
 	for !strings.Contains(strings.Join(readLog(t, log), "\n"), "Primera") {
@@ -254,8 +264,8 @@ func TestAnAlertJumpsTheQueueButNotTheSentence(t *testing.T) {
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
-	speaker.SayIn("es", "Segunda del backlog.")
-	speaker.SayIn("es", "Tercera del backlog.")
+	speaker.SayIn("en", "Second in the backlog.")
+	speaker.SayIn("en", "Third in the backlog.")
 	speaker.SayNext("es", "Espero tu aprobación.")
 	speaker.Finish()
 	waitForSilence(t, speaker)
@@ -272,7 +282,7 @@ func TestAnAlertJumpsTheQueueButNotTheSentence(t *testing.T) {
 		return -1
 	}
 	alert := positionOf("aprobación")
-	if second := positionOf("Segunda"); alert > second {
+	if second := positionOf("Second"); alert > second {
 		t.Fatalf("the alert waited behind the backlog: %q", spoken)
 	}
 	// Already handed over, so it stays where it was. Anything a synthesizer has
