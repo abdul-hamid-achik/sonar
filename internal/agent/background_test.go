@@ -370,7 +370,7 @@ func TestBackgroundBashPromptsExactlyLikeForegroundBash(t *testing.T) {
 			{{ToolCalls: []llm.ToolCall{{ID: "bash-1", Name: "bash", Arguments: args}}, Done: true}},
 			{{Text: "done", Done: true}},
 		}}
-		ag := New(client, nil, 4096)
+		ag := New(client, nil, 8192)
 		ag.SetWorkDir(t.TempDir())
 		ag.SetModeContext("test", BuildToolPolicy())
 		ag.SetPermissionChecker(permission.NewChecker(nil, false))

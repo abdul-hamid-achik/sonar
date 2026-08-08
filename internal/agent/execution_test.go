@@ -151,7 +151,7 @@ func executionEventTypes(events []executionpkg.Event) []executionpkg.EventType {
 func newLedgerAgent(t *testing.T, client llm.Client, registry *mcp.Registry, ledger *fakeExecutionLedger) (*Agent, string) {
 	t.Helper()
 	workDir := t.TempDir()
-	ag := New(client, registry, 4096)
+	ag := New(client, registry, 8192)
 	ag.SetWorkDir(workDir)
 	ag.SetModeContext("test", BuildToolPolicy())
 	ag.SetPermissionChecker(permission.NewChecker(nil, true))

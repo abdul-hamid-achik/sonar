@@ -322,7 +322,7 @@ func newMCPPreflightRegistryWithPadding(t *testing.T, marker string, padding int
 
 func TestPreflightUnknownMCPToolSuggestsUniqueNamespacedName(t *testing.T) {
 	registry := newMCPPreflightRegistry(t, filepath.Join(t.TempDir(), "calls"))
-	ag := New(nil, registry, 4096)
+	ag := New(nil, registry, 8192)
 	t.Cleanup(ag.Close)
 
 	err := ag.preflightToolCall(executionpkg.KindMCP, llm.ToolCall{Name: "investigate"})
@@ -361,7 +361,7 @@ func TestPreflightLazyMCPHubCallRequiresExactTarget(t *testing.T) {
 	// schema. Host trust treats that namespace as MCPHub so the lazy-target
 	// gate runs after schema validation — without rewriting the call name.
 	registry := newMCPPreflightRegistryWithPadding(t, filepath.Join(t.TempDir(), "calls"), 1)
-	ag := New(nil, registry, 4096)
+	ag := New(nil, registry, 8192)
 	t.Cleanup(ag.Close)
 	ag.SetTrustedLocalMCPServers([]config.ServerConfig{{
 		Name:    mcpPreflightServerName,
@@ -383,7 +383,7 @@ func TestPreflightLazyMCPHubCallRequiresExactTarget(t *testing.T) {
 
 	// Without gateway trust the host lazy gate does not fire; schema alone
 	// accepts these args (the padding helper has no server/tool fields).
-	untrusted := New(nil, registry, 4096)
+	untrusted := New(nil, registry, 8192)
 	t.Cleanup(untrusted.Close)
 	if err := untrusted.preflightToolCall(executionpkg.KindMCP, llm.ToolCall{
 		Name:      callName,

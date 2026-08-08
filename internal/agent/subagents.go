@@ -59,6 +59,7 @@ type SubagentEvent struct {
 type SubagentSnapshot struct {
 	ID          string
 	Name        string
+	Provider    string
 	Prompt      string
 	Status      string // running · done · failed
 	Started     time.Time
@@ -73,11 +74,210 @@ type SubagentSnapshot struct {
 	LastEventAt time.Time
 }
 
+// subagentProviderSpec is one way to run a child. "sonar" is the harness
+// itself; the vendor entries run each vendor's OWN CLI under that vendor's
+// own login — the legitimate way to use a chat subscription from here,
+// because the vendor's tool does the talking. Each spec owns two things: the
+// argv that confines the child to read-only work, and a bounded parser for
+// that CLI's stream. The confinement flags were verified live, not assumed —
+// grok's plan mode executed a terminal command during measurement, which is
+// why its argv also denies every mutating tool by name.
+type subagentProviderSpec struct {
+	executable string
+	argv       func(prompt string) []string
+	parse      func(p *subagentProcess, line []byte) bool
+}
+
+func subagentProviders() map[string]subagentProviderSpec {
+	return map[string]subagentProviderSpec{
+		"sonar": {}, // resolved and parsed by the existing native path
+		"claude": {
+			executable: "claude",
+			argv: func(prompt string) []string {
+				return []string{"-p", prompt, "--output-format", "stream-json", "--verbose", "--permission-mode", "plan"}
+			},
+			parse: parseClaudeStreamLine,
+		},
+		"codex": {
+			executable: "codex",
+			argv: func(prompt string) []string {
+				return []string{"exec", "--json", "-s", "read-only", "--skip-git-repo-check", prompt}
+			},
+			parse: parseCodexStreamLine,
+		},
+		"grok": {
+			executable: "grok",
+			argv: func(prompt string) []string {
+				return []string{
+					"-p", prompt, "--output-format", "streaming-json", "--permission-mode", "plan",
+					"--deny", "run_terminal_command", "--deny", "search_replace",
+					"--deny", "spawn_subagent", "--deny", "scheduler_create",
+					"--deny", "kill_command_or_subagent", "--deny", "todo_write",
+				}
+			},
+			parse: parseGrokStreamLine,
+		},
+	}
+}
+
+// parseClaudeStreamLine reads Claude Code's -p --output-format stream-json:
+// assistant messages carry text and tool_use blocks, the result line carries
+// the settled answer, usage, and the error verdict. Shapes measured live
+// against claude 2.1.226.
+func parseClaudeStreamLine(p *subagentProcess, line []byte) bool {
+	var event struct {
+		Type    string `json:"type"`
+		Message struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+				Name string `json:"name"`
+			} `json:"content"`
+		} `json:"message"`
+		Result  string `json:"result"`
+		IsError bool   `json:"is_error"`
+		Usage   struct {
+			OutputTokens int64 `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(line, &event); err != nil {
+		return false
+	}
+	switch event.Type {
+	case "assistant":
+		for _, block := range event.Message.Content {
+			switch block.Type {
+			case "text":
+				p.recordText(block.Text)
+			case "tool_use":
+				p.recordEvent(SubagentEvent{Kind: "tool_start", Name: block.Name})
+			}
+		}
+		return true
+	case "result":
+		p.mu.Lock()
+		p.status = "done"
+		if event.IsError {
+			p.status = "failed"
+		}
+		p.evalTokens += event.Usage.OutputTokens
+		if p.text.Len() == 0 && event.Result != "" {
+			p.appendTextLocked(event.Result)
+		}
+		p.lastEventAt = time.Now()
+		p.mu.Unlock()
+		return true
+	case "system", "user":
+		return true // hooks, tool receipts: presentation noise, not drops
+	}
+	return false
+}
+
+// parseCodexStreamLine reads codex exec --json: item.completed carries agent
+// messages and tool items, turn.completed carries usage. Measured against
+// codex-cli 0.147.0.
+func parseCodexStreamLine(p *subagentProcess, line []byte) bool {
+	var event struct {
+		Type string `json:"type"`
+		Item struct {
+			Type    string `json:"type"`
+			Text    string `json:"text"`
+			Message string `json:"message"`
+		} `json:"item"`
+		Usage struct {
+			OutputTokens int64 `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(line, &event); err != nil {
+		return false
+	}
+	switch event.Type {
+	case "item.completed":
+		switch event.Item.Type {
+		case "agent_message":
+			p.recordText(event.Item.Text)
+		case "error":
+			p.recordEvent(SubagentEvent{Kind: "error", Message: event.Item.Message})
+		default:
+			p.recordEvent(SubagentEvent{Kind: "tool_result", Name: event.Item.Type, Status: "ok"})
+		}
+		return true
+	case "turn.completed":
+		p.mu.Lock()
+		p.evalTokens += event.Usage.OutputTokens
+		p.lastEventAt = time.Now()
+		p.mu.Unlock()
+		return true
+	case "turn.failed":
+		p.mu.Lock()
+		p.status = "failed"
+		p.mu.Unlock()
+		return true
+	case "thread.started", "turn.started", "item.started", "item.updated":
+		return true
+	}
+	return false
+}
+
+// parseGrokStreamLine reads grok -p --output-format streaming-json: text
+// deltas, tool_call/tool_call_update pairs, usage, and an end line with the
+// stop reason. Measured against grok 1.0.0.
+func parseGrokStreamLine(p *subagentProcess, line []byte) bool {
+	var event struct {
+		Type       string `json:"type"`
+		Data       string `json:"data"`
+		ToolName   string `json:"toolName"`
+		Status     string `json:"status"`
+		StopReason string `json:"stopReason"`
+		Usage      struct {
+			OutputTokens int64 `json:"output_tokens"`
+		} `json:"usage"`
+	}
+	if err := json.Unmarshal(line, &event); err != nil {
+		return false
+	}
+	switch event.Type {
+	case "text":
+		p.recordText(event.Data)
+		return true
+	case "tool_call":
+		p.recordEvent(SubagentEvent{Kind: "tool_start", Name: event.ToolName})
+		return true
+	case "tool_call_update":
+		if event.Status == "completed" || event.Status == "failed" {
+			status := "ok"
+			if event.Status == "failed" {
+				status = "error"
+			}
+			p.recordEvent(SubagentEvent{Kind: "tool_result", Name: event.ToolName, Status: status})
+		}
+		return true
+	case "usage":
+		p.mu.Lock()
+		p.evalTokens += event.Usage.OutputTokens
+		p.lastEventAt = time.Now()
+		p.mu.Unlock()
+		return true
+	case "end":
+		p.mu.Lock()
+		if p.stopReason == "" {
+			p.stopReason = event.StopReason
+		}
+		p.mu.Unlock()
+		return true
+	case "thought", "available_commands":
+		return true
+	}
+	return false
+}
+
 type subagentProcess struct {
-	id     string
-	name   string
-	prompt string
-	cmd    *exec.Cmd
+	id       string
+	name     string
+	provider string
+	prompt   string
+	cmd      *exec.Cmd
+	parse    func(p *subagentProcess, line []byte) bool
 
 	mu          sync.Mutex
 	status      string
@@ -136,6 +336,11 @@ func agentToolDef() llm.ToolDef {
 					"type":        "string",
 					"description": "Short label for progress displays (e.g. 'auth-flow').",
 				},
+				"provider": map[string]any{
+					"type":        "string",
+					"enum":        []string{"sonar", "claude", "codex", "grok"},
+					"description": "Engine for the child (default sonar). The others run that vendor's signed-in CLI read-only — only on explicit user request; they spend the user's subscription.",
+				},
 			},
 			"required": []string{"prompt"},
 		},
@@ -173,6 +378,15 @@ func (a *Agent) handleAgentSpawn(args map[string]any) (string, bool) {
 	}
 	name, _ := args["name"].(string)
 	name = strings.TrimSpace(name)
+	provider, _ := args["provider"].(string)
+	provider = strings.TrimSpace(strings.ToLower(provider))
+	if provider == "" {
+		provider = "sonar"
+	}
+	spec, known := subagentProviders()[provider]
+	if !known {
+		return fmt.Sprintf("error: unknown subagent provider %q (sonar, claude, codex, grok)", provider), true
+	}
 	workDir := strings.TrimSpace(a.activeWorkDir())
 	if workDir == "" {
 		return "error: subagents need an active workspace", true
@@ -196,15 +410,29 @@ func (a *Agent) handleAgentSpawn(args map[string]any) (string, bool) {
 	id := fmt.Sprintf("a%d", registry.counter)
 	registry.mu.Unlock()
 
-	executable := a.subagentExecutable
-	if executable == "" {
-		resolved, err := os.Executable()
-		if err != nil {
-			return fmt.Sprintf("error: resolve sonar binary: %v", err), true
+	var cmd *exec.Cmd
+	if provider == "sonar" {
+		executable := a.subagentExecutable
+		if executable == "" {
+			resolved, err := os.Executable()
+			if err != nil {
+				return fmt.Sprintf("error: resolve sonar binary: %v", err), true
+			}
+			executable = resolved
 		}
-		executable = resolved
+		cmd = exec.Command(executable, "-p", prompt, "--json-stream", "--plan", "--actor", "subagent:"+id)
+	} else {
+		executable := spec.executable
+		if a.subagentExecutable != "" {
+			// The test seam substitutes every provider binary alike.
+			executable = a.subagentExecutable
+		}
+		resolved, err := exec.LookPath(executable)
+		if err != nil {
+			return fmt.Sprintf("error: the %s CLI is not installed or not on PATH; install it and sign in, or use another provider", provider), true
+		}
+		cmd = exec.Command(resolved, spec.argv(prompt)...)
 	}
-	cmd := exec.Command(executable, "-p", prompt, "--json-stream", "--plan", "--actor", "subagent:"+id)
 	cmd.Dir = workDir
 	cmd.Env = append(os.Environ(), sonarSubagentEnv+"=1")
 	stdout, err := cmd.StdoutPipe()
@@ -217,7 +445,8 @@ func (a *Agent) handleAgentSpawn(args map[string]any) (string, bool) {
 	}
 
 	proc := &subagentProcess{
-		id: id, name: name, prompt: prompt, cmd: cmd,
+		id: id, name: name, provider: provider, prompt: prompt, cmd: cmd,
+		parse:  spec.parse,
 		status: "running", started: time.Now(),
 	}
 	registry.mu.Lock()
@@ -260,6 +489,15 @@ func (p *subagentProcess) consume(stdout interface{ Read([]byte) (int, error) })
 	scanner.Buffer(make([]byte, 64*1024), maxSubagentLineBytes)
 	for scanner.Scan() {
 		line := scanner.Bytes()
+		if p.parse != nil {
+			// Vendor CLI: that provider's bounded grammar or a counted drop.
+			if !p.parse(p, line) {
+				p.mu.Lock()
+				p.dropped++
+				p.mu.Unlock()
+			}
+			continue
+		}
 		var probe struct {
 			Event  string `json:"event"`
 			Schema string `json:"schema"`
@@ -323,6 +561,34 @@ func (p *subagentProcess) consume(stdout interface{ Read([]byte) (int, error) })
 		p.lastEventAt = time.Now()
 		p.mu.Unlock()
 	}
+}
+
+// recordText appends bounded answer text under the process lock.
+func (p *subagentProcess) recordText(text string) {
+	if text == "" {
+		return
+	}
+	p.mu.Lock()
+	p.appendTextLocked(text)
+	p.lastEventAt = time.Now()
+	p.mu.Unlock()
+}
+
+// recordEvent appends one bounded event to the ring under the process lock.
+func (p *subagentProcess) recordEvent(event SubagentEvent) {
+	event.At = time.Now()
+	p.mu.Lock()
+	if event.Kind == "tool_result" {
+		p.toolCalls++
+	}
+	if len(p.events) >= maxSubagentEvents {
+		copy(p.events, p.events[1:])
+		p.events = p.events[:maxSubagentEvents-1]
+		p.dropped++
+	}
+	p.events = append(p.events, event)
+	p.lastEventAt = event.At
+	p.mu.Unlock()
 }
 
 func (p *subagentProcess) appendTextLocked(text string) {
@@ -420,7 +686,7 @@ func (a *Agent) SubagentSnapshots() []SubagentSnapshot {
 	for _, proc := range procs {
 		proc.mu.Lock()
 		snapshots = append(snapshots, SubagentSnapshot{
-			ID: proc.id, Name: proc.name, Prompt: proc.prompt, Status: proc.status,
+			ID: proc.id, Name: proc.name, Provider: proc.provider, Prompt: proc.prompt, Status: proc.status,
 			Started: proc.started, Finished: proc.finished,
 			EvalTokens: proc.evalTokens, ToolCalls: proc.toolCalls,
 			Events:  append([]SubagentEvent(nil), proc.events...),

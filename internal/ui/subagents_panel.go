@@ -115,6 +115,9 @@ func (m *Model) buildSubagentsContent(width int) string {
 			marker = "▸ "
 		}
 		label := snapshot.ID
+		if snapshot.Provider != "" && snapshot.Provider != "sonar" {
+			label += " [" + snapshot.Provider + "]"
+		}
 		if snapshot.Name != "" {
 			label += " (" + snapshot.Name + ")"
 		}
