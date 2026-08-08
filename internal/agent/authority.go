@@ -463,6 +463,10 @@ func (a *Agent) authorityAutoApproves(mode AuthorityMode, call llm.ToolCall, kin
 		case "bash":
 			command, ok := call.Arguments["command"].(string)
 			return ok && a.autoScopedCommandAllowed(command)
+		case "agent":
+			// A PLAN-confined child can only read this workspace and spend
+			// bounded tokens — the same spend AUTO already makes for itself.
+			return true
 		default:
 			return false
 		}

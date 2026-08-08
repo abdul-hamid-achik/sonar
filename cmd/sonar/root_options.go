@@ -23,6 +23,7 @@ type rootOptions struct {
 	legacyYolo     bool
 	version        bool
 	jsonReceipt    bool
+	jsonStream     bool
 	runID          string
 	turnID         string
 	actor          string
@@ -51,6 +52,7 @@ func parseRootOptions(program string, args []string, stderr, stdout io.Writer) (
 	flags.BoolVar(&options.legacyYolo, "yolo", false, "deprecated alias for --skip-approvals")
 	flags.BoolVar(&options.version, "version", false, "print the build version and exit")
 	flags.BoolVar(&options.jsonReceipt, "json", false, "emit one machine-readable turn receipt on stdout (requires --prompt)")
+	flags.BoolVar(&options.jsonStream, "json-stream", false, "emit JSONL progress events on stdout, ending with the turn receipt (requires --prompt)")
 	flags.StringVar(&options.runID, "run-id", "", "label the execution ledger with an external run identity (requires --prompt)")
 	flags.StringVar(&options.turnID, "turn-id", "", "label this turn with an external turn identity (requires --prompt)")
 	flags.StringVar(&options.actor, "actor", "", "record an external actor label in the turn receipt (requires --prompt)")

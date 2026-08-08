@@ -62,6 +62,9 @@ func validateHeadlessFlagCombinations(options rootOptions) error {
 	if options.promptProvided && strings.TrimSpace(options.prompt) == "" {
 		return errors.New("prompt: -p/--prompt requires a non-empty value")
 	}
+	if options.jsonReceipt && options.jsonStream {
+		return errors.New("json: --json and --json-stream are mutually exclusive; the stream already ends with the receipt")
+	}
 	if options.promptProvided {
 		return nil
 	}
@@ -71,6 +74,9 @@ func validateHeadlessFlagCombinations(options rootOptions) error {
 	}
 	if options.jsonReceipt {
 		return errors.New("json: --json requires a headless prompt via -p/--prompt")
+	}
+	if options.jsonStream {
+		return errors.New("json-stream: --json-stream requires a headless prompt via -p/--prompt")
 	}
 	if options.runID != "" || options.turnID != "" || options.actor != "" {
 		return errors.New("identity: --run-id, --turn-id, and --actor require a headless prompt via -p/--prompt")
@@ -651,7 +657,15 @@ func run() int {
 		// and the emitted receipt share one exact turn identity.
 		var out headlessTurnOutput = agent.NewHeadlessOutput()
 		var jsonOut *agent.JSONOutput
-		if options.jsonReceipt {
+		switch {
+		case options.jsonStream:
+			// The stream shares the receipt accumulator, so both receipt call
+			// sites below keep working unchanged and the stream's last line is
+			// the exact --json document.
+			streamOut := agent.NewStreamJSONOutput(os.Stdout)
+			jsonOut = streamOut.JSONOutput
+			out = streamOut
+		case options.jsonReceipt:
 			jsonOut = agent.NewJSONOutput()
 			out = jsonOut
 		}

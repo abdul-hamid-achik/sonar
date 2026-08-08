@@ -228,6 +228,7 @@ const (
 	ActionVoiceEnable                   // Turn spoken output on or off for the session (Data = "on"|"off")
 	ActionVoiceStage                    // Open or close the centred listening panel
 	ActionVoiceSetting                  // Change one spoken-output setting (Data = "<name> <value>...")
+	ActionSubagentsStatus               // Report every subagent's status, activity, and session reference
 )
 
 // Registry holds all registered slash commands.

@@ -10,7 +10,7 @@
  │ Approval   Prompted for            │
  │            approval-gated tools    │
  │ Read scope workspace only          │
- │ Tools      21 ready · 21 local · 0 │
+ │ Tools      23 ready · 23 local · 0 │
  │            MCP                     │
  │ MCP        not configured · 0      │
  │            servers                 │

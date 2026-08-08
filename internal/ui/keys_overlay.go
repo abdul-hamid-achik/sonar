@@ -59,6 +59,8 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			m.closeContextDoctor()
 		case OverlayRuntimeStatus:
 			m.closeRuntimeStatus()
+		case OverlaySubagents:
+			m.closeSubagentsPanel()
 		case OverlayGoalRecovery:
 			if m.goalRecoveryState != nil {
 				event, cmd := m.goalRecoveryState.Update(msg)
@@ -93,6 +95,23 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			return tea.ClearScreen, true
 		default:
 			navigateReadOnlyViewport(&m.helpViewport, msg.String())
+		}
+		return nil, true
+	}
+
+	if m.overlay == OverlaySubagents {
+		switch msg.String() {
+		case "q":
+			m.closeSubagentsPanel()
+			return tea.ClearScreen, true
+		case "up":
+			m.moveSubagentSelection(-1)
+		case "down":
+			m.moveSubagentSelection(1)
+		default:
+			if m.subagentsPanelState != nil {
+				navigateReadOnlyViewport(&m.subagentsPanelState.Viewport, msg.String())
+			}
 		}
 		return nil, true
 	}

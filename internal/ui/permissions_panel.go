@@ -432,3 +432,4 @@ func (m *Model) renderPermissionsPanel() string {
 	}
 	return m.renderPickerFrame(content, m.pickerNavigationFooter(false))
 }
+

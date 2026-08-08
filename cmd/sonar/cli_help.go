@@ -28,6 +28,7 @@ func writeRootUsage(writer io.Writer, program string) {
 	_, _ = fmt.Fprintln(writer, "      --plan                Shortcut for --mode plan (requires --prompt)")
 	_, _ = fmt.Fprintln(writer, "      --skip-approvals      Skip approval prompts; host, scope, and tool boundaries still apply")
 	_, _ = fmt.Fprintln(writer, "      --json                Emit one machine-readable turn receipt on stdout (requires --prompt)")
+	_, _ = fmt.Fprintln(writer, "      --json-stream         Emit JSONL progress, then the turn receipt (requires --prompt)")
 	_, _ = fmt.Fprintln(writer, "      --run-id <id>         Label the execution ledger with an external run identity")
 	_, _ = fmt.Fprintln(writer, "      --turn-id <id>        Label this headless turn with an external turn identity")
 	_, _ = fmt.Fprintln(writer, "      --actor <name>        Record an external actor label in the turn receipt")

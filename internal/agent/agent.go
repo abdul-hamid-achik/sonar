@@ -90,8 +90,14 @@ type Agent struct {
 	// background owns every shell process started with bash(background=true).
 	// It is created on first use and terminated by Close, so no backgrounded
 	// process can outlive the session that started it.
-	background     *backgroundRegistry
-	hooks          []ToolHook
+	background *backgroundRegistry
+	// subagents owns every child sonar process started with the agent tool.
+	// Created on first use, terminated by Close; children are read-only, so a
+	// hard kill loses nothing durable.
+	subagents *subagentRegistry
+	// subagentExecutable overrides os.Executable for tests.
+	subagentExecutable string
+	hooks              []ToolHook
 	mcpServerScope map[string]struct{}
 	mcpScopeSet    bool
 	trustedMCP     map[string]trustedMCPServer
@@ -1094,6 +1100,7 @@ func (a *Agent) Close() {
 		<-done
 	}
 	a.closeBackgroundShells()
+	a.closeSubagents()
 	a.mcphubResults.Reset()
 	a.clearContinuationContracts()
 	if engine := a.ICEEngine(); engine != nil {

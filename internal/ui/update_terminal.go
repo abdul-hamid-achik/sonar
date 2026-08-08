@@ -256,6 +256,10 @@ func (m *Model) handleMouseWheel(msg tea.MouseWheelMsg) tea.Cmd {
 			if m.runtimeStatusState != nil {
 				m.runtimeStatusState.Viewport, _ = m.runtimeStatusState.Viewport.Update(msg)
 			}
+		case OverlaySubagents:
+			if m.subagentsPanelState != nil {
+				m.subagentsPanelState.Viewport, _ = m.subagentsPanelState.Viewport.Update(msg)
+			}
 		case OverlayGoalInspector:
 			if m.goalInspectorState != nil {
 				m.goalInspectorState.updateViewport(msg)

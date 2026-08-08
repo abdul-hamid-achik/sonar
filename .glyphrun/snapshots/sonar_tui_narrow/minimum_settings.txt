@@ -6,6 +6,6 @@
  │   Mode · NORMAL          │
  │   Sessions · Resume      │
  │   Compact layout · Auto  │
- │   Runtime status · 21 r… │
+ │   Runtime status · 23 r… │
  │ esc close · enter · ↑/↓  │
  ╰──────────────────────────╯

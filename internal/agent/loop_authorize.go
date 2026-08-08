@@ -86,7 +86,7 @@ func (a *Agent) cancelUndispatchedToolCalls(calls []llm.ToolCall, out Output, ca
 
 func builtinToolRequiresApproval(name string) bool {
 	switch name {
-	case "write", "edit", "bash", "mkdir", "remove", "copy", "move":
+	case "write", "edit", "bash", "mkdir", "remove", "copy", "move", "agent":
 		return true
 	default:
 		return false

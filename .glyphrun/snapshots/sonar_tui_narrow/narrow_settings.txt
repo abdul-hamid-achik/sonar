@@ -8,7 +8,7 @@
  │   Mode · PLAN                      │
  │   Sessions · Resume                │
  │   Compact layout · Auto            │
- │   Runtime status · 21 ready tools… │
+ │   Runtime status · 23 ready tools… │
  │   Permissions · 0 session · 0 rul… │
  │   Theme · nord                     │
  │   Voice · Off                      │

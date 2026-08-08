@@ -38,11 +38,17 @@ func (a *Agent) toolsBuiltinToolDefs() []llm.ToolDef {
 		}
 		filtered = append(filtered, def)
 	}
+	// Subagent tools are sonar-only (internal/tools stays drift-synced) and
+	// never reach a child: a subagent that could spawn subagents is a fork
+	// bomb with an API bill.
+	if !runningAsSubagent() {
+		filtered = append(filtered, agentToolDef(), agentOutputToolDef())
+	}
 	return filtered
 }
 
 func (a *Agent) isToolsTool(name string) bool {
-	return tools.IsBuiltinTool(name)
+	return tools.IsBuiltinTool(name) || isSubagentTool(name)
 }
 
 func (a *Agent) handleToolsTool(ctx context.Context, tc llm.ToolCall) (string, bool) {
@@ -79,6 +85,10 @@ func (a *Agent) handleToolsTool(ctx context.Context, tc llm.ToolCall) (string, b
 		return a.handleExists(tc.Arguments)
 	case "load_skill":
 		return a.handleLoadSkill(tc.Arguments)
+	case "agent":
+		return a.handleAgentSpawn(tc.Arguments)
+	case "agent_output":
+		return a.handleAgentOutput(tc.Arguments)
 	default:
 		return fmt.Sprintf("unknown tool: %s", tc.Name), true
 	}

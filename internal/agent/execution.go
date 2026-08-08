@@ -505,8 +505,14 @@ func (a *Agent) executionKindForCall(call llm.ToolCall) (executionpkg.Kind, exec
 		// bash_output only reads a bounded buffer this host already captured
 		// from a process it already started; it cannot signal, start, or
 		// otherwise reach a backend, so the read is genuinely effect-free.
-		case "grep", "read", "glob", "ls", "find", "diff", "exists", "bash_output", "load_skill":
+		// agent_output reads the same class of host-owned buffer for a child
+		// sonar process.
+		case "grep", "read", "glob", "ls", "find", "diff", "exists", "bash_output", "load_skill", "agent_output":
 			return executionpkg.KindBuiltin, executionpkg.EffectReadOnly
+		case "agent":
+			// The child is confined to PLAN authority, but starting it spends
+			// metered provider tokens — an external effect worth the class.
+			return executionpkg.KindBuiltin, executionpkg.Effectful
 		case "bash":
 			// Shell remains approval-gated unless the separate AUTO policy admits
 			// its exact static command. Once admitted, retain that host-owned effect
@@ -799,6 +805,10 @@ func (a *Agent) preflightToolCall(kind executionpkg.Kind, tc llm.ToolCall) error
 				return err
 			}
 			return preflightRequiredString(tc.Arguments, "destination", false)
+		case "agent":
+			return preflightRequiredString(tc.Arguments, "prompt", false)
+		case "agent_output":
+			return preflightRequiredString(tc.Arguments, "id", false)
 		default:
 			return fmt.Errorf("unknown built-in tool %q", tc.Name)
 		}

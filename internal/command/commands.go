@@ -757,6 +757,18 @@ func RegisterBuiltins(r *Registry) {
 	})
 
 	r.Register(&Command{
+		Name:        "agents",
+		Description: "Show every subagent: status, activity, and its session",
+		Usage:       "/agents",
+		Handler: func(ctx *Context, args []string) Result {
+			if len(args) != 0 {
+				return Result{Error: "usage: /agents"}
+			}
+			return Result{Action: ActionSubagentsStatus}
+		},
+	})
+
+	r.Register(&Command{
 		Name:        "tools",
 		Description: "Browse discovered MCP tools",
 		Usage:       "/tools [server]",
