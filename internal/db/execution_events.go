@@ -247,6 +247,58 @@ func (s *Store) ListSessionExecutionEvents(ctx context.Context, sessionID int64,
 	return events, nil
 }
 
+// ApprovalPromptStat is one aggregated row of `/permissions audit`: how often
+// one (tool, refusal detail) pair interrupted the operator in a workspace.
+// Detail is the host-written approval_requested projection — for bash it names
+// the scoped-shell rule that refused and, when one is derivable, the exact
+// grant prefix that would cure it — never raw arguments.
+type ApprovalPromptStat struct {
+	ToolName string
+	Detail   string
+	Count    int64
+	LastAt   string
+}
+
+// WorkspaceApprovalPromptStats aggregates approval_requested events across
+// every session of one workspace, most-interrupting first. This is the audit
+// loop that used to live in engineering-log comments keyed to session hashes:
+// the rows name what keeps prompting, so the operator can decide what deserves
+// a durable rule or a catalog entry instead of re-living the interruptions.
+func (s *Store) WorkspaceApprovalPromptStats(ctx context.Context, workspaceID string, limit int) ([]ApprovalPromptStat, error) {
+	if err := validateExecutionListLimit(limit, maxExecutionEventList); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(workspaceID) == "" {
+		return nil, errors.New("workspace id is required")
+	}
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT tool_name, detail, COUNT(*) AS prompts, MAX(occurred_at) AS last_at
+		   FROM execution_events
+		  WHERE workspace_id = ? AND event_type = 'approval_requested'
+		  GROUP BY tool_name, detail
+		  ORDER BY prompts DESC, last_at DESC
+		  LIMIT ?`,
+		workspaceID, limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("aggregate approval prompts: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	stats := make([]ApprovalPromptStat, 0, 8)
+	for rows.Next() {
+		var stat ApprovalPromptStat
+		if scanErr := rows.Scan(&stat.ToolName, &stat.Detail, &stat.Count, &stat.LastAt); scanErr != nil {
+			return nil, fmt.Errorf("scan approval prompt stat: %w", scanErr)
+		}
+		stats = append(stats, stat)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read approval prompt stats: %w", err)
+	}
+	return stats, nil
+}
+
 // SessionExecutionEventExists reports whether eventID is a durable event in
 // the exact scoped session. A recovery cursor is a global execution_events row
 // ID, so checking only that it is below the session's latest ID can accidentally

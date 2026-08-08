@@ -476,10 +476,30 @@ servers:
     args: [mcp, serve, --agent, sonar]
     # Host-owned exact authority. This is honored only for local STDIO when
     # local_owner exactly matches the executable basename; wrappers, remote
-    # transports, MCP annotations, wildcards, and suffix matches cannot widen it.
+    # transports, wildcards, and suffix matches cannot widen it.
     # read_only routes are auto-authorized and ledgered as reads.
     # workspace_effectful routes are auto-authorized only in AUTO and only when
     # an explicit `workspace` argument resolves inside the active workspace.
+    #
+    # Coarser, per-server grants exist for the operator whose trust boundary
+    # is the server rather than the tool. They trade enumeration for a weaker
+    # promise — approval only, never classification:
+    #
+    #   all_servers: [blankcode]   # gateway only: every tool of a named
+    #                              # downstream runs unattended in AUTO;
+    #                              # NORMAL still asks, and a timeout keeps
+    #                              # the conservative unknown-outcome handling.
+    #   all: true                  # the same, for this whole server. On the
+    #                              # gateway this trusts every downstream it
+    #                              # has now or ever grows — read that twice.
+    #   annotations: honor         # delegate read-only classification to the
+    #                              # server's own readOnlyHint declarations:
+    #                              # declared reads run as reads everywhere.
+    #                              # Applies to tools this server itself
+    #                              # exposes; the lazy call_tool wrapper is
+    #                              # excluded, so it cannot vouch for a
+    #                              # downstream target. Only exact routes and
+    #                              # this flag can claim read semantics.
     trust:
       local_owner: mcphub
       gateway: mcphub

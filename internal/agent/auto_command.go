@@ -990,6 +990,8 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 		allowed = autoScopedPackageCommandAllowed(args, "test", "build", "lint", "check", "typecheck")
 	case "bun":
 		allowed = autoScopedPackageCommandAllowed(args, "test", "lint")
+	case "task", "make":
+		allowed = autoScopedTargetRunnerCommandAllowed(executable, args)
 	case "cargo":
 		allowed = autoScopedCargoCommandAllowed(args)
 	case "swift":
@@ -1578,7 +1580,7 @@ func autoCommandEffectForExecutable(executable string, args []string) autoComman
 		}
 		return autoCommandEffectReadOnly
 	case "go", "npm", "pnpm", "yarn", "bun", "cargo", "swift", "eslint", "prettier", "tsc", "golangci-lint", "staticcheck",
-		"node", "python", "python3":
+		"node", "python", "python3", "task", "make":
 		return autoCommandEffectWorkspaceExecution
 	default:
 		return autoCommandEffectReadOnly
@@ -1762,6 +1764,29 @@ func autoScopedPackageCommandAllowed(args []string, direct ...string) bool {
 	return len(args) == 2 && args[0] == "run" &&
 		autoPackageRunScript.MatchString(args[1]) &&
 		autoLocalVerificationScriptName(args[1])
+}
+
+// autoScopedTargetRunnerCommandAllowed admits `task <target>` and
+// `make <target>` for exactly one target whose name denotes local
+// verification, plus task's read-only listing forms. A target body is
+// workspace-manifest code — the trust level `npm run <script>` already
+// carries — so the same convention guardrail applies verbatim: verification
+// names run unattended, and an effectful or unrecognised name costs one
+// approval whose grant then names the segment that refused.
+//
+// The shape is one word with no options, and that is the whole proof: make's
+// option surface includes forms that execute argv text directly (--eval) or
+// relocate the manifest, and task's includes watch and force modes. The
+// autoPackageRunScript charset cannot start with `-`, so nothing option-shaped
+// reaches the target slot, and none of those flags need enumerating. The
+// attached-path table above still validates -t/-C/-d values on the prompted
+// forms.
+func autoScopedTargetRunnerCommandAllowed(executable string, args []string) bool {
+	if executable == "task" && len(args) == 1 && stringIn(args[0], "-l", "--list", "--list-all") {
+		return true
+	}
+	return len(args) == 1 && autoPackageRunScript.MatchString(args[0]) &&
+		autoLocalVerificationScriptName(args[0])
 }
 
 func autoScopedGoCommandAllowed(args []string) bool {

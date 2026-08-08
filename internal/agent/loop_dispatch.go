@@ -220,6 +220,13 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 						if reason := t.a.autoCommandApprovalReason(t.authorityMode, command); reason != "" {
 							detail += ": " + reason
 						}
+						// The derivable grant prefix makes the ledger row —
+						// and therefore /permissions audit — actionable: the
+						// aggregation groups by this exact string, so each
+						// prefix gets its own interruption count.
+						if prefix := t.a.autoCommandGrantPrefix(t.authorityMode, command); prefix != "" {
+							detail += " · grant prefix: " + prefix
+						}
 					}
 				}
 				return appendExecutionEvent(ctx, t.execRuntime, executionEvent(*tracked, executionPkg.EventApprovalRequested, executionPkg.ApprovalRequested, "", detail))

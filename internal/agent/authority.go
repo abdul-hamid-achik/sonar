@@ -123,6 +123,14 @@ type trustedMCPServer struct {
 	localOwner string
 	gateway    string
 	contracts  map[string]mcpAuthorityContract
+	// annotationsHonored delegates read-only classification to the server's
+	// own tool annotations — explicit per-server opt-in, never a default.
+	annotationsHonored bool
+	// allTools / allDownstream are approval-only grants: AUTO runs the call
+	// unattended, but the effect class stays effectful, so NORMAL still asks
+	// and an unanswered call still has an unknown outcome.
+	allTools      bool
+	allDownstream map[string]struct{}
 }
 
 // SetTrustedLocalMCPServers derives namespace trust exclusively from the
@@ -155,11 +163,20 @@ func (a *Agent) SetTrustedLocalMCPServers(servers []config.ServerConfig) {
 				effect: executionpkg.Effectful, auto: true, workspaceScoped: true,
 			}
 		}
-		if len(contracts) == 0 {
+		honored := trust.Annotations == config.MCPTrustAnnotationsHonor
+		var allDownstream map[string]struct{}
+		if len(trust.AllServers) != 0 {
+			allDownstream = make(map[string]struct{}, len(trust.AllServers))
+			for _, downstream := range trust.AllServers {
+				allDownstream[downstream] = struct{}{}
+			}
+		}
+		if len(contracts) == 0 && !honored && !trust.All && allDownstream == nil {
 			continue
 		}
 		trusted[server.Name] = trustedMCPServer{
 			localOwner: trust.LocalOwner, gateway: trust.Gateway, contracts: contracts,
+			annotationsHonored: honored, allTools: trust.All, allDownstream: allDownstream,
 		}
 	}
 	a.mu.Lock()
@@ -209,10 +226,14 @@ func (a *Agent) trustedMCPHubNamespaces() map[string]struct{} {
 	return trusted
 }
 
-// trustedMCPContract resolves only exact host-configured direct or MCPHub
-// routes. Suffix matching is forbidden: `evil__cortex_status` must never gain
-// authority merely by resembling a configured operation. MCP annotations and
-// descriptions remain presentation metadata and are never consulted here.
+// trustedMCPContract resolves host-configured direct or MCPHub routes. Suffix
+// matching is forbidden: `evil__cortex_status` must never gain authority merely
+// by resembling a configured operation. MCP annotations and descriptions remain
+// presentation metadata with exactly one exception: a server the operator
+// marked `annotations: honor` has its own read-only declarations honored — an
+// explicit per-server delegation, resolved after exact routes and never for
+// the lazy call_tool wrapper, whose annotation describes the proxy rather than
+// the downstream target.
 func (a *Agent) trustedMCPContract(call llm.ToolCall) (mcpAuthorityContract, bool) {
 	if call.Name == "" || strings.TrimSpace(call.Name) != call.Name {
 		return mcpAuthorityContract{}, false
@@ -226,26 +247,70 @@ func (a *Agent) trustedMCPContract(call llm.ToolCall) (mcpAuthorityContract, boo
 		return mcpAuthorityContract{}, false
 	}
 	route := ""
+	downstream := ""
+	lazyWrapper := false
 	switch {
 	case server.gateway == "" && len(parts) == 2:
 		route = parts[1]
 	case server.gateway == config.MCPTrustGatewayMCPHub && len(parts) == 2:
 		if parts[1] == "mcphub_call_tool" {
-			downstream, tool, exact := exactLazyMCPHubTarget(call.Arguments)
+			lazyWrapper = true
+			target, tool, exact := exactLazyMCPHubTarget(call.Arguments)
 			if !exact {
 				return mcpAuthorityContract{}, false
 			}
-			route = downstream + "__" + tool
+			downstream = target
+			route = target + "__" + tool
 		} else {
 			route = parts[1]
 		}
 	case server.gateway == config.MCPTrustGatewayMCPHub && len(parts) == 3:
+		downstream = parts[1]
 		route = parts[1] + "__" + parts[2]
 	default:
 		return mcpAuthorityContract{}, false
 	}
-	contract, found := server.contracts[route]
-	return contract, found
+	if contract, found := server.contracts[route]; found {
+		return contract, true
+	}
+	if server.annotationsHonored && !lazyWrapper {
+		if contract, honored := annotatedReadOnlyContract(a.mcpTools(), call.Name); honored {
+			return contract, true
+		}
+	}
+	if server.allTools {
+		return serverTrustApprovalContract(), true
+	}
+	if downstream != "" {
+		if _, granted := server.allDownstream[downstream]; granted {
+			return serverTrustApprovalContract(), true
+		}
+	}
+	return mcpAuthorityContract{}, false
+}
+
+// serverTrustApprovalContract is the approval-only grant behind `all` and
+// `all_servers`: auto under AUTO authority, effectful class. authorityAutoApproves
+// reaches its non-read branch, which requires AuthorityAutoScoped — so NORMAL
+// still asks — and an unanswered call keeps the conservative outcome handling.
+func serverTrustApprovalContract() mcpAuthorityContract {
+	return mcpAuthorityContract{effect: executionpkg.Effectful, auto: true}
+}
+
+// annotatedReadOnlyContract grants read-only authority from the server's own
+// tool declaration. Reached only under the explicit `annotations: honor`
+// delegation; an absent definition or an undeclared hint fails closed.
+func annotatedReadOnlyContract(defs []llm.ToolDef, name string) (mcpAuthorityContract, bool) {
+	for _, def := range defs {
+		if def.Name != name {
+			continue
+		}
+		if def.Behavior.Declared && def.Behavior.ReadOnly {
+			return mcpAuthorityContract{effect: executionpkg.EffectReadOnly, auto: true}, true
+		}
+		return mcpAuthorityContract{}, false
+	}
+	return mcpAuthorityContract{}, false
 }
 
 // trustedMCPOutcomeContract recognizes exact, build-owned semantic contracts
@@ -353,15 +418,72 @@ func (a *Agent) authorityAutoApproves(mode AuthorityMode, call llm.ToolCall, kin
 		switch call.Name {
 		case "write", "edit", "mkdir":
 			return a.workspaceEditPathAutoApproved(call)
+		case "copy", "move":
+			return a.workspaceTransferAutoApproved(call)
+		case "remove":
+			return a.workspaceRemoveAutoApproved(call)
 		case "bash":
 			command, ok := call.Arguments["command"].(string)
 			return ok && a.autoScopedCommandAllowed(command)
 		default:
 			return false
 		}
+	case executionpkg.KindMemory:
+		// The memory store is workspace-scoped, owner-only JSON, so mutating
+		// it is the same risk class as an in-workspace write — which AUTO
+		// already runs unattended. Named explicitly rather than blanket-true
+		// so a future memory tool does not auto-approve by omission.
+		switch call.Name {
+		case "memory_save", "memory_update", "memory_delete":
+			return true
+		default:
+			return false
+		}
 	default:
 		return false
 	}
+}
+
+// workspaceTransferAutoApproved reports whether a copy/move keeps its mutation
+// inside the active workspace proper. Write grants are deliberately excluded:
+// additionalWriteAllowsTool defines a grant as write/edit/mkdir authority, and
+// auto-approving copy against it would widen a grant the user already scoped.
+// copy reads its source through the read path, which never needs approval, so
+// only its destination is load-bearing; move renames, so both endpoints are.
+func (a *Agent) workspaceTransferAutoApproved(call llm.ToolCall) bool {
+	destination, ok := call.Arguments["destination"].(string)
+	if !ok || strings.TrimSpace(destination) == "" {
+		return false
+	}
+	if _, err := a.resolveWorkspacePath(destination); err != nil {
+		return false
+	}
+	if call.Name != "move" {
+		return true
+	}
+	source, ok := call.Arguments["source"].(string)
+	if !ok || strings.TrimSpace(source) == "" {
+		return false
+	}
+	_, err := a.resolveWorkspacePath(source)
+	return err == nil
+}
+
+// workspaceRemoveAutoApproved admits only the non-recursive form: removing one
+// file or an empty directory in the workspace is the risk class of the write
+// clobber AUTO already runs, while recursive removal is the rm -rf class that
+// stays prompted everywhere else — even confined bash refuses it. recursive is
+// read through getArgBool so authorization and execution parse it identically.
+func (a *Agent) workspaceRemoveAutoApproved(call llm.ToolCall) bool {
+	if a.getArgBool(call.Arguments, "recursive", false) {
+		return false
+	}
+	path, ok := call.Arguments["path"].(string)
+	if !ok || strings.TrimSpace(path) == "" {
+		return false
+	}
+	_, err := a.resolveWorkspacePath(path)
+	return err == nil
 }
 
 // workspaceEditPathAutoApproved reports whether a write/edit/mkdir call targets

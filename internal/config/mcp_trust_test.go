@@ -172,3 +172,49 @@ func containsMCPTrustRoute(routes []string, want string) bool {
 	}
 	return false
 }
+
+func TestMCPTrustServerLevelGrantsValidate(t *testing.T) {
+	server := func(name string) ServerConfig {
+		return ServerConfig{Name: name, Command: name, Transport: "stdio"}
+	}
+	gateway := server("mcphub")
+
+	if _, err := ResolveMCPTrust(ServerConfig{Name: "notes", Command: "notes", Trust: &MCPTrustConfig{
+		LocalOwner: "notes", Annotations: "trust-me",
+	}}); err == nil {
+		t.Fatal("invalid annotations value was accepted")
+	}
+	if _, err := ResolveMCPTrust(ServerConfig{Name: "notes", Command: "notes", Trust: &MCPTrustConfig{
+		LocalOwner: "notes", AllServers: []string{"blankcode"},
+	}}); err == nil {
+		t.Fatal("all_servers without the gateway was accepted")
+	}
+	if _, err := ResolveMCPTrust(ServerConfig{Name: "mcphub", Command: "mcphub", Trust: &MCPTrustConfig{
+		LocalOwner: "mcphub", Gateway: "mcphub", AllServers: []string{"blankcode", "blankcode"},
+	}}); err == nil {
+		t.Fatal("duplicated all_servers entry was accepted")
+	}
+	_ = gateway
+
+	trust, err := ResolveMCPTrust(ServerConfig{Name: "petstore", Command: "petstore", Trust: &MCPTrustConfig{
+		LocalOwner: "petstore", All: true,
+	}})
+	if err != nil || trust == nil || !trust.All {
+		t.Fatalf("all-only trust = %+v, %v; want accepted with All", trust, err)
+	}
+	trust, err = ResolveMCPTrust(ServerConfig{Name: "notes", Command: "notes", Trust: &MCPTrustConfig{
+		LocalOwner: "notes", Annotations: MCPTrustAnnotationsHonor,
+	}})
+	if err != nil || trust == nil || trust.Annotations != MCPTrustAnnotationsHonor {
+		t.Fatalf("annotations-only trust = %+v, %v; want accepted with honor", trust, err)
+	}
+	trust, err = ResolveMCPTrust(ServerConfig{Name: "mcphub", Command: "mcphub", Trust: &MCPTrustConfig{
+		LocalOwner: "mcphub", Gateway: "mcphub", AllServers: []string{"zeta", "blankcode"},
+	}})
+	if err != nil || trust == nil {
+		t.Fatalf("gateway all_servers trust rejected: %v", err)
+	}
+	if len(trust.AllServers) != 2 || trust.AllServers[0] != "blankcode" {
+		t.Fatalf("all_servers not canonicalized: %v", trust.AllServers)
+	}
+}

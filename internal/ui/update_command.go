@@ -856,6 +856,9 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		m.openPermissionsPanel()
 		return nil
 
+	case command.ActionPermissionsAudit:
+		return m.auditWorkspaceApprovals()
+
 	case command.ActionPermissionsExport:
 		return m.exportWorkspaceRules(result.Data)
 

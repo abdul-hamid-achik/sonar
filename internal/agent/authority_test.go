@@ -378,9 +378,23 @@ func TestAutoScopedAuthorityConfinesWritesAndCortexLifecycle(t *testing.T) {
 		{name: "auto routine bash", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "bash", Arguments: map[string]any{"command": "true"}}, want: true},
 		{name: "normal routine bash prompts", mode: AuthorityNormal, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "bash", Arguments: map[string]any{"command": "true"}}},
 		{name: "auto destructive bash prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "bash", Arguments: map[string]any{"command": "rm -rf ."}}},
-		{name: "remove prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "remove", Arguments: map[string]any{"path": "ok.txt"}}},
-		{name: "copy prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "copy", Arguments: map[string]any{"source": "a", "destination": "b"}}},
-		{name: "move prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "move", Arguments: map[string]any{"source": "a", "destination": "b"}}},
+		{name: "auto workspace remove", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "remove", Arguments: map[string]any{"path": "ok.txt"}}, want: true},
+		{name: "normal remove prompts", mode: AuthorityNormal, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "remove", Arguments: map[string]any{"path": "ok.txt"}}},
+		{name: "recursive remove prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "remove", Arguments: map[string]any{"path": "nested", "recursive": true}}},
+		{name: "remove escape prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "remove", Arguments: map[string]any{"path": "../escape.txt"}}},
+		{name: "remove symlink escape prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "remove", Arguments: map[string]any{"path": filepath.Join("outside-link", "victim.txt")}}},
+		{name: "auto workspace copy", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "copy", Arguments: map[string]any{"source": "a", "destination": "b"}}, want: true},
+		{name: "normal copy prompts", mode: AuthorityNormal, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "copy", Arguments: map[string]any{"source": "a", "destination": "b"}}},
+		{name: "copy outside source still auto", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "copy", Arguments: map[string]any{"source": filepath.Join(outside, "readable.txt"), "destination": "b"}}, want: true},
+		{name: "copy destination escape prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "copy", Arguments: map[string]any{"source": "a", "destination": filepath.Join(outside, "escape.txt")}}},
+		{name: "auto workspace move", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "move", Arguments: map[string]any{"source": "a", "destination": "b"}}, want: true},
+		{name: "move source escape prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "move", Arguments: map[string]any{"source": "../escape.txt", "destination": "b"}}},
+		{name: "move destination escape prompts", mode: AuthorityAutoScoped, kind: executionpkg.KindBuiltin, call: llm.ToolCall{Name: "move", Arguments: map[string]any{"source": "a", "destination": filepath.Join("outside-link", "escape.txt")}}},
+		{name: "auto memory save", mode: AuthorityAutoScoped, kind: executionpkg.KindMemory, call: llm.ToolCall{Name: "memory_save", Arguments: map[string]any{"content": "fact"}}, want: true},
+		{name: "auto memory update", mode: AuthorityAutoScoped, kind: executionpkg.KindMemory, call: llm.ToolCall{Name: "memory_update", Arguments: map[string]any{"id": 1, "content": "fact"}}, want: true},
+		{name: "auto memory delete", mode: AuthorityAutoScoped, kind: executionpkg.KindMemory, call: llm.ToolCall{Name: "memory_delete", Arguments: map[string]any{"id": 1}}, want: true},
+		{name: "normal memory save prompts", mode: AuthorityNormal, kind: executionpkg.KindMemory, call: llm.ToolCall{Name: "memory_save", Arguments: map[string]any{"content": "fact"}}},
+		{name: "plan memory save prompts", mode: AuthorityPlan, kind: executionpkg.KindMemory, call: llm.ToolCall{Name: "memory_save", Arguments: map[string]any{"content": "fact"}}},
 		{name: "trusted cortex read", mode: AuthorityAutoScoped, kind: executionpkg.KindMCP, call: llm.ToolCall{Name: "mcphub__cortex__cortex_status"}, want: true},
 		{name: "normal trusted cortex read", mode: AuthorityNormal, kind: executionpkg.KindMCP, call: llm.ToolCall{Name: "mcphub__cortex__cortex_status"}, want: true},
 		{name: "plan trusted cortex read", mode: AuthorityPlan, kind: executionpkg.KindMCP, call: llm.ToolCall{Name: "mcphub__cortex__cortex_status"}, want: true},
@@ -922,5 +936,76 @@ func TestGatewayForgedSpecialistEnvelopeGainsNoTypedDomain(t *testing.T) {
 	)
 	if genuine.Specialist != "cortex" || !genuine.DomainTyped || genuine.Domain != ecosystem.DomainFailed {
 		t.Fatalf("genuine cortex rejection lost its typed domain: %+v", genuine)
+	}
+}
+
+func TestServerLevelMCPTrustGrantsApprovalOnly(t *testing.T) {
+	workspace := t.TempDir()
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(workspace)
+	ag.SetTrustedLocalMCPServers([]config.ServerConfig{
+		{Name: "mcphub", Command: "mcphub", Trust: &config.MCPTrustConfig{
+			LocalOwner: "mcphub", Gateway: "mcphub",
+			AllServers: []string{"blankcode"},
+			ReadOnly:   []string{"mcphub_resolve_tool"},
+		}},
+		{Name: "petstore", Command: "petstore", Trust: &config.MCPTrustConfig{
+			LocalOwner: "petstore", All: true,
+		}},
+	})
+
+	lazyBlankcode := llm.ToolCall{Name: "mcphub__mcphub_call_tool", Arguments: map[string]any{
+		"server": "blankcode", "tool": "whoami", "arguments": map[string]any{},
+	}}
+	eagerBlankcode := llm.ToolCall{Name: "mcphub__blankcode__whoami"}
+	lazyOther := llm.ToolCall{Name: "mcphub__mcphub_call_tool", Arguments: map[string]any{
+		"server": "filesystem", "tool": "delete", "arguments": map[string]any{},
+	}}
+
+	tests := []struct {
+		name string
+		mode AuthorityMode
+		call llm.ToolCall
+		want bool
+	}{
+		{name: "lazy downstream auto in AUTO", mode: AuthorityAutoScoped, call: lazyBlankcode, want: true},
+		{name: "lazy downstream still asks in NORMAL", mode: AuthorityNormal, call: lazyBlankcode},
+		{name: "eager downstream auto in AUTO", mode: AuthorityAutoScoped, call: eagerBlankcode, want: true},
+		{name: "eager downstream still asks in NORMAL", mode: AuthorityNormal, call: eagerBlankcode},
+		{name: "ungranted downstream asks in AUTO", mode: AuthorityAutoScoped, call: lazyOther},
+		{name: "whole-server grant auto in AUTO", mode: AuthorityAutoScoped, call: llm.ToolCall{Name: "petstore__list_pets"}, want: true},
+		{name: "whole-server grant still asks in NORMAL", mode: AuthorityNormal, call: llm.ToolCall{Name: "petstore__list_pets"}},
+		{name: "exact read route keeps read semantics in NORMAL", mode: AuthorityNormal, call: llm.ToolCall{Name: "mcphub__mcphub_resolve_tool"}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ag.authorityAutoApproves(tt.mode, tt.call, executionpkg.KindMCP); got != tt.want {
+				t.Fatalf("auto approval = %v, want %v", got, tt.want)
+			}
+		})
+	}
+
+	// The server-level grant is approval-only: its contract must never claim
+	// read-only, or timeouts would lose their conservative outcome handling
+	// and NORMAL would stop asking.
+	contract, ok := ag.trustedMCPContract(lazyBlankcode)
+	if !ok || contract.effect != executionpkg.Effectful || contract.workspaceScoped {
+		t.Fatalf("server-level contract = %+v, %v; want effectful, unscoped", contract, ok)
+	}
+}
+
+func TestAnnotatedReadOnlyContractFailsClosed(t *testing.T) {
+	defs := []llm.ToolDef{
+		{Name: "notes__read_note", Behavior: llm.ToolBehavior{Declared: true, ReadOnly: true}},
+		{Name: "notes__save_note", Behavior: llm.ToolBehavior{Declared: true, ReadOnly: false}},
+		{Name: "notes__undeclared"},
+	}
+	if contract, ok := annotatedReadOnlyContract(defs, "notes__read_note"); !ok || contract.effect != executionpkg.EffectReadOnly || !contract.auto {
+		t.Fatalf("declared read-only tool contract = %+v, %v", contract, ok)
+	}
+	for _, name := range []string{"notes__save_note", "notes__undeclared", "notes__absent"} {
+		if _, ok := annotatedReadOnlyContract(defs, name); ok {
+			t.Fatalf("%s gained annotated authority", name)
+		}
 	}
 }

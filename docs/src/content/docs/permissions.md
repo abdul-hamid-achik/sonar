@@ -24,9 +24,21 @@ There is no "allow everything". Each choice binds exactly one thing:
 | tool / path / prefix | one tool, one path, or one command prefix, for this session |
 | workspace | the same, saved durably for this workspace |
 
+For MCP, the config can also grant trust at the server level: `all` /
+`all_servers` run a whole (downstream) server unattended in AUTO while NORMAL
+keeps asking, and `annotations: honor` lets a server's own read-only
+declarations count as reads. Only exact routes and honored annotations claim
+read semantics; the server-level grants are approval only. See
+`config.example.yaml` for the exact shapes.
+
 `/permissions` shows the current posture, the session grants and the workspace
 rules, and can revoke or clear them. It also exports and imports rules, so a
 workspace policy can be reviewed as a file.
+
+`/permissions audit` reads the durable execution ledger and lists the prompts
+that interrupt this workspace most often — each row names the rule that
+refused and, where one is derivable, the exact grant prefix that would cure
+it. The most frequent interruptions are the ones worth a durable rule.
 
 ## Modes
 
@@ -34,8 +46,10 @@ workspace policy can be reviewed as a file.
 
 - **NORMAL** — tools ask.
 - **PLAN** — read-only. It may inspect and reason and cannot write.
-- **AUTO** — a bounded shell subset runs without asking; anything outside it is
-  still approval-gated.
+- **AUTO** — workspace-scoped file changes (write, edit, mkdir, copy, move,
+  single-file remove), workspace memory, and a bounded shell subset run without
+  asking. Recursive removal, anything resolving outside the workspace, and
+  every uncatalogued command are still approval-gated.
 
 ## Timeouts refuse, they never grant
 

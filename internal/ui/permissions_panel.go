@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/list"
 	tea "charm.land/bubbletea/v2"
@@ -340,6 +342,59 @@ func (m *Model) importWorkspaceRules(data string) tea.Cmd {
 	}
 	m.refreshTranscript()
 	m.refreshPermissionsPanel()
+	return nil
+}
+
+// auditWorkspaceApprovals reports the workspace's most frequent approval
+// prompts from the durable execution ledger, most-interrupting first. Each row
+// is the host's own bounded projection (rule tripped, derivable grant prefix)
+// — never raw arguments — so the operator can turn the top interruptions into
+// durable rules instead of re-living them.
+func (m *Model) auditWorkspaceApprovals() tea.Cmd {
+	if m.sessionStore == nil || m.agent == nil {
+		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: "Session persistence is unavailable."})
+		m.refreshTranscript()
+		return nil
+	}
+	workspaceID, err := canonicalWorkspaceID(m.agent.WorkDir())
+	if err != nil {
+		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
+		m.refreshTranscript()
+		return nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	stats, err := m.sessionStore.WorkspaceApprovalPromptStats(ctx, workspaceID, 15)
+	if err != nil {
+		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
+		m.refreshTranscript()
+		return nil
+	}
+	if len(stats) == 0 {
+		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "No approval prompts recorded for this workspace."})
+		m.refreshTranscript()
+		m.resumeFollow()
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString("Most frequent approval prompts in this workspace:\n")
+	for _, stat := range stats {
+		detail := strings.TrimSpace(strings.TrimPrefix(stat.Detail, "interactive approval requested"))
+		detail = strings.TrimSpace(strings.TrimPrefix(detail, ":"))
+		line := stat.ToolName
+		if detail != "" {
+			line += " — " + detail
+		}
+		when := stat.LastAt
+		if len(when) > 10 {
+			when = when[:10]
+		}
+		fmt.Fprintf(&b, "  %3d× %s  (last %s)\n", stat.Count, line, when)
+	}
+	b.WriteString("Durable cures: /permissions allow-bash <prefix> · allow-mcp <server__tool> · allow-path <path>")
+	m.entries = append(m.entries, ChatEntry{Kind: "system", Content: b.String()})
+	m.refreshTranscript()
+	m.resumeFollow()
 	return nil
 }
 

@@ -25,15 +25,32 @@ const (
 )
 
 // MCPTrustConfig is explicit host-owned authority for one local STDIO MCP
-// process. It intentionally models only the two reduced-friction classes the
-// runtime can enforce safely. Server annotations never widen this policy.
+// process. Exact routes model the two reduced-friction classes the runtime can
+// enforce safely. Server annotations never widen this policy UNLESS the
+// operator delegates with `annotations: honor` — that flag is the single place
+// the server's own read-only declarations gain authority, and it is a per-
+// server decision, never a default.
+//
+// The coarser grants trade enumeration for a weaker promise: `all` (whole
+// server) and `all_servers` (named downstream namespaces behind the MCPHub
+// gateway) auto-approve under AUTO authority only, and their calls keep the
+// conservative effect class — NORMAL still asks, and an unanswered call is
+// still treated as an effect whose outcome is unknown. Only exact routes and
+// honored annotations can claim read-only semantics.
 type MCPTrustConfig struct {
 	Disabled           bool     `yaml:"disabled,omitempty" json:"disabled,omitempty"`
 	LocalOwner         string   `yaml:"local_owner,omitempty" json:"local_owner,omitempty"`
 	Gateway            string   `yaml:"gateway,omitempty" json:"gateway,omitempty"`
+	Annotations        string   `yaml:"annotations,omitempty" json:"annotations,omitempty"`
+	All                bool     `yaml:"all,omitempty" json:"all,omitempty"`
+	AllServers         []string `yaml:"all_servers,omitempty" json:"all_servers,omitempty"`
 	ReadOnly           []string `yaml:"read_only,omitempty" json:"read_only,omitempty"`
 	WorkspaceEffectful []string `yaml:"workspace_effectful,omitempty" json:"workspace_effectful,omitempty"`
 }
+
+// MCPTrustAnnotationsHonor is the only accepted non-empty value for
+// MCPTrustConfig.Annotations.
+const MCPTrustAnnotationsHonor = "honor"
 
 // UnmarshalYAML makes the entire server authority object strict. Without this
 // boundary, `turst: {disabled: true}` would be silently ignored and an omitted
@@ -100,6 +117,7 @@ func (c *MCPTrustConfig) UnmarshalYAML(node *yaml.Node) error {
 	}
 	allowed := map[string]bool{
 		"disabled": true, "local_owner": true, "gateway": true,
+		"annotations": true, "all": true, "all_servers": true,
 		"read_only": true, "workspace_effectful": true,
 	}
 	for index := 0; index < len(node.Content); index += 2 {
@@ -121,6 +139,7 @@ func (c *MCPTrustConfig) UnmarshalYAML(node *yaml.Node) error {
 func (c *MCPTrustConfig) UnmarshalJSON(data []byte) error {
 	allowed := map[string]bool{
 		"disabled": true, "local_owner": true, "gateway": true,
+		"annotations": true, "all": true, "all_servers": true,
 		"read_only": true, "workspace_effectful": true,
 	}
 	if _, err := strictJSONObjectFields(data, "MCP trust", allowed); err != nil {
@@ -256,10 +275,14 @@ func eligibleForDefaultMCPTrust(server ServerConfig) bool {
 
 func validateAndCanonicalizeMCPTrust(server ServerConfig, trust MCPTrustConfig) (MCPTrustConfig, error) {
 	if trust.Disabled {
-		if trust.LocalOwner != "" || trust.Gateway != "" || len(trust.ReadOnly) != 0 || len(trust.WorkspaceEffectful) != 0 {
+		if trust.LocalOwner != "" || trust.Gateway != "" || trust.Annotations != "" || trust.All ||
+			len(trust.AllServers) != 0 || len(trust.ReadOnly) != 0 || len(trust.WorkspaceEffectful) != 0 {
 			return MCPTrustConfig{}, fmt.Errorf("disabled MCP trust cannot declare owner, gateway, or contracts")
 		}
 		return MCPTrustConfig{Disabled: true}, nil
+	}
+	if trust.Annotations != "" && trust.Annotations != MCPTrustAnnotationsHonor {
+		return MCPTrustConfig{}, fmt.Errorf("MCP trust annotations must be %q or omitted, got %q", MCPTrustAnnotationsHonor, trust.Annotations)
 	}
 	if !validMCPTrustNamespace(server.Name) {
 		return MCPTrustConfig{}, fmt.Errorf("MCP trust requires an exact valid server namespace")
@@ -283,9 +306,22 @@ func validateAndCanonicalizeMCPTrust(server ServerConfig, trust MCPTrustConfig) 
 	if trust.Gateway == MCPTrustGatewayMCPHub && trust.LocalOwner != MCPTrustGatewayMCPHub {
 		return MCPTrustConfig{}, fmt.Errorf("MCPHub gateway trust requires local_owner %q", MCPTrustGatewayMCPHub)
 	}
-	total := len(trust.ReadOnly) + len(trust.WorkspaceEffectful)
-	if total == 0 {
-		return MCPTrustConfig{}, fmt.Errorf("MCP trust must declare at least one exact contract or disabled: true")
+	if len(trust.AllServers) != 0 && trust.Gateway != MCPTrustGatewayMCPHub {
+		return MCPTrustConfig{}, fmt.Errorf("MCP trust all_servers names downstream namespaces and requires gateway %q", MCPTrustGatewayMCPHub)
+	}
+	seenDownstream := make(map[string]struct{}, len(trust.AllServers))
+	for _, downstream := range trust.AllServers {
+		if !validMCPTrustIdentifier(downstream) {
+			return MCPTrustConfig{}, fmt.Errorf("MCP trust all_servers entry %q is not a canonical identifier", downstream)
+		}
+		if _, duplicate := seenDownstream[downstream]; duplicate {
+			return MCPTrustConfig{}, fmt.Errorf("MCP trust all_servers entry %q is duplicated", downstream)
+		}
+		seenDownstream[downstream] = struct{}{}
+	}
+	total := len(trust.ReadOnly) + len(trust.WorkspaceEffectful) + len(trust.AllServers)
+	if total == 0 && !trust.All && trust.Annotations != MCPTrustAnnotationsHonor {
+		return MCPTrustConfig{}, fmt.Errorf("MCP trust must declare at least one exact contract, all, all_servers, annotations: honor, or disabled: true")
 	}
 	if total > maxMCPTrustContracts {
 		return MCPTrustConfig{}, fmt.Errorf("MCP trust declares %d contracts; maximum is %d", total, maxMCPTrustContracts)
@@ -312,6 +348,7 @@ func validateAndCanonicalizeMCPTrust(server ServerConfig, trust MCPTrustConfig) 
 	canonical := cloneMCPTrust(trust)
 	sort.Strings(canonical.ReadOnly)
 	sort.Strings(canonical.WorkspaceEffectful)
+	sort.Strings(canonical.AllServers)
 	return canonical, nil
 }
 
@@ -362,5 +399,6 @@ func validMCPTrustNamespace(value string) bool {
 func cloneMCPTrust(trust MCPTrustConfig) MCPTrustConfig {
 	trust.ReadOnly = append([]string(nil), trust.ReadOnly...)
 	trust.WorkspaceEffectful = append([]string(nil), trust.WorkspaceEffectful...)
+	trust.AllServers = append([]string(nil), trust.AllServers...)
 	return trust
 }

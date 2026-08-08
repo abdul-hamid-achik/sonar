@@ -24,7 +24,7 @@ func TestAutoScopedCommandAllowsRoutineWorkspaceDevelopment(t *testing.T) {
 	// provenance check without executing any fixture binary.
 	hostBin := t.TempDir()
 	for _, name := range []string{
-		"bun", "cargo", "date", "go", "gofmt", "grep", "head", "npm", "pnpm", "rg", "sed", "swift", "yarn",
+		"bun", "cargo", "date", "go", "gofmt", "grep", "head", "make", "npm", "pnpm", "rg", "sed", "swift", "task", "yarn",
 	} {
 		if err := os.WriteFile(filepath.Join(hostBin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
 			t.Fatalf("install host executable %s: %v", name, err)
@@ -66,6 +66,22 @@ func TestAutoScopedCommandAllowsRoutineWorkspaceDevelopment(t *testing.T) {
 		"yarn run lint",
 		"CI=1 cargo check",
 		"date",
+		// task and make targets are workspace-manifest code, the same trust
+		// `npm run build` carries, so the npm-run name convention polices them
+		// verbatim — including its case folding and its segment reading
+		// (site:verify and test-watch carry a verification segment and no
+		// effectful one, exactly like the admitted `npm run site:build`).
+		"task build",
+		"task test",
+		"task verify",
+		"task VERIFY",
+		"task site:verify",
+		"task --list",
+		"task -l",
+		"make test",
+		"make build",
+		"make test-watch",
+		"make lint && go test ./...",
 	} {
 		t.Run(command, func(t *testing.T) {
 			if !ag.autoScopedCommandAllowed(command) {
@@ -78,6 +94,15 @@ func TestAutoScopedCommandAllowsRoutineWorkspaceDevelopment(t *testing.T) {
 func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T) {
 	workspace := t.TempDir()
 	outside := t.TempDir()
+	// task/make refusals below must fall out of the argument contract, not out
+	// of the binary happening to be absent on the test host.
+	hostBin := t.TempDir()
+	for _, name := range []string{"make", "task"} {
+		if err := os.WriteFile(filepath.Join(hostBin, name), []byte("#!/bin/sh\nexit 0\n"), 0o755); err != nil {
+			t.Fatalf("install host executable %s: %v", name, err)
+		}
+	}
+	t.Setenv("PATH", hostBin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	ag := New(nil, nil, 4096)
 	ag.SetWorkDir(workspace)
 
@@ -111,6 +136,20 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 		"git tag -F/etc/passwd v0.1.0",
 		"make -f" + filepath.Join(outside, "Makefile") + " test",
 		"make -ksf" + filepath.Join(outside, "Makefile") + " test",
+		// Target runners: an unnamed default target, an effectful name, or any
+		// option at all stays prompted — the admitted shape is one
+		// verification-named word.
+		"make",
+		"task",
+		"make deploy",
+		"make install",
+		"task migrate",
+		"task db:push",
+		"make -j4 test",
+		"make --eval='x: ; rm -rf .' test",
+		"task --force build",
+		"task --watch test",
+		"task build extra",
 		"sort input -o" + filepath.Join(outside, "sorted.txt"),
 		"sort -bo" + filepath.Join(outside, "sorted-cluster.txt") + " input",
 		"sort --files0-from=paths0",
@@ -174,8 +213,6 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 		"task release",
 		"task site",
 		"task docs:serve",
-		"make test-watch",
-		"task VERIFY",
 		`make "test "`,
 		"make clean",
 		"make test --eval='x:; touch /private/tmp/pwn'",
@@ -184,8 +221,6 @@ func TestAutoScopedCommandGatesDynamicDestructiveAndExternalEffects(t *testing.T
 		"touch " + filepath.Join(outside, "pwn=foo"),
 		"touch /dev/null",
 		"touch -r /dev/null target",
-		"make test",
-		"task site:verify",
 		"just test",
 		"go generate ./...",
 		"mkdir /dev/null",

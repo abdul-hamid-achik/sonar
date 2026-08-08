@@ -991,3 +991,52 @@ func TestExecutionMigrationObjectsAreIdempotent(t *testing.T) {
 		t.Fatalf("session_state revision found=%v error=%v", revisionFound, err)
 	}
 }
+
+func TestWorkspaceApprovalPromptStatsAggregatesAcrossSessions(t *testing.T) {
+	store := testStore(t)
+	first := createExecutionTestSession(t, store, "/workspace/audit")
+	second := createExecutionTestSession(t, store, "/workspace/audit")
+	other := createExecutionTestSession(t, store, "/workspace/elsewhere")
+
+	prompt := func(session Session, suffix, tool, detail string, at time.Time) {
+		t.Helper()
+		requested := executionTestEvent(t, session.ID, session.WorkspaceID, suffix, execution.Effectful)
+		requested.Identity.ToolName = tool
+		requested.OccurredAt = at
+		appendExecutionEvent(t, store, requested)
+		asked := requested
+		asked.Type = execution.EventApprovalRequested
+		asked.Approval = execution.ApprovalRequested
+		asked.Detail = detail
+		asked.OccurredAt = at.Add(time.Second)
+		appendExecutionEvent(t, store, asked)
+	}
+
+	taskDetail := "interactive approval requested: executable outside the host catalog · grant prefix: task deploy"
+	prompt(first, "a1", "bash", taskDetail, executionTestTime)
+	prompt(first, "a2", "bash", taskDetail, executionTestTime.Add(time.Minute))
+	prompt(second, "a3", "bash", taskDetail, executionTestTime.Add(2*time.Minute))
+	prompt(second, "a4", "remove", "interactive approval requested", executionTestTime.Add(3*time.Minute))
+	prompt(other, "a5", "bash", taskDetail, executionTestTime)
+
+	stats, err := store.WorkspaceApprovalPromptStats(context.Background(), "/workspace/audit", 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(stats) != 2 {
+		t.Fatalf("stats = %d rows, want 2 (same-workspace pairs only): %+v", len(stats), stats)
+	}
+	if stats[0].ToolName != "bash" || stats[0].Detail != taskDetail || stats[0].Count != 3 {
+		t.Fatalf("top row = %+v, want the bash prefix pair counted 3 times across both sessions", stats[0])
+	}
+	if stats[1].ToolName != "remove" || stats[1].Count != 1 {
+		t.Fatalf("second row = %+v, want the single remove prompt", stats[1])
+	}
+	if !strings.HasPrefix(stats[0].LastAt, "2026-07-11T12:32") {
+		t.Fatalf("LastAt = %q, want the most recent same-workspace occurrence", stats[0].LastAt)
+	}
+
+	if _, err := store.WorkspaceApprovalPromptStats(context.Background(), "  ", 10); err == nil {
+		t.Fatal("blank workspace id was accepted")
+	}
+}

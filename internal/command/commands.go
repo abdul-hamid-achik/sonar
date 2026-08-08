@@ -444,7 +444,7 @@ func RegisterBuiltins(r *Registry) {
 		Name:        "permissions",
 		Aliases:     []string{"perms"},
 		Description: "Show approval posture, session grants, and workspace rules",
-		Usage:       "/permissions [panel|export [path]|import [--replace] <path>|accept-edits on|off|clear|clear-rules|revoke|allow-*|forget-*]",
+		Usage:       "/permissions [panel|audit|export [path]|import [--replace] <path>|accept-edits on|off|clear|clear-rules|revoke|allow-*|forget-*]",
 		Handler: func(ctx *Context, args []string) Result {
 			if ctx == nil {
 				ctx = &Context{}
@@ -457,6 +457,12 @@ func RegisterBuiltins(r *Registry) {
 					return Result{Error: "usage: /permissions panel"}
 				}
 				return Result{Action: ActionPermissionsPanel}
+			}
+			if args[0] == "audit" {
+				if len(args) != 1 {
+					return Result{Error: "usage: /permissions audit"}
+				}
+				return Result{Action: ActionPermissionsAudit}
 			}
 			if args[0] == "export" {
 				path := ""
@@ -541,7 +547,7 @@ func RegisterBuiltins(r *Registry) {
 			}
 			spec, ok := r.MatchAction("permissions", args[0])
 			if !ok {
-				return Result{Error: "usage: /permissions [panel|export|import|accept-edits|clear|clear-rules|revoke|allow-*|forget-*]"}
+				return Result{Error: "usage: /permissions [panel|audit|export|import|accept-edits|clear|clear-rules|revoke|allow-*|forget-*]"}
 			}
 			switch spec.ID {
 			case PermissionsActionClear:

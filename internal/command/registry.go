@@ -215,6 +215,7 @@ const (
 	ActionPermissionsImport             // Import durable rules (Data = path[|replace])
 	ActionPermissionsClearRules         // Clear all durable workspace rules
 	ActionPermissionsPanel              // Open the interactive permissions panel
+	ActionPermissionsAudit              // Report the workspace's most frequent approval prompts
 	ActionShowContextDoctor             // Open the animated context-usage overlay
 	ActionVoiceInput                    // Open or close the microphone and dictate into the composer
 	ActionVoiceStatus                   // Report every part of the voice pipeline and what is missing
