@@ -2,7 +2,9 @@ package agent
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -719,4 +721,63 @@ func (a *Agent) closeSubagents() {
 			_ = proc.cmd.Process.Kill()
 		}
 	}
+}
+
+// SubagentDoctorRow is one vendor CLI's readiness for /agents doctor.
+type SubagentDoctorRow struct {
+	Provider  string
+	Installed bool
+	Path      string
+	Version   string
+}
+
+// SubagentDoctor reports whether each vendor CLI is installed and answers
+// --version. It deliberately does not probe sign-in state: no vendor exposes
+// a stable no-cost auth check, and the honest proof of a working login is a
+// live child. Called from a command goroutine — version probes execute
+// subprocesses.
+func SubagentDoctor(ctx context.Context) []SubagentDoctorRow {
+	providers := subagentProviders()
+	names := make([]string, 0, len(providers))
+	for name, spec := range providers {
+		if spec.executable != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	rows := make([]SubagentDoctorRow, 0, len(names))
+	for _, name := range names {
+		row := SubagentDoctorRow{Provider: name}
+		resolved, err := exec.LookPath(providers[name].executable)
+		if err == nil {
+			row.Installed = true
+			row.Path = resolved
+			probeCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+			out, versionErr := exec.CommandContext(probeCtx, resolved, "--version").Output()
+			cancel()
+			if versionErr == nil {
+				version := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
+				if len(version) > 64 {
+					version = version[:64]
+				}
+				row.Version = version
+			}
+		}
+		rows = append(rows, row)
+	}
+	return rows
+}
+
+// SpawnSubagent starts one child on the operator's explicit request — the
+// /agents spawn path. The human typing the command IS the authority, so no
+// approval round applies; the child lands in the same registry the panel and
+// agent_output read.
+func (a *Agent) SpawnSubagent(provider, prompt string) (string, error) {
+	result, isErr := a.handleAgentSpawn(map[string]any{
+		"prompt": prompt, "provider": provider,
+	})
+	if isErr {
+		return "", errors.New(strings.TrimPrefix(result, "error: "))
+	}
+	return result, nil
 }

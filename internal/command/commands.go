@@ -759,12 +759,25 @@ func RegisterBuiltins(r *Registry) {
 	r.Register(&Command{
 		Name:        "agents",
 		Description: "Show every subagent: status, activity, and its session",
-		Usage:       "/agents",
+		Usage:       "/agents [doctor|spawn <provider> <prompt>]",
 		Handler: func(ctx *Context, args []string) Result {
-			if len(args) != 0 {
-				return Result{Error: "usage: /agents"}
+			if len(args) == 0 {
+				return Result{Action: ActionSubagentsStatus}
 			}
-			return Result{Action: ActionSubagentsStatus}
+			switch args[0] {
+			case "doctor":
+				if len(args) != 1 {
+					return Result{Error: "usage: /agents doctor"}
+				}
+				return Result{Action: ActionSubagentsDoctor}
+			case "spawn":
+				if len(args) < 3 {
+					return Result{Error: "usage: /agents spawn <sonar|claude|codex|grok> <prompt>"}
+				}
+				return Result{Action: ActionSubagentsSpawn, Data: args[1] + " " + strings.Join(args[2:], " ")}
+			default:
+				return Result{Error: "usage: /agents [doctor|spawn <provider> <prompt>]"}
+			}
 		},
 	})
 

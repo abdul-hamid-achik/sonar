@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -219,5 +220,44 @@ func TestLiveVendorSubagent(t *testing.T) {
 			t.Fatalf("live %s child never settled", provider)
 		}
 		time.Sleep(200 * time.Millisecond)
+	}
+}
+
+// The doctor reports installed state per vendor without spending anything;
+// the manual spawn path lands children in the same registry the panel reads.
+func TestSubagentDoctorAndManualSpawn(t *testing.T) {
+	hostBin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(hostBin, "claude"), []byte("#!/bin/sh\necho 'claude 9.9.9 (test)'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", hostBin)
+	rows := SubagentDoctor(context.Background())
+	if len(rows) != 3 {
+		t.Fatalf("doctor rows = %d, want claude/codex/grok", len(rows))
+	}
+	byName := map[string]SubagentDoctorRow{}
+	for _, row := range rows {
+		byName[row.Provider] = row
+	}
+	if !byName["claude"].Installed || byName["claude"].Version != "claude 9.9.9 (test)" {
+		t.Fatalf("claude row = %+v", byName["claude"])
+	}
+	if byName["codex"].Installed || byName["grok"].Installed {
+		t.Fatalf("absent CLIs reported installed: %+v", rows)
+	}
+
+	fake := filepath.Join(t.TempDir(), "fake-sonar")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\necho '{\"event\":\"text\",\"text\":\"listo\"}'\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ag := New(nil, nil, 4096)
+	ag.SetWorkDir(t.TempDir())
+	ag.subagentExecutable = fake
+	started, err := ag.SpawnSubagent("sonar", "explora")
+	if err != nil || !strings.Contains(started, `"a1"`) {
+		t.Fatalf("manual spawn = %q, %v", started, err)
+	}
+	if _, err := ag.SpawnSubagent("nope", "x"); err == nil {
+		t.Fatal("unknown provider accepted")
 	}
 }

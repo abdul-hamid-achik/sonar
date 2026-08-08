@@ -10,6 +10,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/abdul-hamid-achik/sonar/internal/agent"
 	"github.com/abdul-hamid-achik/sonar/internal/command"
 	"github.com/abdul-hamid-achik/sonar/internal/safeio"
 )
@@ -898,6 +899,52 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		return nil
 
 	case command.ActionSubagentsStatus:
+		m.preemptTranscriptSearch()
+		m.clearViewerModals(false)
+		m.overlayParent = OverlayNone
+		return m.openSubagentsPanel()
+
+	case command.ActionSubagentsDoctor:
+		// Version probes execute subprocesses; keep them off the Update thread.
+		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+			defer cancel()
+			rows := agent.SubagentDoctor(ctx)
+			var b strings.Builder
+			b.WriteString("Subagent engines:\n")
+			for _, row := range rows {
+				switch {
+				case row.Installed && row.Version != "":
+					fmt.Fprintf(&b, "  ✓ %s · %s · %s\n", row.Provider, row.Version, row.Path)
+				case row.Installed:
+					fmt.Fprintf(&b, "  ✓ %s · installed · %s (version probe failed)\n", row.Provider, row.Path)
+				default:
+					fmt.Fprintf(&b, "  ✗ %s · not installed\n", row.Provider)
+				}
+			}
+			b.WriteString("Sign-in state is only proven by a live child: /agents spawn <provider> <prompt>.")
+			return systemNoticeMsg{Text: strings.TrimRight(b.String(), "\n")}
+		}
+
+	case command.ActionSubagentsSpawn:
+		if m.agent == nil {
+			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: "Agent is unavailable."})
+			m.refreshTranscript()
+			m.resumeFollow()
+			return nil
+		}
+		provider, prompt, _ := strings.Cut(result.Data, " ")
+		started, err := m.agent.SpawnSubagent(provider, prompt)
+		if err != nil {
+			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
+			m.refreshTranscript()
+			m.resumeFollow()
+			return nil
+		}
+		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: started})
+		m.refreshTranscript()
+		m.resumeFollow()
+		// Open the panel so the child is visible the moment it starts working.
 		m.preemptTranscriptSearch()
 		m.clearViewerModals(false)
 		m.overlayParent = OverlayNone
