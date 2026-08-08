@@ -72,6 +72,20 @@ func (m *Model) buildHelpContent(innerW int) string {
 
 	m.writeHelpRows(&b, inputShortcuts, innerW)
 
+	// Voice gets its own block because its surface is mostly slash verbs: the
+	// keyboard section can only name ctrl+g, and the registry list below only
+	// says "/voice" once — neither tells a reader the stage or the channels
+	// exist.
+	b.WriteString(m.styles.OverlayAccent.Render("Voice"))
+	b.WriteString("\n")
+	m.writeHelpRows(&b, []helpRow{
+		{"ctrl+g", "Open the mic; the same key closes it and the transcription lands in the composer"},
+		{"/voice on", "Speak answers and alerts — four channels, each one switchable"},
+		{"/voice view", "Listening stage: one panel with the state and the last line said aloud"},
+		{"/voice status", "Every voice setting, plus the config block that reproduces the session"},
+	}, innerW)
+	b.WriteString("\n")
+
 	b.WriteString(m.styles.OverlayAccent.Render("Slash Commands"))
 	b.WriteString("\n")
 

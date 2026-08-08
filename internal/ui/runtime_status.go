@@ -116,13 +116,14 @@ func (m *Model) buildRuntimeStatusContent(width int) string {
 	if version := sanitizeTerminalSingleLine(m.ollamaVersion); version != "" {
 		lines = append(lines, m.runtimeStatusRow("Ollama", version, width))
 	}
-	if m.ollamaOffline {
-		// Ping failure can mean either host transport or model selection/setup.
-		// Keep the recovery conditional rather than presenting transport success
-		// or failure as verified model availability.
+	if m.providerOffline {
+		// A failed ping is transport evidence only. Keep the recovery
+		// conditional — credentials, network, and the provider's own status
+		// are indistinguishable from here — and name the two paths that are
+		// actually available on this keyboard.
 		lines = append(lines, m.runtimeStatusRow(
-			"Ollama",
-			"setup needed · ctrl+o select or install a model; run ollama serve if the host is unavailable",
+			"Provider",
+			"unreachable at startup · check the API key and network; /provider switches profiles, ctrl+o picks a model",
 			width,
 		))
 	}

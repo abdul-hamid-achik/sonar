@@ -14,4 +14,4 @@
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
    Recovery paused <session> · Recovery receipt review · /recover inspect
 ▏❯ Ask
-   enter send · shift+tab mode · esc cancel · f1 help
+   enter send · shift+tab mode · esc cancel · f1 help · ctrl+g voice

@@ -40,6 +40,9 @@ steps:
             contains: "Keyboard Shortcuts"
         timeoutMs: 3000
     - snapshot: help
+    # Two pages: the help gained a Voice block (keyboard section + its own
+    # rows) and one pgdown no longer reaches the slash-command list.
+    - press: "pgdown"
     - press: "pgdown"
     - wait:
         screen:

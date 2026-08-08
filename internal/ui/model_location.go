@@ -53,7 +53,7 @@ func (m *Model) currentModelReachabilityLabel(compact bool) string {
 		return ""
 	}
 	label := m.currentModelSurfaceLabel(compact)
-	if !m.ollamaOffline {
+	if !m.providerOffline {
 		return label
 	}
 	if label == "" {

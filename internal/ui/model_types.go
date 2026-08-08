@@ -38,8 +38,6 @@ const (
 	OverlayRuntimeStatus
 	OverlayGoalInspector
 	OverlayGoalRecovery
-	OverlayModelDetails
-	OverlayModelPull
 	OverlayTranscriptSearch
 	OverlayPermissions
 	OverlayThemePicker

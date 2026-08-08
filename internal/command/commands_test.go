@@ -917,11 +917,13 @@ func TestContextCommandParsesSubcommands(t *testing.T) {
 		wantError  bool
 	}{
 		{args: nil, wantAction: ActionShowContextDoctor},
-		{args: []string{"status"}, wantAction: ActionSetNumCtx, wantData: "status"},
-		{args: []string{"auto"}, wantAction: ActionSetNumCtx, wantData: "auto"},
-		{args: []string{"set", "96k"}, wantAction: ActionSetNumCtx, wantData: "set:96k"},
-		{args: []string{"save"}, wantAction: ActionSaveNumCtx},
-		{args: []string{"set"}, wantError: true},
+		{args: []string{"status"}, wantAction: ActionContextWindowStatus},
+		// The num_ctx tuning verbs are gone, not hidden: every provider sonar
+		// can run against is hosted and owns its own window, so auto/set only
+		// ever errored and save wrote a value nothing read.
+		{args: []string{"auto"}, wantError: true},
+		{args: []string{"set", "96k"}, wantError: true},
+		{args: []string{"save"}, wantError: true},
 		{args: []string{"nope"}, wantError: true},
 	} {
 		result := r.Execute(&Context{}, "context", test.args)

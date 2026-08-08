@@ -89,21 +89,27 @@ func TestRuntimeStatusSeparatesLocalToolsFromMCPServers(t *testing.T) {
 	}
 }
 
-func TestRuntimeStatusKeepsOllamaRecoveryConditionalAndActionable(t *testing.T) {
+func TestRuntimeStatusKeepsProviderRecoveryConditionalAndActionable(t *testing.T) {
 	m := newTestModel(t)
-	m.ollamaOffline = true
+	m.providerOffline = true
 	content := strings.Join(strings.Fields(ansi.Strip(m.buildRuntimeStatusContent(58))), " ")
 	for _, want := range []string{
-		"Ollama setup needed",
-		"ctrl+o select or install a model",
-		"run ollama serve if the host is unavailable",
+		"Provider unreachable at startup",
+		"check the API key and network",
+		"/provider switches profiles",
+		"ctrl+o picks a model",
 	} {
 		if !strings.Contains(content, want) {
-			t.Fatalf("Runtime omitted Ollama recovery %q:\n%s", want, content)
+			t.Fatalf("Runtime omitted provider recovery %q:\n%s", want, content)
 		}
 	}
-	if strings.Contains(content, "host offline") {
-		t.Fatalf("Runtime promoted an unverified host diagnosis:\n%s", content)
+	// The old copy advised `ollama serve` — a local daemon this product does
+	// not have. A failed ping is transport evidence only, so no diagnosis is
+	// promoted to a verdict either.
+	for _, forbidden := range []string{"ollama serve", "host offline"} {
+		if strings.Contains(content, forbidden) {
+			t.Fatalf("Runtime resurrected %q:\n%s", forbidden, content)
+		}
 	}
 }
 
@@ -290,7 +296,7 @@ func TestRuntimeStatusSurfacesTheOllamaVersion(t *testing.T) {
 	if !strings.Contains(panel, "0.31.2-test") {
 		t.Fatalf("runtime panel does not report the Ollama version:\n%s", panel)
 	}
-	if title := ollamaModelPickerTitle("0.31.2-test"); title != "Ollama models" {
+	if title := ollamaModelPickerTitle("0.31.2-test"); title != "Models" {
 		t.Fatalf("model picker title still carries the version: %q", title)
 	}
 }

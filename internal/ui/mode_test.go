@@ -465,7 +465,7 @@ func TestModeStatusLine(t *testing.T) {
 func TestUnavailableOllamaModelIsMarkedOfflineBesideItsName(t *testing.T) {
 	m := newTestModel(t)
 	m.model = "qwen3.5:2b"
-	m.ollamaOffline = true
+	m.providerOffline = true
 	m.recalcViewportHeight()
 	m.refreshTranscript()
 

@@ -341,6 +341,13 @@ func (m *Model) renderShortcutsBar(paneW int) string {
 		return ""
 	}
 
+	lead := m.contentGrid().Prefix(" ")
+	inner := max(1, paneW-lipgloss.Width(lead))
+
+	// Reserve room for right identity; pack hints into the remainder.
+	rightBudget := m.shortcutsIdentityRightBudget()
+	leftBudget := max(8, inner-rightBudget-1)
+
 	var hints []keyHint
 	if m.state == StateIdle && !m.composerIsBusy() {
 		hints = []keyHint{
@@ -349,18 +356,22 @@ func (m *Model) renderShortcutsBar(paneW int) string {
 			{Key: "esc", Action: "cancel"},
 			{Key: m.keys.Help.Help().Key, Action: "help"},
 		}
+		// The voice invite joins only when every hint keeps its label. This
+		// row is where first-run discovery happens — the welcome deliberately
+		// paints nothing on roomy frames — but renderKeyHints compacts by
+		// stripping action words, and a bar that trades "shift+tab mode" for
+		// an unlabeled "ctrl+g" taught one thing by unteaching another.
+		withVoice := append(append([]keyHint{}, hints...),
+			keyHint{Key: m.keys.VoiceInput.Help().Key, Action: "voice"})
+		if lipgloss.Width(m.renderKeyHintSet(mergeKeyHintAliases(withVoice), len(withVoice))) <= leftBudget {
+			hints = withVoice
+		}
 	} else {
 		// Live activity rail already surfaces esc stop · enter queue.
 		hints = []keyHint{
 			{Key: "shift+tab", Action: "mode"},
 		}
 	}
-	lead := m.contentGrid().Prefix(" ")
-	inner := max(1, paneW-lipgloss.Width(lead))
-
-	// Reserve room for right identity; pack hints into the remainder.
-	rightBudget := m.shortcutsIdentityRightBudget()
-	leftBudget := max(8, inner-rightBudget-1)
 	left := m.renderKeyHints(leftBudget, hints...)
 	right := ""
 	if rightBudget > 0 {

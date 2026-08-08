@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,13 +49,23 @@ import (
 func (m *Model) setVoiceSetting(request string) tea.Cmd {
 	name, value, _ := strings.Cut(strings.TrimSpace(request), " ")
 	value = strings.TrimSpace(value)
+	if strings.EqualFold(name, "input") {
+		// Dictation is the independent half — the microphone needs no
+		// synthesizer — so its settings apply with spoken output off and must
+		// not sit behind the voiceActive guard below.
+		return m.setVoiceInputSetting(value)
+	}
 	if !m.voiceActive() {
 		return m.setFooterNotice(noticeInfo,
 			"Spoken output is off. Run /voice on first.", 4*time.Second)
 	}
 	switch strings.ToLower(name) {
+	case "profile":
+		return m.setVoiceProfile(value)
 	case "provider":
 		return m.setVoiceProvider(value)
+	case "model":
+		return m.setVoiceModel(value)
 	case "speak_when", "speakwhen":
 		return m.setVoiceSpeakWhen(value)
 	case "rate":
@@ -65,8 +76,113 @@ func (m *Model) setVoiceSetting(request string) tea.Cmd {
 		return m.setVoicePronunciation(value)
 	default:
 		return m.setFooterNotice(noticeWarning,
-			"Unknown voice setting "+name+". Try: provider, speak_when, rate, voice, pronounce.", 6*time.Second)
+			"Unknown voice setting "+name+". Try: provider, model, speak_when, rate, voice, pronounce.", 6*time.Second)
 	}
+}
+
+// setVoiceInputSetting tunes dictation, by the names the config file uses:
+// voice.input.model and voice.input.language. These were config-file-only,
+// which for a model path meant "restart to try a different Whisper size" —
+// the exact loop /voice exists to close.
+func (m *Model) setVoiceInputSetting(request string) tea.Cmd {
+	name, value, _ := strings.Cut(strings.TrimSpace(request), " ")
+	value = strings.TrimSpace(value)
+	switch strings.ToLower(name) {
+	case "model":
+		if value == "" {
+			current := m.voiceInputModel
+			if current == "" {
+				current = "searching the conventional install locations, smallest first"
+			}
+			return m.appendVoiceReport("Dictation model: " + current + "\nUsage: /voice input model <ggml path>")
+		}
+		if _, err := os.Stat(value); err != nil {
+			// Refused now rather than discovered mid-dictation: the failure
+			// would otherwise surface at the moment somebody finished
+			// speaking a sentence they now have to repeat.
+			return m.setFooterNotice(noticeWarning, "No model file at "+value+".", 6*time.Second)
+		}
+		m.voiceInputModel = value
+		return m.setFooterNotice(noticeInfo, "Dictation model: "+value+" · the next transcription uses it.", 5*time.Second)
+	case "language":
+		if value == "" {
+			current := m.voiceInputLanguage
+			if current == "" {
+				current = "detected per utterance"
+			}
+			return m.appendVoiceReport("Dictation language: " + current + "\nUsage: /voice input language <ISO code|auto>")
+		}
+		if strings.EqualFold(value, "auto") {
+			m.voiceInputLanguage = ""
+			return m.setFooterNotice(noticeInfo, "Dictation language: detected per utterance.", 5*time.Second)
+		}
+		m.voiceInputLanguage = strings.ToLower(value)
+		return m.setFooterNotice(noticeInfo, "Dictation language: "+m.voiceInputLanguage+".", 5*time.Second)
+	default:
+		return m.appendVoiceReport("Usage: /voice input model <ggml path> | /voice input language <ISO code|auto>")
+	}
+}
+
+// voiceProfiles are named channel mixes for the places a session is actually
+// listened from. A correct mix takes four toggles and a speak_when to reach,
+// and the moment somebody wants it is the moment they are about to stop
+// looking at the screen — exactly when a five-command detour is most likely
+// to be skipped. Policy only: no synthesizer rebuild, and like every /voice
+// verb nothing persists; /voice status prints the block that would.
+var voiceProfiles = map[string]struct {
+	answer, alerts, activity, reasoning bool
+	speakWhen                           string
+	summary                             string
+}{
+	// At the desk the screen wins; speech is the channel for the moment you
+	// switch away.
+	"desk": {answer: true, alerts: true, speakWhen: config.SpeakWhenUnfocused,
+		summary: "answer + alerts, held back while this window has focus"},
+	// Walked away, the voice is the only channel left — activity joins so a
+	// long AUTO run is audible progress rather than suspicious silence.
+	"walkaway": {answer: true, alerts: true, activity: true, speakWhen: config.SpeakWhenAlways,
+		summary: "answer + alerts + activity, spoken always"},
+	// Pairing: both of you are looking, but the answer read aloud keeps the
+	// conversation moving without anyone leaning in to read.
+	"pair": {answer: true, alerts: true, speakWhen: config.SpeakWhenAlways,
+		summary: "answer + alerts, spoken always"},
+}
+
+func (m *Model) setVoiceProfile(value string) tea.Cmd {
+	name := strings.ToLower(strings.TrimSpace(value))
+	profile, ok := voiceProfiles[name]
+	if !ok {
+		return m.appendVoiceReport("Usage: /voice profile desk|walkaway|pair\n" +
+			"  desk      answer + alerts, held back while you are looking\n" +
+			"  walkaway  answer + alerts + activity, spoken always\n" +
+			"  pair      answer + alerts, spoken always")
+	}
+	cfg := &m.voice.config
+	cfg.Answer, cfg.Alerts = profile.answer, profile.alerts
+	cfg.Activity, cfg.Reasoning = profile.activity, profile.reasoning
+	cfg.SpeakWhen = profile.speakWhen
+	return m.setFooterNotice(noticeInfo,
+		"Voice profile "+name+": "+profile.summary+". /voice status prints the block that keeps it.", 6*time.Second)
+}
+
+// setVoiceModel names the hosted synthesis model. Only the hosted driver has
+// one — under `say` the setting is refused rather than silently stored, so
+// /voice status never describes a knob the active synthesizer cannot read.
+func (m *Model) setVoiceModel(value string) tea.Cmd {
+	if value == "" {
+		return m.appendVoiceReport("Usage: /voice model <hosted synthesis model>  (openai provider only)")
+	}
+	if m.effectiveProvider() != "openai" {
+		return m.setFooterNotice(noticeWarning,
+			"voice.model names the hosted synthesis model; switch with /voice provider openai first.", 6*time.Second)
+	}
+	previous := m.voice.config.Model
+	m.voice.config.Model = value
+	if notice, ok := m.reopenVoice(); !ok {
+		m.voice.config.Model = previous
+		return m.setFooterNotice(noticeWarning, notice, 8*time.Second)
+	}
+	return m.setFooterNotice(noticeInfo, "Hosted synthesis model: "+value+". /voice test to hear it.", 5*time.Second)
 }
 
 func (m *Model) setVoiceProvider(value string) tea.Cmd {
@@ -298,6 +414,12 @@ func (m *Model) voiceSettingsYAML() string {
 	}
 	if provider := m.effectiveProvider(); provider != "say" {
 		fmt.Fprintf(&block, "      provider: %s\n", provider)
+		if model := strings.TrimSpace(cfg.Model); model != "" {
+			fmt.Fprintf(&block, "      model: %s\n", model)
+		}
+		if endpoint := strings.TrimSpace(cfg.Endpoint); endpoint != "" {
+			fmt.Fprintf(&block, "      endpoint: %s\n", endpoint)
+		}
 	}
 	if !cfg.SpeaksWhileFocused() {
 		fmt.Fprintf(&block, "      speak_when: %s\n", config.SpeakWhenUnfocused)
@@ -325,6 +447,15 @@ func (m *Model) voiceSettingsYAML() string {
 		fmt.Fprintf(&block, "        %s:\n", language)
 		for _, word := range sortedKeysOf(entries) {
 			fmt.Fprintf(&block, "          %s: %q\n", word, entries[word])
+		}
+	}
+	if m.voiceInputModel != "" || m.voiceInputLanguage != "" {
+		block.WriteString("      input:\n")
+		if m.voiceInputModel != "" {
+			fmt.Fprintf(&block, "        model: %s\n", m.voiceInputModel)
+		}
+		if m.voiceInputLanguage != "" {
+			fmt.Fprintf(&block, "        language: %s\n", m.voiceInputLanguage)
 		}
 	}
 	return block.String()

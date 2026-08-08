@@ -1,35 +1,35 @@
                      ╭────────────────────────────────────────────────────────────────────────────╮
                      │ Help                                                                       │
                      │                                                                            │
+                     │ Voice                                                                      │
+                     │   ctrl+g            Open the mic; the same key closes it and the           │
+                     │                     transcription lands in the composer                    │
+                     │   /voice on         Speak answers and alerts — four channels, each one     │
+                     │                     switchable                                             │
+                     │   /voice view       Listening stage: one panel with the state and the      │
+                     │                     last line said aloud                                   │
+                     │   /voice status     Every voice setting, plus the config block that        │
+                     │                     reproduces the session                                 │
                      │                                                                            │
-                     │   Session                                                                  │
-                     │   shift+tab         Cycle mode (NORMAL/PLAN/AUTO)                          │
-                     │   ctrl+o            Open model picker                                      │
-                     │   ctrl+p            Open settings                                          │
-                     │   ctrl+n            New conversation                                       │
-                     │   ctrl+l            Clear screen                                           │
-                     │   f1                Show help (empty input)                                │
-                     │                                                                            │
-                     │   Leave                                                                    │
-                     │   esc               Cancel / close overlay                                 │
-                     │   ctrl+c            Quit                                                   │
-                     │                                                                            │
-                     │ Input Shortcuts                                                            │
-                     │   @file / @agent    Insert file or agent mention text                      │
-                     │   paste/drag imag…  Attach up to four PNG, JPEG, or GIF files to the       │
-                     │                     pending prompt                                         │
-                     │   shift+drag        Select and copy: Ghostty, kitty, WezTerm, Alacritty,   │
-                     │                     xterm — Option in iTerm2, and alt+m for terminals      │
-                     │                     with no override                                       │
-                     │   ~/… or /…         Review temporary read-only access; MCP tools require   │
-                     │                     separate approval                                      │
-                     │   #skill            Insert skill mention text                              │
-                     │   /cmd              Run slash command                                      │
-                     │   enter (running)   Slash commands run immediately; other drafts queue     │
-                     │                     until the current turn settles                         │
-                     │   esc (running)     Clear a queued follow-up first; press again to cancel  │
-                     │                     the turn                                               │
                      │ Slash Commands                                                             │
                      │   /help             Show help overlay with shortcuts and commands          │
-                     │ esc/q close · j/k scroll · pgup/pgdn page · 27%                            │
+                     │   /clear            Clear conversation history                             │
+                     │   /plan             Open a guided read-only planning form                  │
+                     │   /goal             Create, inspect, pause, resume, budget, or drop a      │
+                     │                     durable goal                                           │
+                     │   /goal new         Define a durable objective, acceptance, and budget     │
+                     │   /goal show        Unavailable · No goal is configured.                   │
+                     │   /goal pause       Unavailable · No goal is configured.                   │
+                     │   /goal resume      Unavailable · No goal is configured.                   │
+                     │   /goal budget      Unavailable · No goal is configured.                   │
+                     │   /goal drop        Unavailable · No goal is configured.                   │
+                     │   /model            Show, switch, or list models                           │
+                     │   /theme            Show, switch, or list color schemes                    │
+                     │   /provider         Show or switch inference provider profiles             │
+                     │   /recover          Review a paused execution and record typed evidence    │
+                     │   /agent            Show or switch agent profile                           │
+                     │   /load             Load a markdown file as context                        │
+                     │   /image            Attach or manage pending and historical images         │
+                     │   /image list       Show images attached to the pending prompt             │
+                     │ esc/q close · j/k scroll · pgup/pgdn page · 48%                            │
                      ╰────────────────────────────────────────────────────────────────────────────╯

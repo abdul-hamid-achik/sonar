@@ -185,6 +185,12 @@ func (m *Model) renderStatusLine() string {
 	if !contextHigh && contextStatus != "" && plan.owns(factContext, surfaceStatusLine) {
 		parts = append(parts, contextStatus)
 	}
+	// The chip answers "will this speak" from across the room. Last in the
+	// row on purpose: the width-trim below drops from the right, and every
+	// operational signal above outranks an ambient reminder.
+	if plan.owns(factVoice, surfaceStatusLine) {
+		parts = append(parts, m.styles.StatusText.Render("voice on"))
+	}
 	// Shortcuts bar already carries enter/mode/help. Idle footer only adds
 	// operational signals (mode, approvals, MCP, notices, high context) —
 	// not a second discoverability strip that fights the fixed chrome.

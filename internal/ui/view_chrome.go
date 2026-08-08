@@ -402,67 +402,13 @@ func (m *Model) compactCompletionOwnsDivider() bool {
 		completionPopupHeight(m.height, m.inputLines) <= 6
 }
 
-// compactOllamaStartupNotice is deliberately narrow: only the fixed startup
-// recovery message authored by the host is eligible, and only when the chat
-// pane would otherwise hide the welcome surface. Arbitrary provider/tool
-// errors retain the complete generic error presentation.
-func compactOllamaStartupNotice(content string, width int, unavailable bool) (string, bool) {
-	if width >= 28 || !isOllamaStartupRecovery(content, unavailable) {
-		return "", false
-	}
-	normalized := strings.ToLower(sanitizeTerminalSingleLine(content))
-	if strings.Contains(normalized, "no model selected") {
-		return truncateDisplay("Ollama model · ctrl+o", max(1, width)), true
-	}
-	return truncateDisplay("Ollama setup · Runtime", max(1, width)), true
-}
-
-func isOllamaStartupRecovery(content string, unavailable bool) bool {
-	if !unavailable {
-		return false
-	}
-	normalized := strings.ToLower(sanitizeTerminalSingleLine(content))
-	return strings.HasPrefix(normalized, "ollama:") && strings.Contains(normalized, "try: ollama serve")
-}
-
-// defaultBootstrapModel is the recommended first model for new installations.
-const (
-	defaultBootstrapModel     = "qwen3.5:2b"
-	defaultBootstrapModelSize = "~2.7 GB"
-)
-
-// bootstrapPullHint is the single wording for the first-run pull affordance.
-// It was previously written out at two call sites that had already drifted.
-func bootstrapPullHint() string {
-	return "press p to pull " + defaultBootstrapModel + " (" + defaultBootstrapModelSize + ")"
-}
-
-// needsModelBootstrap returns true when Ollama is reachable but no local
-// models are installed, indicating a first-run state.
-// needsModelBootstrap reports whether this session has no model to talk to and
-// the user must install one before anything works.
-//
-// A remote provider answers that question on its own. sonar's opening frame
-// read "DEEPSEEK · remote prompts · deepseek-v4-flash" in the top bar and
-// "No local model installed / press p to pull qwen3.5:2b (~2.7 GB)"
-// immediately underneath — a correctly configured, fully working session
-// telling a new user to download 2.7 GB they do not need, as the first thing
-// they see. The check only ever asked the Ollama inventory, which is empty by
-// construction on a harness that does not use Ollama.
-//
-// Bootstrap is about having no model at all, not about having no *local* one.
-func (m *Model) needsModelBootstrap() bool {
-	if m == nil {
-		return false
-	}
-	if m.modelManager != nil && m.modelManager.RemoteProvider() {
-		return false
-	}
-	if m.ollamaOffline || len(m.ollamaModels) > 0 {
-		return false
-	}
-	return m.ollamaInventoryAttempted
-}
+// The local-runtime bootstrap surface — "No local model installed / press p
+// to pull qwen3.5:2b" — and the compact "ollama: … try: ollama serve"
+// startup projection lived here until both were confirmed unreachable: the
+// bootstrap predicate returned false for every remote provider and
+// RemoteProvider() is constant-true in this product, and the recovery
+// message the projection matched is emitted only on the dead local startup
+// branch. local-agent keeps its copies, where a daemon exists to pull into.
 
 // renderWelcome paints only recovery-critical empty-state copy.
 //
@@ -556,10 +502,6 @@ func (m *Model) renderWelcome(b *strings.Builder) {
 				writeLine(m.styles.StatusText, mode)
 			}
 		}
-		if m.needsModelBootstrap() {
-			writeLine(m.styles.StatusWarning, "No local model installed")
-			writeLine(m.styles.WelcomeHint, bootstrapPullHint())
-		}
 		return
 	}
 
@@ -582,11 +524,6 @@ func (m *Model) renderWelcome(b *strings.Builder) {
 		if mode := welcomeModeLabel(); mode != "" {
 			writeLine(m.styles.StatusText, mode)
 		}
-	}
-
-	if m.needsModelBootstrap() {
-		writeLine(m.styles.StatusWarning, "No local model installed")
-		writeLine(m.styles.WelcomeHint, bootstrapPullHint())
 	}
 
 	writeLine(m.styles.WelcomeHint, "Ask · /help")

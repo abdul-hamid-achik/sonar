@@ -48,11 +48,15 @@ const (
 	factContext
 	// factMode is the NORMAL/PLAN/AUTO authority badge.
 	factMode
+	// factVoice is the "spoken output is on" chip. It exists so somebody who
+	// walked away and came back can tell at a glance whether the harness will
+	// speak, without opening /voice status.
+	factVoice
 )
 
 // statusPlan is the resolved owner of each ambient fact for one frame.
 type statusPlan struct {
-	owners [4]statusSurface
+	owners [5]statusSurface
 }
 
 // owns reports whether surface should paint fact in this frame. A surface that
@@ -112,6 +116,15 @@ func (m *Model) planStatus() statusPlan {
 		plan.owners[factModel] = surfaceStatusLine
 		plan.owners[factContext] = surfaceStatusLine
 		plan.owners[factRemoteBoundary] = surfaceStatusLine
+	}
+
+	// Voice is ambient only while the harness is quiet. The activity rail
+	// already leads with Listening/Transcribing while a turn runs, the pulse
+	// carries speaking, and the stage IS the voice surface whenever it is up —
+	// assigning the chip anywhere in those frames would say the same thing
+	// twice. Unassigned means surfaceNone: the fact simply is not painted.
+	if m.voiceActive() && !m.activityRailActive() && !m.voiceStageActive() {
+		plan.owners[factVoice] = surfaceStatusLine
 	}
 
 	// A context window near its limit stops being ambient and becomes an

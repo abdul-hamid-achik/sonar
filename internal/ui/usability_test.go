@@ -100,58 +100,27 @@ func TestWindowTitleIdentifiesOnlySanitizedWorkspaceBasename(t *testing.T) {
 	}
 }
 
-func TestMinimumTerminalCompactsOnlyKnownOllamaStartupRecovery(t *testing.T) {
-	m := newTestModel(t)
-	updated, _ := m.Update(tea.WindowSizeMsg{Width: minTerminalWidth, Height: minTerminalHeight})
-	m = updated.(*Model)
-	raw := "ollama: no model selected\ntry: ollama serve · ollama pull qwen3.5:2b"
-	m.ollamaOffline = true
-	updated, _ = m.Update(ErrorMsg{Msg: raw})
-	m = updated.(*Model)
-	transcript := m.renderEntries()
-	if plain := ansi.Strip(transcript); !strings.Contains(plain, "Ollama model") {
-		t.Fatalf("compact transcript projection missing:\n%s", plain)
-	}
-
-	visible := ansi.Strip(m.View().Content)
-	for _, want := range []string{"SONAR", "Ollama model", "ctrl+o", "ctrl+p settings"} {
-		if !strings.Contains(visible, want) {
-			t.Fatalf("minimum startup recovery omitted %q:\n%s", want, visible)
-		}
-	}
-	if strings.Contains(visible, "ollama pull") {
-		t.Fatalf("minimum startup recovery retained the fragmented long command:\n%s", visible)
-	}
-	if got := m.entries[0].Content; got != raw {
-		t.Fatalf("compact projection mutated raw diagnostic: %q", got)
-	}
-	assertRenderedLinesFit(t, m.View().Content, minTerminalWidth)
-	assertRenderedHeightFits(t, m.View().Content, minTerminalHeight)
-}
-
-func TestCompactOllamaRecoveryDoesNotRewriteArbitraryErrors(t *testing.T) {
-	if rendered, ok := compactOllamaStartupNotice("provider failed: no model selected", 23, true); ok || rendered != "" {
-		t.Fatalf("arbitrary error compacted as Ollama startup recovery: %q", rendered)
-	}
-}
-
-func TestOllamaStartupRecoveryRemainsDetailedAtOrdinaryWidth(t *testing.T) {
+// The compact "ollama: … try: ollama serve" startup projection is gone with
+// the message it matched: the only emitter lived on the dead local startup
+// branch (RemoteProvider() is constant-true), so the projection could never
+// trigger. A provider failure renders through the ordinary error entry.
+func TestStartupErrorsRenderWithoutLocalRuntimeProjection(t *testing.T) {
 	m := newTestModel(t)
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 90, Height: 32})
 	m = updated.(*Model)
-	m.ollamaOffline = true
-	raw := "ollama: no model selected\ntry: ollama serve · ollama pull qwen3.5:2b"
+	m.providerOffline = true
+	raw := "The provider did not answer. Check the API key and network."
 	updated, _ = m.Update(ErrorMsg{Msg: raw})
 	m = updated.(*Model)
 
 	plain := ansi.Strip(m.renderEntries())
-	for _, want := range []string{"ollama: no model selected", "ollama serve", "ollama pull"} {
-		if !strings.Contains(plain, want) {
-			t.Fatalf("ordinary startup recovery omitted %q:\n%s", want, plain)
-		}
+	if !strings.Contains(plain, "provider did not answer") {
+		t.Fatalf("startup failure lost its diagnostic:\n%s", plain)
 	}
-	if strings.Contains(plain, "✗ error") {
-		t.Fatalf("known startup recovery was promoted to a generic operation error:\n%s", plain)
+	for _, forbidden := range []string{"ollama serve", "Ollama model · ctrl+o", "Ollama setup · Runtime"} {
+		if strings.Contains(plain, forbidden) {
+			t.Fatalf("local-runtime recovery copy resurfaced as %q:\n%s", forbidden, plain)
+		}
 	}
 }
 

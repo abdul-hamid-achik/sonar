@@ -39,7 +39,7 @@ supervisor or a cron job would use.
 
 ## Context
 
-`/context` shows how much of the window this session is using and can save a
-preference for it. When a turn approaches the limit, sonar compacts earlier
-turns rather than truncating them, and reconciles the image references it still
-has to keep visible.
+`/context` shows how much of the window this session is using. The window
+itself belongs to the provider — there is nothing to tune here. When a turn
+approaches the limit, sonar compacts earlier turns rather than truncating
+them, and reconciles the image references it still has to keep visible.

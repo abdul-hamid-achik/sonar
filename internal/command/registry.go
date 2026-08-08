@@ -200,8 +200,7 @@ const (
 	ActionClearImages                   // Remove every image from the pending prompt
 	ActionForgetImageHistory            // Remove image references from active conversation history; checkpoints remain
 	ActionDeleteMemory                  // Delete one persistent memory entry (Data = id)
-	ActionSetNumCtx                     // Apply a new ollama.num_ctx at runtime (Data = tokens; optional Force)
-	ActionSaveNumCtx                    // Persist the active num_ctx into the host config file
+	ActionContextWindowStatus           // Report the session's context window and its usage as text
 	ActionMCPReconnect                  // Reconnect an MCP server (Data = server name)
 	ActionPermissionsAcceptEdits        // Toggle accept-workspace-edits posture (Data = on|off)
 	ActionPermissionsClear              // Clear every process-local session approval grant

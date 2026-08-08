@@ -9,13 +9,16 @@ import (
 	"github.com/abdul-hamid-achik/sonar/internal/speech"
 )
 
-// Voice output: three channels, separately switchable, one of them on.
+// Voice output: four channels, separately switchable, two of them on.
 //
-// Answer, reasoning, and activity are three different things to hear, and a
-// single on/off switch makes that choice for the listener badly. An AUTO turn
-// produces eight tool receipts and several reasoning blocks; spoken together
-// they bury the one sentence that was worth waiting for. So each is its own
-// channel, and only the answer speaks by default.
+// Answer, reasoning, activity, and alerts are four different things to hear,
+// and a single on/off switch makes that choice for the listener badly. An AUTO
+// turn produces eight tool receipts and several reasoning blocks; spoken
+// together they bury the one sentence that was worth waiting for. So each is
+// its own channel, and only the answer and the alerts speak by default. The
+// alert channel lives in voice_alerts.go and is the one that ignores
+// speak_when: an approval waiting on somebody who is not looking has no
+// competing channel at all.
 //
 // The projection is in voice_projection.go and is where the value is. This file
 // owns only WHEN each channel speaks and what silences it.
@@ -121,11 +124,19 @@ func (m *Model) openVoice() (string, bool) {
 	if m.voice != nil {
 		return "", true
 	}
-	if !speech.Available() {
-		return "voice: this host has no synthesizer; nothing would be spoken", false
-	}
 	cfg := m.voiceConfig
-	speaker, err := speech.NewWithProvider(cfg.Provider, cfg.Voice, cfg.Rate, cfg.Voices)
+	// Ask the provider before probing the host. The hosted driver needs a key
+	// and a player, never a host synthesizer — this check used to run first
+	// unconditionally, which refused `voice.provider: openai` on every Linux
+	// host that was configured for exactly that engine, while the driver layer
+	// below would have accepted it.
+	if speech.ProviderNeedsHost(cfg.Provider) && !speech.Available() {
+		return "voice: this host has no synthesizer (Linux: install espeak-ng); voice.provider: openai works without one", false
+	}
+	speaker, err := speech.NewFromConfig(speech.Config{
+		Provider: cfg.Provider, Voice: cfg.Voice, Rate: cfg.Rate, Voices: cfg.Voices,
+		HostedModel: cfg.Model, HostedEndpoint: cfg.Endpoint,
+	})
 	if err != nil {
 		return "voice: " + err.Error(), false
 	}
@@ -165,6 +176,10 @@ func (m *Model) beginVoiceTurn(prompt string) {
 	}
 	m.voice.language, m.voice.languageKnown = "", false
 	m.voice.lastActivity, m.voice.digestSpoken = "", ""
+	// A new turn makes the previous turn's alert history, not state: the
+	// stage must not keep saying "The turn failed." beside a run that is
+	// currently working.
+	m.voiceLastAlert = ""
 	if seed := spokenLanguage(prompt); seed != "" {
 		m.voice.seed = seed
 	}

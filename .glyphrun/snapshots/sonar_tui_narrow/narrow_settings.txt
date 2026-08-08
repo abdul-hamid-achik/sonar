@@ -1,17 +1,17 @@
    DEEPSEEK · remote…
 
-   PLAN · read-only
-
  ╭────────────────────────────────────╮
  │ Settings                           │
  │ │ Model · DEEPSEEK · remote promp… │
- │   Provider · deepseek · remote     │
+ │   Provider · deepseek              │
  │   Agent profile · Default          │
  │   Mode · PLAN                      │
  │   Sessions · Resume                │
  │   Compact layout · Auto            │
  │   Runtime status · 21 ready tools… │
  │   Permissions · 0 session · 0 rul… │
+ │   Theme · nord                     │
+ │   Voice · Off                      │
  │   Help · Shortcuts                 │
  │                                    │
  │   Choose a model                   │

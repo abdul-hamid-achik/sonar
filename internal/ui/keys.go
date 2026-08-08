@@ -268,7 +268,7 @@ func (k KeyMap) HelpSections() []KeyHelpSection {
 	return []KeyHelpSection{
 		{"Compose", []key.Binding{
 			k.Send, k.NewLine, k.Paste, k.Complete, k.HistoryUp, k.HistoryDown,
-			k.ExternalEditor, k.VoiceInput,
+			k.ExternalEditor,
 		}},
 		{"Read", []key.Binding{
 			k.PageUp, k.PageDown, k.HalfPageUp, k.HalfPageDn, k.JumpLatest, k.TranscriptSearch,
@@ -281,6 +281,12 @@ func (k KeyMap) HelpSections() []KeyHelpSection {
 		{"Session", []key.Binding{
 			k.CycleMode, k.ModelPicker, k.SettingsPicker, k.NewConvo, k.ClearView, k.Help,
 		}},
+		// Voice gets its own heading even though it holds one chord today: the
+		// microphone key lived under Compose — accurate, dictation is composer
+		// input — and nobody looking for voice found it there. The rest of the
+		// surface is slash verbs (/voice view, /voice status), which the help
+		// overlay documents beside the commands rather than here.
+		{"Voice", []key.Binding{k.VoiceInput}},
 		{"Leave", []key.Binding{k.Cancel, k.Quit}},
 	}
 }

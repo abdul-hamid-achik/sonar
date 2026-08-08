@@ -330,32 +330,8 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		m.resumeFollow()
 		return nil
 
-	case command.ActionSetNumCtx:
-		text, apply, err := m.handleContextWindowCommand(result.Data)
-		switch {
-		case err != nil:
-			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
-		case apply != nil:
-			// The receipt arrives with the result; say something now so the
-			// wait is not silent when a background stream holds the lock.
-			m.entries = append(m.entries, ChatEntry{
-				Kind:    "system",
-				Content: "Applying context window…",
-			})
-		case text != "":
-			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: text})
-		}
-		m.refreshTranscript()
-		m.resumeFollow()
-		return apply
-
-	case command.ActionSaveNumCtx:
-		text, err := m.saveConfiguredNumCtx()
-		if err != nil {
-			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
-		} else {
-			m.entries = append(m.entries, ChatEntry{Kind: "system", Content: text})
-		}
+	case command.ActionContextWindowStatus:
+		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: m.contextWindowStatusReport()})
 		m.refreshTranscript()
 		m.resumeFollow()
 		return nil

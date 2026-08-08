@@ -244,3 +244,39 @@ func TestNoSurfaceKeepsTheDefaultPaletteAfterASwitch(t *testing.T) {
 		})
 	}
 }
+
+// The voice chip is ambient state like the rest: it exists so a glance
+// answers "will this speak", and it must yield to every frame that already
+// says so — the activity rail leads with Listening/Transcribing, and the
+// stage is the voice surface itself.
+func TestVoiceChipOwnershipYieldsToRailAndStage(t *testing.T) {
+	m := newTestModel(t)
+	if m.planStatus().ownedBy(factVoice) != surfaceNone {
+		t.Fatal("voice fact assigned while voice is off")
+	}
+
+	m.voice = &voiceState{config: m.voiceConfig}
+	if got := m.planStatus().ownedBy(factVoice); got != surfaceStatusLine {
+		t.Fatalf("idle voice fact owner = %d, want status line", got)
+	}
+	// Virgin frames keep the idle footer deliberately empty (conversationQuiet)
+	// — the chip's contract starts once a conversation exists.
+	m.entries = []ChatEntry{{Kind: "user", Content: "hola"}}
+	if line := ansi.Strip(m.renderStatusLine()); !strings.Contains(line, "voice on") {
+		t.Fatalf("idle status line does not carry the voice chip:\n%s", line)
+	}
+
+	m.state = StateStreaming
+	if got := m.planStatus().ownedBy(factVoice); got != surfaceNone {
+		t.Fatalf("voice fact owner while the rail runs = %d, want none", got)
+	}
+
+	m.state = StateIdle
+	m.voiceStage = true
+	if !m.voiceStageActive() {
+		t.Fatal("stage should be active for this case")
+	}
+	if got := m.planStatus().ownedBy(factVoice); got != surfaceNone {
+		t.Fatalf("voice fact owner while the stage is up = %d, want none", got)
+	}
+}

@@ -26,7 +26,7 @@ func TestSettingsPickerOpensWithCurrentValues(t *testing.T) {
 		t.Fatal("Ctrl+P did not open session settings")
 	}
 	rendered := m.renderSettingsPicker()
-	for _, want := range []string{"Settings", "Pinned", "qwen3.5:4b", "reviewer", "ready tools", "local"} {
+	for _, want := range []string{"Settings", "Pinned", "qwen3.5:4b", "reviewer", "ready tools", "built-in"} {
 		if !strings.Contains(rendered, want) {
 			t.Errorf("settings missing %q:\n%s", want, rendered)
 		}
@@ -272,6 +272,10 @@ func TestSettingsOverlayDoesNotSwallowQuit(t *testing.T) {
 
 func TestSettingsEscapeClosesAndResizePreservesSelection(t *testing.T) {
 	m := newTestModel(t)
+	// 80×30 is the two-line baseline now that density is content-aware; the
+	// default 24 rows cannot hold eleven two-line rows without scrolling.
+	updated0, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	m = updated0.(*Model)
 	m.openSettingsPicker()
 	m.settingsPickerState.List.Select(int(settingsSessions))
 	if got := m.settingsPickerState.ItemHeight; got != 2 {
@@ -289,7 +293,7 @@ func TestSettingsEscapeClosesAndResizePreservesSelection(t *testing.T) {
 	assertRenderedLinesFit(t, m.renderSettingsPicker(), 40)
 	assertRenderedHeightFits(t, m.renderSettingsPicker(), 20)
 
-	updated, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
 	m = updated.(*Model)
 	if got := m.settingsPickerState.List.Index(); got != int(settingsSessions) {
 		t.Fatalf("selected setting after resize back = %d, want %d", got, settingsSessions)
@@ -315,8 +319,8 @@ func TestSettingsCompactRowsShowOnlySelectedSingleLineDetail(t *testing.T) {
 	if !state.Compact || state.ItemHeight != 1 {
 		t.Fatalf("compact state = compact %v height %d, want true/1", state.Compact, state.ItemHeight)
 	}
-	if got := len(state.List.Items()); got != 9 {
-		t.Fatalf("settings item count = %d, want 9", got)
+	if got := len(state.List.Items()); got != 11 {
+		t.Fatalf("settings item count = %d, want 11", got)
 	}
 	if got := state.List.Height(); got >= 16 {
 		t.Fatalf("compact list height = %d, want denser than the normal 16 rows", got)
@@ -354,7 +358,10 @@ func TestSettingsCompactRowsUseEitherResponsiveBreakpoint(t *testing.T) {
 	}{
 		{name: "narrow", width: 40, height: 24, compact: true},
 		{name: "short", width: 80, height: 20, compact: true},
-		{name: "normal", width: 41, height: 21, compact: false},
+		// Content-aware: eleven two-line rows need 28 lines, so "normal"
+		// begins where they all fit, not at the bare size breakpoint.
+		{name: "tall_enough_for_all_rows", width: 41, height: 28, compact: false},
+		{name: "roomy_but_rows_would_scroll", width: 80, height: 24, compact: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newTestModel(t)
@@ -417,6 +424,11 @@ func TestSettingsCompactRowsFitMinimumWithLabelsAndFooter(t *testing.T) {
 
 func TestSettingsNormalRowsKeepAllDescriptions(t *testing.T) {
 	m := newTestModel(t)
+	// Two-line rows only engage once every row fits that way; at the default
+	// 80×24 the picker deliberately stays compact rather than scrolling its
+	// tail off-screen.
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 30})
+	m = updated.(*Model)
 	m.openSettingsPicker()
 	state := m.settingsPickerState
 	if state.Compact || state.ItemHeight != 2 {

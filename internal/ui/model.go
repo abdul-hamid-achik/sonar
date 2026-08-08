@@ -157,6 +157,10 @@ type Model struct {
 	// because the panel's job is to still be readable after one ends.
 	voiceStage      bool
 	voiceLastDigest string
+	// voiceLastAlert is the last alert sentence spoken this turn, as heard.
+	// The stage shows it so someone who caught only "the harness said
+	// something" can read what it was; beginVoiceTurn clears it.
+	voiceLastAlert string
 	// voiceLastDigestLanguage is the language that line was read in, carried
 	// with it so a later "again" does not read it in the current turn's voice.
 	voiceLastDigestLanguage string
@@ -166,6 +170,10 @@ type Model struct {
 	voiceInput         *voiceInputState
 	voiceInputModel    string
 	voiceInputLanguage string
+	// voiceContextAlerted latches the opt-in context-pressure alert so it
+	// fires once per crossing of the threshold, not once per segment above it.
+	// It re-arms when compaction or a new conversation brings usage back down.
+	voiceContextAlerted bool
 	// terminalFocused is whether this window is in the foreground, and
 	// terminalFocusReported is whether the terminal has ever said so.
 	//
@@ -281,7 +289,6 @@ type Model struct {
 	agentPickerState         *AgentPickerState
 	providerPickerState      *ProviderPickerState
 	providerSwitchToken      uint64
-	numCtxApplyToken         uint64
 	providerSwitchRunning    bool
 	providerSwitchName       string
 	providerSwitchCancel     context.CancelFunc
@@ -367,7 +374,7 @@ type Model struct {
 	modelList                 []string
 	ollamaModels              []OllamaModelDescriptor
 	ollamaVersion             string
-	ollamaOffline             bool
+	providerOffline             bool
 	ollamaInventoryAttempted  bool
 	pendingOllamaInventory    *OllamaModelInventoryMsg
 	ollamaInventoryCommitting bool
@@ -864,9 +871,6 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 
 	case providerSwitchResultMsg:
 		cmds = m.handleProviderSwitchResult(msg, cmds)
-
-	case numCtxAppliedMsg:
-		cmds = append(cmds, m.handleNumCtxApplied(msg))
 
 	case StartupStatusMsg:
 		m.handleStartupStatus(msg)

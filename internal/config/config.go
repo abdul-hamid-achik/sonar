@@ -232,6 +232,12 @@ type VoiceConfig struct {
 	// and a long AUTO run that ended is a thing you learn by checking. Those are
 	// what a listener actually cannot get any other way.
 	Alerts bool `yaml:"alerts"`
+	// ContextAlert additionally speaks, once per crossing, when the context
+	// window passes three quarters full. Off by default: on screen the meter
+	// already says so, most sessions cross the line routinely, and compaction
+	// handles it unattended. It exists for the walkaway case, where the
+	// filling window is inaudible and compaction will trim what was said.
+	ContextAlert bool `yaml:"context_alert,omitempty"`
 	// SpeakWhen bounds speech to when the terminal is in the background:
 	// "always" (the default) or "unfocused".
 	//
@@ -255,6 +261,14 @@ type VoiceConfig struct {
 	// off by default because it adds a second vendor, a key, and about two
 	// seconds between a sentence and its audio.
 	Provider string `yaml:"provider,omitempty"`
+	// Model names the hosted synthesis model when provider is "openai". Empty
+	// uses gpt-4o-mini-tts, the one the projection measurements were made
+	// against. The local `say` provider has no model to name and ignores it.
+	Model string `yaml:"model,omitempty"`
+	// Endpoint overrides the hosted synthesis URL. Empty uses OpenAI's own.
+	// Advanced: it exists for OpenAI-compatible gateways and for hermetic
+	// tests, and it never changes which credential is sent.
+	Endpoint string `yaml:"endpoint,omitempty"`
 	// Voice names a synthesizer voice for every language. Empty uses the system
 	// default; `say -v ?` lists what this machine has. Under the hosted
 	// provider it names one of that provider's voices instead (nova by

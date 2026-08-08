@@ -70,11 +70,10 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	case key.Matches(msg, m.keys.Cancel):
 		// An open microphone owns Escape before anything else does. It is the
 		// only stop that works in every terminal — the toggle chord may be
-		// claimed by a multiplexer and
-		// /voice needs the composer, which is awkward while dictating into it —
-		// and discarding is the right default for a key that means "undo this":
-		// someone hitting escape mid-sentence wants the recording gone, not
-		// transcribed.
+		// claimed by a multiplexer, and /voice needs the composer, which is
+		// awkward while dictating into it — and discarding is the right
+		// default for a key that means "undo this": someone hitting escape
+		// mid-sentence wants the recording gone, not transcribed.
 		if m.listeningForVoice() {
 			m.voiceInput.listener.Cancel()
 			m.voiceInput.token++
@@ -112,8 +111,11 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		}
 
 	case key.Matches(msg, m.keys.Help):
-		// Only toggle help when input is empty.
-		if m.state == StateIdle && strings.TrimSpace(m.input.Value()) == "" {
+		// F1 opens help regardless of the draft — an overlay covers the
+		// composer without touching it, so the text survives the detour.
+		// Ctrl+H shares the binding but is backspace whenever a draft exists,
+		// so only the empty-draft case may read it as help.
+		if m.state == StateIdle && (strings.TrimSpace(m.input.Value()) == "" || msg.String() == "f1") {
 			m.overlayParent = OverlayNone
 			m.overlay = OverlayHelp
 			m.initHelpViewport()
@@ -134,6 +136,11 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			m.refreshTranscript()
 			m.restoreTranscriptReflowAnchor(anchor)
 			return nil, true
+		}
+		// A chord that silently does nothing reads as a dead key. Say what it
+		// needs instead; the draft is untouched either way.
+		if m.state == StateIdle {
+			return m.setFooterNotice(noticeInfo, "alt+t needs an empty draft · draft kept", 3*time.Second), true
 		}
 
 	case key.Matches(msg, m.keys.VoiceInput):
@@ -163,6 +170,9 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 			}
 			return nil, true
 		}
+		if m.state == StateIdle {
+			return m.setFooterNotice(noticeInfo, "ctrl+t needs an empty draft · draft kept", 3*time.Second), true
+		}
 
 	case key.Matches(msg, m.keys.CompactToggle):
 		if m.state == StateIdle {
@@ -181,8 +191,9 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		// Thinking row is never part of this batch operation.
 		if m.input.Value() != "" {
 			// Bubbles treats Ctrl+T as transpose. This application-level
-			// disclosure shortcut must never silently rewrite a draft.
-			return nil, true
+			// disclosure shortcut must never silently rewrite a draft — and a
+			// consumed key that says nothing reads as a dead one.
+			return m.setFooterNotice(noticeInfo, "alt+r needs an empty draft · draft kept", 3*time.Second), true
 		}
 		m.cancelReceiptInspection(true)
 		m.toggleAllThinkingReceipts()

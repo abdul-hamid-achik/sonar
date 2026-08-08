@@ -162,6 +162,11 @@ voice:
   # noise the projection exists to remove, and worse here, because the sentence
   # has to survive being heard from another room.
   alerts: true
+  # Additionally say, once per crossing, that the context window passed three
+  # quarters full. Off by default: the meter already shows it on screen and
+  # compaction handles it unattended. It exists for the walkaway case, where
+  # a filling window is inaudible and compaction will trim what was said.
+  # context_alert: true
   # Thinking blocks, spoken once settled rather than streamed. Off by default:
   # reasoning contradicts itself, abandons paths, and runs far longer than the
   # answer, so streaming it alongside produces two voices arguing.
@@ -209,6 +214,14 @@ voice:
   # which is what makes it tolerable — not free. Playback needs ffplay, which
   # ships with the ffmpeg dictation already requires.
   # provider: openai
+  #
+  # The hosted synthesis model, when provider is "openai". Empty uses
+  # gpt-4o-mini-tts — the one the measurements above were made against.
+  # model: gpt-4o-mini-tts
+  #
+  # Advanced: an OpenAI-compatible speech endpoint to send the same request
+  # shape to. Empty uses OpenAI's own. The credential sent never changes.
+  # endpoint: https://api.openai.com/v1/audio/speech
   #
   # `say -v ?` lists this machine's voices, and /voice test speaks one so you
   # can hear it before committing. Empty uses the system default, and this

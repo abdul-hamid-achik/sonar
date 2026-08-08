@@ -960,7 +960,7 @@ func RegisterBuiltins(r *Registry) {
 		Name:        "voice",
 		Aliases:     []string{"listen", "mic"},
 		Description: "Dictate into the composer, or inspect and tune spoken output",
-		Usage:       "/voice [on|off|view|status|voices|test|provider|speak_when|rate|voice|pronounce|<channel> on|off]",
+		Usage:       "/voice [on|off|view|status|voices|test|profile|provider|model|speak_when|rate|voice|pronounce|<channel> on|off]",
 		Handler: func(_ *Context, args []string) Result {
 			if len(args) == 0 {
 				return Result{Action: ActionVoiceInput}
@@ -974,7 +974,7 @@ func RegisterBuiltins(r *Registry) {
 				return Result{Action: ActionVoiceTest}
 			case "view", "stage", "screen":
 				return Result{Action: ActionVoiceStage}
-			case "provider", "speak_when", "speakwhen", "rate", "voice", "pronounce":
+			case "profile", "provider", "model", "input", "speak_when", "speakwhen", "rate", "voice", "pronounce":
 				// Settings, as opposed to the channel toggles below. The UI owns
 				// what each one accepts — it is the side that has to rebuild a
 				// synthesizer when one changes — so the arguments travel as a
@@ -1006,11 +1006,17 @@ func RegisterBuiltins(r *Registry) {
 		},
 	})
 
+	// The auto/set/save verbs this command carried were local-Ollama num_ctx
+	// tuning inherited from local-agent. Every provider sonar can actually run
+	// against is hosted and owns its own window, so auto and set could only
+	// ever error, and save persisted a value SetNumCtx no-ops for remote
+	// providers — a knob that wrote config and changed nothing. Removed rather
+	// than documented around.
 	r.Register(&Command{
 		Name:        "context",
-		Aliases:     []string{"numctx", "ctx"},
-		Description: "Visualize session context usage and manage the Ollama context window (num_ctx)",
-		Usage:       "/context [status|auto|set <n>|save]",
+		Aliases:     []string{"ctx"},
+		Description: "Visualize how much of the context window this session is using",
+		Usage:       "/context [status]",
 		Handler: func(ctx *Context, args []string) Result {
 			if len(args) == 0 {
 				return Result{Action: ActionShowContextDoctor}
@@ -1018,26 +1024,11 @@ func RegisterBuiltins(r *Registry) {
 			switch strings.ToLower(args[0]) {
 			case "status", "show", "analyze":
 				if len(args) != 1 {
-					return Result{Error: "usage: /context [status|auto|set <n>|save]"}
+					return Result{Error: "usage: /context [status]"}
 				}
-				return Result{Action: ActionSetNumCtx, Data: "status"}
-			case "auto", "recommend", "apply":
-				if len(args) != 1 {
-					return Result{Error: "usage: /context auto"}
-				}
-				return Result{Action: ActionSetNumCtx, Data: "auto"}
-			case "set":
-				if len(args) != 2 {
-					return Result{Error: "usage: /context set <tokens|Nk>"}
-				}
-				return Result{Action: ActionSetNumCtx, Data: "set:" + strings.TrimSpace(args[1])}
-			case "save":
-				if len(args) != 1 {
-					return Result{Error: "usage: /context save"}
-				}
-				return Result{Action: ActionSaveNumCtx}
+				return Result{Action: ActionContextWindowStatus}
 			default:
-				return Result{Error: "usage: /context [status|auto|set <n>|save]"}
+				return Result{Error: "usage: /context [status]"}
 			}
 		},
 	})

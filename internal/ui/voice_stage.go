@@ -113,6 +113,9 @@ func (m *Model) voiceStageSummary() string {
 	if digest := strings.TrimSpace(m.voiceLastDigest); digest != "" {
 		return digest
 	}
+	if resolveGlyphProfile(m.glyphProfile) == GlyphASCII {
+		return "-"
+	}
 	return "—"
 }
 
@@ -137,7 +140,7 @@ func (m *Model) voiceStageCounts() string {
 	if len(parts) == 0 {
 		return "nothing yet"
 	}
-	return strings.Join(parts, " · ")
+	return strings.Join(parts, glyphSeparator(m.glyphProfile))
 }
 
 // renderVoiceStageView paints the panel.
@@ -150,39 +153,59 @@ func (m *Model) renderVoiceStageView() tea.View {
 	width := max(1, m.width)
 	height := max(1, m.height)
 	content := max(1, width-4)
+	// One separator vocabulary with the rest of the chrome: an ASCII terminal
+	// gets " | " here for the same reason it gets it in every picker footer.
+	sep := glyphSeparator(m.glyphProfile)
+	trim := func(text string) string {
+		return truncateDisplayWithGlyphProfile(text, content, m.glyphProfile)
+	}
 
 	rows := []string{
-		m.styles.OverlayTitle.Render(truncateDisplay(m.voiceStageState(), content)),
+		m.styles.OverlayTitle.Render(trim(m.voiceStageState())),
 		"",
 	}
 	// The summary is the only row allowed to wrap: it is a sentence somebody
 	// wrote, and cutting it would leave a caption that ends mid-thought.
 	for _, line := range strings.Split(wrapText(m.voiceStageSummary(), min(content, 64)), "\n") {
-		rows = append(rows, m.styles.StatusText.Render(truncateDisplay(line, content)))
+		rows = append(rows, m.styles.StatusText.Render(trim(line)))
 	}
 	rows = append(rows,
 		"",
-		m.styles.OverlayDim.Render(truncateDisplay(m.voiceStageCounts(), content)),
+		m.styles.OverlayDim.Render(trim(m.voiceStageCounts())),
 		"",
 	)
+	// The last alert, as heard. The digest above is what the harness SAID;
+	// this is what it interrupted for — and the person most likely to open
+	// this panel is the one who caught only that it spoke. Cleared when a new
+	// turn begins, so it is present tense or absent.
+	if alert := strings.TrimSpace(m.voiceLastAlert); alert != "" {
+		rows = append(rows,
+			m.styles.OverlayDim.Render(trim("alert"+sep+alert)),
+			"",
+		)
+	}
 	// The draft, whenever there is one. This was missing and it mattered more
 	// than anything else on the panel: dictation is INSERTED and never sent,
 	// precisely so it can be read before it becomes a request — and a screen
 	// that hides the composer makes that impossible. Somebody would speak, see
 	// nothing, and press enter on words they never checked.
 	if draft := strings.TrimSpace(m.input.Value()); draft != "" {
-		for _, line := range strings.Split(wrapText("› "+draft, min(content, 64)), "\n") {
-			rows = append(rows, m.styles.StatusText.Render(truncateDisplay(line, content)))
+		draftPrefix := "› "
+		if resolveGlyphProfile(m.glyphProfile) == GlyphASCII {
+			draftPrefix = "> "
+		}
+		for _, line := range strings.Split(wrapText(draftPrefix+draft, min(content, 64)), "\n") {
+			rows = append(rows, m.styles.StatusText.Render(trim(line)))
 		}
 		rows = append(rows, "")
 	}
 	// The doors. Named at whatever width there is, shortest form last, because
 	// a panel that overflows is worse than one that offers fewer detours.
 	for _, candidate := range []string{
-		"alt+d diffs · alt+o output · ctrl+f search · ctrl+t receipts",
-		"alt+d diffs · alt+o output · ctrl+f search",
-		"alt+d diffs · ctrl+f search",
-		"alt+d · ctrl+f",
+		strings.Join([]string{"alt+d diffs", "alt+o output", "ctrl+f search", "ctrl+t receipts"}, sep),
+		strings.Join([]string{"alt+d diffs", "alt+o output", "ctrl+f search"}, sep),
+		strings.Join([]string{"alt+d diffs", "ctrl+f search"}, sep),
+		strings.Join([]string{"alt+d", "ctrl+f"}, sep),
 	} {
 		if lipgloss.Width(candidate) <= content {
 			rows = append(rows, m.styles.FocusIndicator.Render(candidate))
@@ -190,14 +213,14 @@ func (m *Model) renderVoiceStageView() tea.View {
 		}
 	}
 	leave := []string{
-		"esc back to the transcript · " + m.voiceInputKeyHint() + " talk · /voice off",
-		"esc transcript · " + m.voiceInputKeyHint() + " talk",
+		strings.Join([]string{"esc back to the transcript", m.voiceInputKeyHint() + " talk", "/voice off"}, sep),
+		strings.Join([]string{"esc transcript", m.voiceInputKeyHint() + " talk"}, sep),
 		"esc transcript",
 	}
 	if strings.TrimSpace(m.input.Value()) != "" {
 		leave = append([]string{
-			"enter send · esc transcript · " + m.voiceInputKeyHint() + " talk",
-			"enter send · esc transcript",
+			strings.Join([]string{"enter send", "esc transcript", m.voiceInputKeyHint() + " talk"}, sep),
+			strings.Join([]string{"enter send", "esc transcript"}, sep),
 		}, leave...)
 	}
 	for _, candidate := range leave {

@@ -99,7 +99,7 @@ func (m *Model) scheduleSessionTitleGen() tea.Cmd {
 		return nil
 	}
 	// Offline / no model: keep the provisional title.
-	if strings.TrimSpace(m.model) == "" || m.ollamaOffline {
+	if strings.TrimSpace(m.model) == "" || m.providerOffline {
 		return nil
 	}
 

@@ -63,6 +63,12 @@ const (
 	alertTurnCancelled
 	// alertApprovalNeededFor is the same alert with the action named.
 	alertApprovalNeededFor
+	// alertContextPressure is opt-in (voice.context_alert). On screen the
+	// filling window is ambient state with a meter; from another room it is
+	// the difference between "still working" and "about to compact what we
+	// said". Off by default because most sessions cross the line routinely
+	// and compaction handles it without anyone needing to come back.
+	alertContextPressure
 )
 
 // alertPhrases maps an alert to what to say, per language.
@@ -92,6 +98,10 @@ var alertPhrases = map[voiceAlert]map[string]string{
 	alertTurnCancelled: {
 		"en": "Stopped.",
 		"es": "Detenido.",
+	},
+	alertContextPressure: {
+		"en": "The context window is past three quarters full.",
+		"es": "La ventana de contexto pasó los tres cuartos.",
 	},
 }
 
@@ -123,7 +133,11 @@ func (m *Model) speakAlert(alert voiceAlert) {
 	// alert would sit behind — announcing an approval that has been blocking the
 	// run for the whole length of it. It still waits for the sentence being
 	// read: interrupting is Stop's job and nothing else's.
-	m.sayNext(language, alertPhrase(alert, language))
+	phrase := alertPhrase(alert, language)
+	// Recorded as heard, for the stage: somebody who caught only that the
+	// harness said SOMETHING can read what it was.
+	m.voiceLastAlert = phrase
+	m.sayNext(language, phrase)
 	m.voice.speaker.Finish()
 }
 
@@ -152,7 +166,9 @@ func (m *Model) speakApprovalNeeded(action string) {
 		return
 	}
 	language := m.voice.spokenLanguageNow()
-	m.sayNext(language, fmt.Sprintf(alertPhrase(alertApprovalNeededFor, language), action))
+	phrase := fmt.Sprintf(alertPhrase(alertApprovalNeededFor, language), action)
+	m.voiceLastAlert = phrase
+	m.sayNext(language, phrase)
 	m.voice.speaker.Finish()
 }
 
@@ -174,6 +190,27 @@ func spokenApprovalAction(preview permission.ApprovalPreview) string {
 		}
 	}
 	return action
+}
+
+// speakContextPressure says the window crossed the pressure line, once per
+// crossing. It rides the alert channel's rules — ahead of the backlog,
+// indifferent to focus — but behind its own opt-in, because most sessions
+// cross the line routinely and compaction handles it unattended.
+func (m *Model) speakContextPressure() {
+	if !m.voiceActive() || !m.voice.config.ContextAlert {
+		return
+	}
+	if !m.contextPressureHigh() {
+		// Re-arm once compaction (or a new conversation) brings usage back
+		// under the line, so the next crossing is news again.
+		m.voiceContextAlerted = false
+		return
+	}
+	if m.voiceContextAlerted {
+		return
+	}
+	m.voiceContextAlerted = true
+	m.speakAlert(alertContextPressure)
 }
 
 // speakTurnOutcome reports how a turn ended, once, to whoever is not watching.

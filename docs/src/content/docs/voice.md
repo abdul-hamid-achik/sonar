@@ -3,8 +3,11 @@ title: Voice
 description: Listening to sonar from another room, and talking back to it.
 ---
 
-macOS only for now, off by default. Turn it on for the session with `/voice on`,
-or from the start with `voice.enabled: true`.
+Off by default. The default engine is the host synthesizer — `say` on macOS,
+`espeak-ng` on Linux when it is installed — and on any system
+`voice.provider: openai` speaks through a hosted engine instead, needing an
+`OPENAI_API_KEY` and `ffplay` but no host synthesizer at all. Turn voice on
+for the session with `/voice on`, or from the start with `voice.enabled: true`.
 
 ## Four channels
 
@@ -19,6 +22,11 @@ way — reading an answer aloud competes with reading it off the screen and lose
 but an approval nobody is looking at stops the run until somebody glances over.
 The approval alert names the action, which no other alert does, because "go to
 the screen" assumes the listener will come.
+
+`voice.context_alert` adds one more, off by default: the context window passing
+three quarters full, said once per crossing. On screen the meter already shows
+it; from another room it is the difference between "still working" and "about
+to compact what we said".
 
 ## What you hear is a projection
 
@@ -58,15 +66,36 @@ lands in the composer as a draft you read before sending. `esc` discards it.
 While it is open the rail draws the input level, calibrated to your room, so a
 flat meter means a muted input rather than a frozen animation.
 
-A closed set of phrases steers instead of dictating — "otra vez" repeats the
-last line, "callate" stops it, "mostrame el diff" opens the diff, "volver" goes
-back. It matches whole utterances only, so "mostrame el diff y arreglá el bug"
-is dictation. Nothing it reaches can send a prompt or cancel a turn.
+A closed set of phrases steers instead of dictating. It matches whole
+utterances only, so "mostrame el diff y arreglá el bug" is dictation. Nothing
+it reaches can send a prompt or cancel a turn. The full vocabulary:
 
-If an approval is waiting and **you** open the microphone, "aprobalo" or
-"denegalo" answers it. sonar never opens the microphone on its own. Voice can
+| Does | Spanish | English |
+| --- | --- | --- |
+| Repeat the last line | otra vez · repetí · repetilo · de nuevo | again · repeat · say that again |
+| Stop the audio | callate · silencio · pará | quiet · stop talking · be quiet |
+| Open the diff | el diff · mostrame el diff · muéstrame el diff | diff · show the diff · show me the diff |
+| Open the output | la salida · mostrame la salida | output · show the output · show me the output |
+| Open the listening stage | panel · el panel | stage · show the panel |
+| Go back one step | transcript · volver · atrás | back · go back |
+
+A near-miss is dictation, deliberately: anything that is not exactly one of
+these lands in the composer where you can read it before it does anything.
+
+If an approval is waiting and **you** open the microphone, a second closed
+vocabulary answers it. sonar never opens the microphone on its own. Voice can
 only allow once or deny — it cannot widen a scope, and anything destructive is
 refused rather than downgraded.
+
+| Answer | Spanish | English |
+| --- | --- | --- |
+| Allow once | aprobalo · apruébalo | approve it · approve this |
+| Deny | denegalo · rechazalo · recházalo · no lo hagas | deny · denied · reject it · don't do it |
+
+"sí", a bare "no", "aprobado" and "approved" are absent on purpose. Approving
+needs a word nobody utters by accident, because the transcriber reports no
+confidence and the two directions cost different things: a wrong deny is a
+refusal the model routes around, a wrong allow is a command nobody asked for.
 
 ## Pronunciation
 
@@ -92,6 +121,7 @@ type while tuning and what you write down afterwards are the same word:
 
 ```
 /voice provider say|openai
+/voice model gpt-4o-mini-tts   # hosted synthesis model (openai only)
 /voice speak_when always|unfocused
 /voice rate 195
 /voice voice Samantha          # one voice for everything
@@ -99,10 +129,23 @@ type while tuning and what you write down afterwards are the same word:
 /voice voice es                # forget that language's entry
 /voice pronounce deploy dipló  # say it this way
 /voice pronounce deploy        # say it as written
+/voice input model ~/models/ggml-small.bin   # try a different Whisper size
+/voice input language es|auto  # pin or re-detect the dictation language
 ```
+
+Under the hosted provider, `voice.voice` names one of that provider's voices
+(`nova` by default), `voice.model` picks the synthesis model, and
+`voice.endpoint` — config-file only — points an OpenAI-compatible gateway at
+the same request shape.
 
 These are settings only an ear can judge, so the loop has to close in one
 sitting: change it, `/voice test`, listen, change it again.
+
+`/voice profile desk|walkaway|pair` reaches a whole mix in one command —
+**desk** speaks answer and alerts only when the window loses focus,
+**walkaway** adds activity and speaks always, **pair** speaks answer and
+alerts always. A profile writes exactly the toggles `/voice status` reports;
+it is a shortcut, not a fifth channel.
 
 Nothing is persisted. Tuning by ear produces a state nobody should inherit by
 accident on the next launch, so the session stays a session — and `/voice

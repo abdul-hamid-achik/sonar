@@ -118,22 +118,7 @@ func (m *Model) renderEntries() string {
 				b.WriteString(m.renderSystemNotice(e.Content, proseW))
 				b.WriteString("\n")
 			case "error":
-				if notice, ok := compactOllamaStartupNotice(e.Content, contentW, m.ollamaOffline); ok {
-					// At the supported 30-column tier the generic error frame can
-					// consume the whole viewport and hide the empty-state recovery
-					// paths. Keep the raw ChatEntry unchanged and project only this
-					// host-authored startup diagnostic into a bounded notice.
-					b.WriteString(m.styles.ErrorText.Render(notice))
-					b.WriteByte('\n')
-				} else if isOllamaStartupRecovery(e.Content, m.ollamaOffline) {
-					// Missing startup inventory is an actionable empty state, not a
-					// failed user operation. Preserve the detailed host recovery copy
-					// at ordinary widths without adding the generic red error label.
-					b.WriteString(m.renderSystemNotice(e.Content, proseW))
-					b.WriteString("\n")
-				} else {
-					m.renderEntryError(&b, e.Content, contentW)
-				}
+				m.renderEntryError(&b, e.Content, contentW)
 			}
 		}
 		m.endLiveTailLayoutEpisode()

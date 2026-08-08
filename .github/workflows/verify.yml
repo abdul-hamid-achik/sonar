@@ -78,8 +78,12 @@ jobs:
       # tui_sandbox proves confinement through a real AUTO turn. On Linux that
       # requires bwrap; without it SandboxActive stays false, sh leak.sh stays
       # approval-gated, and the spec times out waiting for "Confinement held".
-      - name: Install bubblewrap
-        run: sudo apt-get update && sudo apt-get install -y bubblewrap
+      # espeak-ng is the Linux host synthesizer: tui_voice_stage enables voice
+      # at startup, and without a synthesizer openVoice refuses and the stage
+      # never opens. Nothing is spoken during the run — the speaker starts no
+      # process until its first sentence, and the spec never sends one.
+      - name: Install bubblewrap and espeak-ng
+        run: sudo apt-get update && sudo apt-get install -y bubblewrap espeak-ng
 
       - name: Set up Go for Glyphrun
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0

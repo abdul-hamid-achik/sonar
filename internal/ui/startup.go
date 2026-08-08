@@ -24,8 +24,13 @@ func sanitizeStartupDetail(detail string) string {
 // handleStartupStatus records a startup item's status and repaints once the
 // viewport is ready.
 func (m *Model) handleStartupStatus(msg StartupStatusMsg) {
-	if msg.ID == "ollama" {
-		m.ollamaOffline = msg.Status == "failed"
+	// "provider" is the ID the shipped startup path sends; "ollama" survives
+	// for the inherited message shape. This flag was matched on "ollama"
+	// alone, which the remote path never sends — so a hosted provider that
+	// failed its ping never marked the model offline beside its name, the
+	// exact signal model_location exists to carry.
+	if msg.ID == "provider" || msg.ID == "ollama" {
+		m.providerOffline = msg.Status == "failed"
 	}
 	found := false
 	for i, item := range m.startupItems {

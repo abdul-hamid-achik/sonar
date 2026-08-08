@@ -59,15 +59,6 @@ type OllamaModelInventoryMsg struct {
 	Err       error
 }
 
-// OllamaModelDetailsRequestedMsg asks the parent to enrich/show one model.
-// Cached descriptors may be rendered immediately while /api/show completes.
-type OllamaModelDetailsRequestedMsg struct{ Model OllamaModelDescriptor }
-
-type OllamaModelDetailsResultMsg struct {
-	Model OllamaModelDescriptor
-	Err   error
-}
-
 type modelItem struct {
 	name       string
 	descriptor OllamaModelDescriptor
@@ -148,8 +139,10 @@ func modelDisplayName(model OllamaModelDescriptor) string {
 
 // ollamaModelPickerTitle is a constant heading. The daemon version it used to
 // carry is a runtime fact, and now lives in the Runtime panel with the others.
+// "Models", not "Ollama models": every model this picker can offer is a hosted
+// provider's, and the old title named a runtime this product does not have.
 func ollamaModelPickerTitle(string) string {
-	return "Ollama models"
+	return "Models"
 }
 
 type ModelPickerState struct {
@@ -258,7 +251,7 @@ func newOllamaModelPickerState(models []OllamaModelDescriptor, currentModel stri
 		ItemHeight:   delegate.Height(),
 	}
 	if len(models) == 0 {
-		state.Notice = "No models found · add a model or refresh Ollama"
+		state.Notice = "No models found · check the provider configuration"
 	}
 	return state
 }
@@ -277,7 +270,10 @@ func descriptorGroup(model OllamaModelDescriptor) int {
 func modelGroupLabel(group int) string {
 	switch group {
 	case 0:
-		return "LOCAL"
+		// Group zero is the fallback tag every config-declared model gets
+		// (OllamaModelLocal is the iota-zero source). Nothing in it runs on
+		// this machine, so the heading names where the list came from.
+		return "CONFIGURED"
 	case 1:
 		return "CLOUD"
 	case 2:
@@ -309,7 +305,7 @@ func modelDecisionReason(model OllamaModelDescriptor) string {
 		if reason != "" {
 			return reason
 		}
-		return "model is unavailable under the current Ollama policy"
+		return "model is unavailable under the current model policy"
 	case model.Source == OllamaModelLocal && model.ManualOnly:
 		if reason != "" {
 			return reason
@@ -488,8 +484,11 @@ func (m *Model) openModelPicker() {
 			if model, ok := byName[name]; ok {
 				models = append(models, model)
 			} else {
+				// Size stays empty: this is a config-declared name the catalog
+				// does not know, and "local" — the old placeholder — rendered a
+				// parameter-size column claiming a runtime this product lacks.
 				models = append(models, config.Model{
-					Name: name, DisplayName: name, Size: "local", Capability: config.CapabilityMedium,
+					Name: name, DisplayName: name, Capability: config.CapabilityMedium,
 				})
 			}
 		}
@@ -510,7 +509,7 @@ func (m *Model) selectModel(name string) {
 		if !descriptor.Selectable || !descriptor.Fit {
 			reason := descriptor.Reason
 			if reason == "" {
-				reason = "model is not admitted by the current Ollama policy"
+				reason = "model is not admitted by the current model policy"
 			}
 			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: reason})
 			m.closeModelPicker()
@@ -561,7 +560,7 @@ func (m *Model) switchSelectedModel(name string) bool {
 		}
 	}
 	m.setCurrentModelProjection(name)
-	m.ollamaOffline = false
+	m.providerOffline = false
 	m.modelPinned = true
 	m.saveManualModelPreference(name)
 	for index := range m.ollamaModels {
@@ -612,10 +611,10 @@ func (m *Model) validateModelAdmission(name string) error {
 		if descriptor.Reason != "" {
 			return errors.New(descriptor.Reason)
 		}
-		return fmt.Errorf("model %q is not admitted by the current Ollama policy", name)
+		return fmt.Errorf("model %q is not admitted by the current model policy", name)
 	}
 	if m.ollamaInventoryAttempted {
-		return fmt.Errorf("model %q is absent from the current Ollama inventory", name)
+		return fmt.Errorf("model %q is absent from the current model list", name)
 	}
 	return config.CheckModelMemorySafe(name)
 }

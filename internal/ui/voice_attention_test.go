@@ -643,3 +643,32 @@ func TestEscapeStopsTheUrgentThingBeforeLeavingTheStage(t *testing.T) {
 		t.Fatal("escape did not leave the stage when nothing else wanted it")
 	}
 }
+
+// The context-pressure alert is one sentence per crossing, not one per
+// segment above the line — an AUTO run settles counts at every tool round,
+// and a re-announcement at each is exactly the noise alerts exist to avoid.
+func TestContextPressureAlertLatchesPerCrossing(t *testing.T) {
+	m := newTestModel(t)
+	m.voice = &voiceState{config: config.VoiceConfig{Enabled: true, Alerts: true, ContextAlert: true}}
+	m.numCtx = 1000
+
+	m.promptTokens = 800
+	m.speakContextPressure()
+	if !m.voiceContextAlerted {
+		t.Fatal("crossing the line did not latch the alert")
+	}
+
+	m.promptTokens = 100
+	m.speakContextPressure()
+	if m.voiceContextAlerted {
+		t.Fatal("falling back under the line did not re-arm it")
+	}
+
+	// Off by default: without the opt-in the latch must never engage.
+	m.voice.config.ContextAlert = false
+	m.promptTokens = 900
+	m.speakContextPressure()
+	if m.voiceContextAlerted {
+		t.Fatal("the alert fired without its opt-in")
+	}
+}

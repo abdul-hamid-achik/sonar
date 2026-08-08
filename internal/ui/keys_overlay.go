@@ -236,10 +236,6 @@ func (m *Model) handleOverlayKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return tea.Batch(cmds...), true
 	}
 
-	if m.overlay == OverlayModelDetails {
-		return nil, true
-	}
-
 	// Composer-owned inline Plan form.
 	if m.overlay == OverlayPlanForm && m.planFormState != nil {
 		anchor := m.captureInlineFormTranscriptAnchor()

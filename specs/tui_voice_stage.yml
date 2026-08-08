@@ -1,0 +1,66 @@
+version: 1
+name: sonar_tui_voice_stage
+intent: |
+    with voice enabled, /voice view replaces the transcript with the listening
+    stage; the stage names its exits even on short terminals, and esc returns
+    to the transcript without ending the session.
+target:
+    # Driven through the fake DeepSeek fixture like every TUI spec; see
+    # specs/fixtures/fake_deepseek. Voice uses the host synthesizer — `say`
+    # on macOS, `espeak-ng` on Linux (CI installs it beside bubblewrap). No
+    # prompt is ever sent, so nothing is actually spoken during the run: the
+    # speaker starts no process until its first sentence.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/voice-stage-protocol.txt"
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/voice-stage-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/voice-stage-agents"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/voice-stage-protocol.txt .glyphrun/tmp/voice-stage-home .glyphrun/tmp/voice-stage-agents && mkdir -p .glyphrun/tmp/voice-stage-home/.config/sonar .glyphrun/tmp/voice-stage-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' 'voice:' '  enabled: true' > .glyphrun/tmp/voice-stage-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "remote prompts"
+        timeoutMs: 5000
+    - type: "/voice view"
+    - press: "enter"
+    # The exit line is the stage's one invariant: it may trim prose on short
+    # terminals but never its exits.
+    - wait:
+        screen:
+            contains: "esc back to the transcript"
+        timeoutMs: 3000
+    - snapshot: voice_stage
+    - press: "esc"
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 3000
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: stage_replaces_transcript
+      description: the listening stage owns the screen and names its exits
+      verify:
+        snapshot:
+            name: voice_stage
+            mode: text
+    - id: escape_returns_to_transcript
+      description: esc leaves the stage without ending the session
+      verify:
+        process:
+            exitCode: 0

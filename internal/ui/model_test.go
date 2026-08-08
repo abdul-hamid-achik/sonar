@@ -81,7 +81,7 @@ func TestHelpChordOnlyWhenIdleAndEmpty(t *testing.T) {
 			}
 		})
 
-		t.Run("idle_nonempty_no_help_"+shortcut.name, func(t *testing.T) {
+		t.Run("idle_nonempty_"+shortcut.name, func(t *testing.T) {
 			m := newTestModel(t)
 			m.state = StateIdle
 			m.input.SetValue("hello")
@@ -89,7 +89,17 @@ func TestHelpChordOnlyWhenIdleAndEmpty(t *testing.T) {
 			updated, _ := m.Update(shortcut.key)
 			m = updated.(*Model)
 
-			if m.overlay == OverlayHelp {
+			// The two keys diverge on a draft: F1 opens help — an overlay
+			// covers the composer without touching it — while ctrl+h stays
+			// backspace whenever there is text to delete.
+			if shortcut.name == "f1_primary" {
+				if m.overlay != OverlayHelp {
+					t.Errorf("f1 with a draft should still open help, got overlay=%d", m.overlay)
+				}
+				if got := m.input.Value(); got != "hello" {
+					t.Errorf("f1 opening help must keep the draft, got %q", got)
+				}
+			} else if m.overlay == OverlayHelp {
 				t.Errorf("%s with non-empty input should not open help", shortcut.name)
 			}
 		})

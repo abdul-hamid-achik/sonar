@@ -37,6 +37,10 @@ func TestMCPStatusSnapshotRefreshesEverySurfaceWithoutPersistingRawError(t *test
 
 	m.closeRuntimeStatus()
 	m.openSettingsPicker()
+	// At the default 80×24 the picker is compact — eleven two-line rows would
+	// scroll — so the MCP facts live in the Runtime row's description, which
+	// compact mode paints for the selected row only.
+	m.settingsPickerState.List.Select(int(settingsRuntime))
 	settings := ansi.Strip(m.renderSettingsPicker())
 	for _, want := range []string{"2 servers", "1 connected", "1 unavailable"} {
 		if !strings.Contains(settings, want) {

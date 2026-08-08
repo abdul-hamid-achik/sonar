@@ -18,4 +18,4 @@
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
    <session> · Recovery receipt review · Follow paused · end latest
 ▏❯ draft survives transcript search
-   enter send · shift+tab mode · esc cancel · f1 help
+   enter send · shift+tab mode · esc cancel · f1 help · ctrl+g voice

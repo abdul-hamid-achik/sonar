@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 	"time"
@@ -60,6 +61,12 @@ var voiceChannels = []struct {
 		set:  func(v *voiceState, on bool) { v.config.Reasoning = on },
 		help: "thinking blocks, once settled",
 	},
+	{
+		name: "context_alert",
+		get:  func(v *voiceState) bool { return v.config.ContextAlert },
+		set:  func(v *voiceState, on bool) { v.config.ContextAlert = on },
+		help: "the context window passing 75%, once per crossing",
+	},
 }
 
 // voiceChannelReport is the "is this thing on" half of /voice status.
@@ -88,10 +95,21 @@ func (m *Model) voiceChannelReport() string {
 		}
 	}
 	fmt.Fprintf(&report, "    %-3s %-10s %s\n", "", "provider", m.effectiveProvider())
-	if speech.Available() && !speech.HasHighQualityVoices() {
+	if dropped := m.voice.speaker.DroppedStale(); dropped > 0 {
+		// The drop itself is deliberate policy — speech runs behind the agent,
+		// and a sentence that waited half a minute answers a question nobody
+		// is still asking — but audio that never arrived with nothing anywhere
+		// saying why reads as a bug. This line is the why.
+		fmt.Fprintf(&report, "    %d queued %s dropped for going stale (waited over 30s)\n",
+			dropped, pluralizeNoun(dropped, "sentence", "sentences"))
+	}
+	if runtime.GOOS == "darwin" && speech.Available() && !speech.HasHighQualityVoices() {
 		// The single largest change available to how this feature sounds, and it
 		// is a download rather than a line of code. Nothing else in sonar would
-		// ever tell anyone, so it is said where someone came looking.
+		// ever tell anyone, so it is said where someone came looking. Darwin
+		// only: the detection heuristics and the menu path are macOS's, and on
+		// an espeak-ng host this advice would send someone to a settings pane
+		// that does not exist.
 		report.WriteString("    Voices installed here are the compact ones. The downloadable\n" +
 			"      variants sound markedly better: System Settings → Accessibility →\n" +
 			"      Spoken Content → System Voice → Manage Voices.\n")

@@ -14,4 +14,4 @@
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
    <session> · Recovery receipt review · Follow paused · end latest
 ▏❯ draft must stay unchanged while the transcript scrolls
-   enter send · shift+tab mode · esc cancel · f1 help
+   enter send · shift+tab mode · esc cancel · f1 help · ctrl+g voice

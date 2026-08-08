@@ -101,3 +101,37 @@ func TestTheSessionCanBeWrittenDown(t *testing.T) {
 		}
 	}
 }
+
+// A profile is a named mix, not a hidden fifth channel: it writes exactly the
+// toggles /voice status reports, and it persists nothing.
+func TestVoiceProfilePresetsSetTheMixWithoutPersisting(t *testing.T) {
+	m := newTestModel(t)
+	m.voice = &voiceState{config: config.VoiceConfig{Enabled: true}}
+
+	m.setVoiceSetting("profile walkaway")
+	cfg := m.voice.config
+	if !cfg.Answer || !cfg.Alerts || !cfg.Activity || cfg.Reasoning {
+		t.Fatalf("walkaway mix = %+v, want answer+alerts+activity on, reasoning off", cfg)
+	}
+	if !cfg.SpeaksWhileFocused() {
+		t.Fatal("walkaway should speak regardless of focus")
+	}
+
+	m.setVoiceSetting("profile desk")
+	cfg = m.voice.config
+	if cfg.Activity {
+		t.Fatal("desk keeps activity off")
+	}
+	if cfg.SpeaksWhileFocused() {
+		t.Fatal("desk holds speech back while focused")
+	}
+
+	entriesBefore := len(m.entries)
+	m.setVoiceSetting("profile night")
+	if m.voice.config.Activity || m.voice.config.SpeaksWhileFocused() {
+		t.Fatal("an unknown profile must not change the mix")
+	}
+	if len(m.entries) == entriesBefore {
+		t.Fatal("an unknown profile should answer with usage, not silence")
+	}
+}

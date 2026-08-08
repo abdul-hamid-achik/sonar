@@ -1,7 +1,7 @@
  ╭──────────────────────────╮
  │ Settings                 │
  │ │ Model · DEEPSEEK · re… │
- │   Provider · deepseek ·… │
+ │   Provider · deepseek    │
  │   Agent profile · Defau… │
  │   Mode · NORMAL          │
  │   Sessions · Resume      │

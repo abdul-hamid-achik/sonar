@@ -19,6 +19,8 @@ const (
 	settingsCompact
 	settingsRuntime
 	settingsPermissions
+	settingsTheme
+	settingsVoice
 	settingsHelp
 )
 
@@ -59,7 +61,7 @@ func newSettingsPickerState(items []settingsItem, terminalWidth, terminalHeight 
 		listItems[i] = items[i]
 	}
 
-	compact := compactSettingsRows(terminalWidth, terminalHeight)
+	compact := compactSettingsRowsFor(terminalWidth, terminalHeight, len(items))
 	delegate := newSettingsDelegate(isDark, compact, themeID, profile)
 	itemHeight := delegate.Height()
 
@@ -88,6 +90,21 @@ func compactSettingsRows(terminalWidth, terminalHeight int) bool {
 	return terminalWidth <= 40 || terminalHeight <= 20
 }
 
+// compactSettingsRowsFor adds the content-aware half of the density rule: rows
+// get their two-line presentation only when every row fits that way. A list
+// that scrolls its last descriptions off-screen at 80×24 reads as complete —
+// which is worse than dense, because nobody scrolls a settings list they
+// believe they have seen the end of.
+func compactSettingsRowsFor(terminalWidth, terminalHeight, itemCount int) bool {
+	if compactSettingsRows(terminalWidth, terminalHeight) {
+		return true
+	}
+	const normalItemHeight = 2
+	desired := itemCount*normalItemHeight + 2
+	available := terminalHeight - 4
+	return desired > available
+}
+
 func newSettingsDelegate(isDark, compact bool, themeID string, profiles ...GlyphProfile) list.DefaultDelegate {
 	return newPickerDelegate(isDark, compact, themeID, profiles...)
 }
@@ -109,7 +126,15 @@ func settingsDetailWidth(terminalWidth int) int {
 }
 
 func settingsListHeight(items []list.Item, itemHeight, terminalHeight int) int {
-	return pickerListHeight(terminalHeight, len(items)*itemHeight+2, 4)
+	// Settings sizes against the terminal alone rather than through
+	// pickerListHeight's 20-row transient cap: the item set is fixed and
+	// small, and compactSettingsRowsFor has already guaranteed the desired
+	// height fits whenever two-line rows are in play. Reintroducing the cap
+	// here would scroll the trailing rows on exactly the terminals the
+	// density rule just decided were roomy enough not to.
+	desired := len(items)*itemHeight + 2
+	available := max(4, terminalHeight-4)
+	return min(desired, available)
 }
 
 // overlayWidthTiers is the modal width scale, widest first. Every overlay
@@ -165,7 +190,7 @@ func (m *Model) resizePickerOverlays() {
 		state.Filter.SetWidth(completionFilterInputWidth(m.width))
 	}
 	if state := m.settingsPickerState; state != nil {
-		compact := compactSettingsRows(m.width, m.height)
+		compact := compactSettingsRowsFor(m.width, m.height, len(state.List.Items()))
 		delegate := newSettingsDelegate(m.isDark, compact, m.themeID, m.glyphProfile)
 		state.List.SetDelegate(delegate)
 		setSettingsTitleDensity(&state.List, compact)
@@ -266,7 +291,7 @@ func (m *Model) settingsItems() []settingsItem {
 	runtime := fmt.Sprintf("%d %s total", m.toolCount, pluralizeNoun(m.toolCount, "tool", "tools"))
 	if m.agent != nil {
 		availability := m.agent.ToolAvailability()
-		runtime = fmt.Sprintf("%d ready %s · %d local · %d MCP",
+		runtime = fmt.Sprintf("%d ready %s · %d built-in · %d MCP",
 			availability.Ready(), pluralizeNoun(availability.Ready(), "tool", "tools"),
 			availability.Local, availability.MCPConnected,
 		)
@@ -298,12 +323,10 @@ func (m *Model) settingsItems() []settingsItem {
 	if providerValue == "" {
 		providerValue = "ollama"
 	}
-	if m.modelManager != nil && m.modelManager.RemoteProvider() {
-		providerValue += " · remote"
-	} else {
-		providerValue += " · local"
-	}
-	providerDescription := "Switch Ollama or OpenAI-compatible remote profiles"
+	// No remote/local suffix: every provider sonar can run against is hosted
+	// (ProviderProfile.IsRemote is constant true), so the badge carried no
+	// information and the "· local" branch was unreachable chrome.
+	providerDescription := "Switch between configured provider profiles"
 	if names := m.providerNames(); len(names) > 1 {
 		providerDescription = fmt.Sprintf("%d profiles · /provider", len(names))
 	}
@@ -328,6 +351,21 @@ func (m *Model) settingsItems() []settingsItem {
 			permissionsValue = fmt.Sprintf("%d session · %d rules", sessionN, ruleN)
 		}
 	}
+	themeValue := m.ThemeID()
+	if themeValue == "" {
+		themeValue = "default"
+	}
+	// Voice reports the master switch, not the stage: the row's value answers
+	// "is anything going to be spoken", which is the question someone opens
+	// Settings with. Activating the row opens the listening stage.
+	voiceValue := "Off"
+	if m.voiceActive() {
+		voiceValue = "On"
+	}
+	voiceDescription := "Open the listening stage · /voice tunes channels and voices"
+	if !m.voiceActive() {
+		voiceDescription = "Off · /voice on enables spoken output · ctrl+g dictates"
+	}
 	modeTitle := "Mode"
 	modeDescription := "NORMAL, PLAN, or AUTO authority"
 	if m.goalRuntime != nil {
@@ -343,6 +381,11 @@ func (m *Model) settingsItems() []settingsItem {
 		{action: settingsCompact, title: "Compact layout", value: compact, description: "Toggle the explicit compact transcript preference"},
 		{action: settingsRuntime, title: "Runtime status", value: runtime, description: runtimeDescription},
 		{action: settingsPermissions, title: "Permissions", value: permissionsValue, description: permissionsDescription},
+		// Theme and Voice sit after the original seven: the 30×12 minimum can
+		// show eight rows, and the contract there is that Model through
+		// Runtime status stay simultaneously visible with Runtime selected.
+		{action: settingsTheme, title: "Theme", value: themeValue, description: "Choose a colour scheme with live preview"},
+		{action: settingsVoice, title: "Voice", value: voiceValue, description: voiceDescription},
 		{action: settingsHelp, title: "Help", value: "Shortcuts", description: "Keyboard reference and slash commands"},
 	}
 }
@@ -388,6 +431,15 @@ func (m *Model) activateSettings(action settingsAction) tea.Cmd {
 		m.invalidateEntryCache()
 		m.refreshTranscript()
 		m.refreshSettingsPicker()
+	case settingsTheme:
+		m.openSettingsChild(m.openThemePicker)
+	case settingsVoice:
+		// The stage replaces the whole screen rather than stacking over the
+		// picker, so the picker closes first — overlay-return has no meaning
+		// underneath a surface that IS the screen. Sessions already steps
+		// outside the plain openSettingsChild shape for its own reason.
+		m.closeSettingsPicker()
+		return m.toggleVoiceStage()
 	case settingsRuntime:
 		m.openSettingsChild(m.openRuntimeStatus)
 	case settingsPermissions:

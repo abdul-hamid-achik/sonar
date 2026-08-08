@@ -82,6 +82,9 @@ func (m *Model) handleStreamDone(msg StreamDoneMsg) {
 	m.turnPromptTotal += msg.PromptTokens
 	m.sessionEvalTotal += msg.EvalCount
 	m.sessionPromptTotal += msg.PromptTokens
+	// After the counts settle: the pressure verdict this speaks is computed
+	// from the promptTokens line above.
+	m.speakContextPressure()
 }
 
 // handleContextCompacted reconciles visible image references after the agent

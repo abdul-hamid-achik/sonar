@@ -545,15 +545,9 @@ func (m *Model) buildEmptyTranscriptPaintDocument(contentW, proseW int) transcri
 		case "system":
 			appendChunk(m.renderSystemNotice(entry.Content, proseW) + "\n")
 		case "error":
-			if notice, ok := compactOllamaStartupNotice(entry.Content, contentW, m.ollamaOffline); ok {
-				appendChunk(m.styles.ErrorText.Render(notice) + "\n")
-			} else if isOllamaStartupRecovery(entry.Content, m.ollamaOffline) {
-				appendChunk(m.renderSystemNotice(entry.Content, proseW) + "\n")
-			} else {
-				var rendered strings.Builder
-				m.renderEntryError(&rendered, entry.Content, contentW)
-				appendChunk(rendered.String())
-			}
+			var rendered strings.Builder
+			m.renderEntryError(&rendered, entry.Content, contentW)
+			appendChunk(rendered.String())
 		}
 	}
 	return transcriptPaintDocument{
