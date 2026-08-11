@@ -184,6 +184,7 @@ func assertFileCheapArtifact(t *testing.T, artifact *ArtifactDigest) {
 	t.Helper()
 	if artifact == nil {
 		t.Fatal("missing file.cheap artifact digest")
+		return
 	}
 	if artifact.Kind != ArtifactDigestFileCheapStash || artifact.ID != fileCheapTestStashID ||
 		artifact.URI != fileCheapStashURI(fileCheapTestStashID) || artifact.SchemaVersion != "1.0" ||

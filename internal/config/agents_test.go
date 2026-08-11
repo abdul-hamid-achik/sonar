@@ -154,10 +154,11 @@ model: qwen3.5:0.8b
 			t.Fatalf("LoadAgentsDir('') error: %v", err)
 		}
 		// Should return a valid AgentsDir (possibly with no agents)
-		if dir == nil {
-			t.Fatal("expected non-nil AgentsDir")
-		}
-		if dir.Agents == nil {
+	if dir == nil {
+		t.Fatal("expected non-nil AgentsDir")
+		return
+	}
+	if dir.Agents == nil {
 			t.Error("expected Agents map to be initialized")
 		}
 	})
