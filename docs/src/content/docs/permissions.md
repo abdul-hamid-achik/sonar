@@ -22,6 +22,7 @@ There is no "allow everything". Each choice binds exactly one thing:
 | once | this request only |
 | session | this same request again, for this session |
 | tool / path / prefix | one tool, one path, or one command prefix, for this session |
+| read dir | shell reads under one directory outside the workspace, for this session — read-only commands only, secrets stay refused beneath it |
 | workspace | the same, saved durably for this workspace |
 | server | every tool from the call's MCP server, saved durably — the first prompt from a server can be its last |
 
@@ -36,9 +37,14 @@ declarations count as reads. Only exact routes and honored annotations claim
 read semantics; the server-level grants are approval only. See
 `config.example.yaml` for the exact shapes.
 
-`/permissions` shows the current posture, the session grants and the workspace
-rules, and can revoke or clear them. It also exports and imports rules, so a
-workspace policy can be reviewed as a file.
+`/permissions` opens with the posture presets — Read Only, Ask for approval,
+Accept workspace edits, Auto — each described by what runs *without* asking,
+with the current one marked; selecting one commits the mode and the approval
+posture together. Skip-approvals appears as a row but is a launch decision
+(`--skip-approvals`), never togglable from the panel. Below the presets sit
+the session grants and the workspace rules, which the panel can revoke or
+clear. It also exports and imports rules, so a workspace policy can be
+reviewed as a file.
 
 `/permissions audit` reads the durable execution ledger and lists the prompts
 that interrupt this workspace most often — each row names the rule that

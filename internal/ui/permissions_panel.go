@@ -16,6 +16,11 @@ type permissionsAction int
 
 const (
 	permissionsToggleAcceptEdits permissionsAction = iota
+	permissionsPostureReadOnly
+	permissionsPostureAsk
+	permissionsPostureAcceptEdits
+	permissionsPostureAuto
+	permissionsPostureSkipInfo
 	permissionsClearSession
 	permissionsExport
 	permissionsImportHint
@@ -81,22 +86,109 @@ func newPermissionsPanelState(items []permissionsItem, terminalWidth, terminalHe
 	return &PermissionsPanelState{List: l, ItemHeight: itemHeight, Compact: compact}
 }
 
-func (m *Model) permissionsPanelItems() []permissionsItem {
-	items := make([]permissionsItem, 0, 16)
-	acceptValue := "Off"
-	acceptDesc := "Toggle accept-workspace-edits for write/edit/mkdir"
-	if m.acceptWorkspaceEditsEnabled() {
-		acceptValue = "On"
-		acceptDesc = "Workspace file edits auto-approve · press enter to turn off"
+// permissionsPostureLabel names the panel's posture presets the way the
+// status line and the "Permissions updated to X" notice must agree on.
+func permissionsPostureLabel(action permissionsAction) string {
+	switch action {
+	case permissionsPostureReadOnly:
+		return "Read Only"
+	case permissionsPostureAsk:
+		return "Ask for approval"
+	case permissionsPostureAcceptEdits:
+		return "Accept workspace edits"
+	case permissionsPostureAuto:
+		return "Auto (workspace)"
+	case permissionsPostureSkipInfo:
+		return "Skip approvals"
+	default:
+		return ""
+	}
+}
+
+// permissionsCurrentPosture reports which preset row describes the model's
+// present mode+posture combination.
+func (m *Model) permissionsCurrentPosture() permissionsAction {
+	switch {
+	case m.skipApprovalsEnabled():
+		return permissionsPostureSkipInfo
+	case m.mode == ModePlan:
+		return permissionsPostureReadOnly
+	case m.mode == ModeAuto:
+		return permissionsPostureAuto
+	case m.acceptWorkspaceEditsEnabled():
+		return permissionsPostureAcceptEdits
+	default:
+		return permissionsPostureAsk
+	}
+}
+
+// permissionsPostureItems is the Codex-shaped top of the panel: a handful of
+// postures, each described by what runs WITHOUT asking, the current one
+// marked. Every row maps onto levers that already exist — mode, approval
+// posture — so the picker is presentation over authority, never a new
+// authority surface.
+func (m *Model) permissionsPostureItems() []permissionsItem {
+	current := m.permissionsCurrentPosture()
+	sandboxValue := "sandbox off"
+	if m.agent != nil && m.agent.SandboxActive() {
+		sandboxValue = "sandbox on"
+	}
+	rows := []permissionsItem{
+		{
+			action:      permissionsPostureReadOnly,
+			title:       permissionsPostureLabel(permissionsPostureReadOnly),
+			description: "Reads and planning run without asking. Edits and commands stay blocked until you leave Plan.",
+		},
+		{
+			action:      permissionsPostureAsk,
+			title:       permissionsPostureLabel(permissionsPostureAsk),
+			description: "Reads run without asking. Edits, commands and MCP tools ask first.",
+		},
+		{
+			action:      permissionsPostureAcceptEdits,
+			title:       permissionsPostureLabel(permissionsPostureAcceptEdits),
+			description: "Workspace file edits run without asking. Commands and MCP tools still ask.",
+		},
+		{
+			action:      permissionsPostureAuto,
+			title:       permissionsPostureLabel(permissionsPostureAuto),
+			value:       sandboxValue,
+			description: "Catalogued commands, workspace edits and builds run without asking. Network, outside paths and destructive actions still ask.",
+		},
 	}
 	if m.skipApprovalsEnabled() {
-		acceptValue = "Unavailable"
-		acceptDesc = "Skip-approvals is active; accept-edits is subordinate"
+		rows = append(rows, permissionsItem{
+			action:      permissionsPostureSkipInfo,
+			title:       permissionsPostureLabel(permissionsPostureSkipInfo),
+			description: "Active for this process. Everything runs without asking; host and tool boundaries still apply.",
+		})
+	} else {
+		// The Codex pattern: an unavailable posture is greyed by explanation,
+		// not hidden. Skip-approvals is a launch decision — the checker binds
+		// it at boot — so the row says how to get it rather than pretending
+		// the panel could.
+		rows = append(rows, permissionsItem{
+			action:      permissionsPostureSkipInfo,
+			title:       permissionsPostureLabel(permissionsPostureSkipInfo),
+			value:       "launch flag",
+			description: "Not togglable at runtime. Launch with --skip-approvals to run without prompts.",
+		})
 	}
-	items = append(items, permissionsItem{
-		action: permissionsToggleAcceptEdits, title: "Accept workspace edits",
-		value: acceptValue, description: acceptDesc,
-	})
+	for i := range rows {
+		if rows[i].action == current {
+			value := "current"
+			if rows[i].value != "" {
+				value = rows[i].value + " · current"
+			}
+			rows[i].value = value
+		}
+	}
+	return rows
+}
+
+func (m *Model) permissionsPanelItems() []permissionsItem {
+	items := make([]permissionsItem, 0, 20)
+	items = append(items, m.permissionsPostureItems()...)
 
 	sessionCount := 0
 	if m.agent != nil {
@@ -169,6 +261,7 @@ func (m *Model) permissionsPanelItems() []permissionsItem {
 func (m *Model) openPermissionsPanel() {
 	// openSettingsChild may set overlayParent=Settings before calling this.
 	m.permissionsPanelState = newPermissionsPanelState(m.permissionsPanelItems(), m.width, m.height, m.isDark, m.themeID, m.glyphProfile)
+	m.permissionsPanelState.List.Title = "Permissions · " + permissionsPostureLabel(m.permissionsCurrentPosture())
 	m.overlay = OverlayPermissions
 	m.input.Blur()
 }
@@ -179,6 +272,7 @@ func (m *Model) refreshPermissionsPanel() {
 	}
 	selected := m.permissionsPanelState.List.Index()
 	m.permissionsPanelState = newPermissionsPanelState(m.permissionsPanelItems(), m.width, m.height, m.isDark, m.themeID, m.glyphProfile)
+	m.permissionsPanelState.List.Title = "Permissions · " + permissionsPostureLabel(m.permissionsCurrentPosture())
 	if selected >= 0 && selected < len(m.permissionsPanelState.List.Items()) {
 		m.permissionsPanelState.List.Select(selected)
 	}
@@ -189,8 +283,61 @@ func (m *Model) closePermissionsPanel() {
 	m.closeOverlayToParent()
 }
 
+// applyPermissionsPosture commits one preset selection: mode plus approval
+// posture together, then the Codex-style transcript notice. Selecting the
+// current posture is a quiet no-op rather than a toggle — a picker that
+// flips state on re-selection punishes reading it.
+func (m *Model) applyPermissionsPosture(action permissionsAction) {
+	if action == m.permissionsCurrentPosture() {
+		m.closePermissionsPanel()
+		return
+	}
+	if m.skipApprovalsEnabled() {
+		m.entries = append(m.entries, ChatEntry{
+			Kind: "system", Content: "Postures are unavailable while approval prompts are skipped for this process.",
+		})
+		m.refreshTranscript()
+		return
+	}
+	switch action {
+	case permissionsPostureReadOnly:
+		m.SetApprovalPosture(ApprovalPosturePrompted)
+		m.setMode(ModePlan)
+	case permissionsPostureAsk:
+		m.SetApprovalPosture(ApprovalPosturePrompted)
+		m.setMode(ModeNormal)
+	case permissionsPostureAcceptEdits:
+		m.SetApprovalPosture(ApprovalPostureAcceptWorkspaceEdits)
+		m.setMode(ModeNormal)
+	case permissionsPostureAuto:
+		m.SetApprovalPosture(ApprovalPosturePrompted)
+		m.setMode(ModeAuto)
+	}
+	m.entries = append(m.entries, ChatEntry{
+		Kind:    "system",
+		Content: "Permissions updated to " + permissionsPostureLabel(action) + ".",
+	})
+	m.refreshTranscript()
+	m.closePermissionsPanel()
+}
+
 func (m *Model) activatePermissionsItem(item permissionsItem) tea.Cmd {
 	switch item.action {
+	case permissionsPostureReadOnly, permissionsPostureAsk, permissionsPostureAcceptEdits, permissionsPostureAuto:
+		m.applyPermissionsPosture(item.action)
+		return nil
+	case permissionsPostureSkipInfo:
+		if m.skipApprovalsEnabled() {
+			m.entries = append(m.entries, ChatEntry{
+				Kind: "system", Content: "Skip-approvals is active for this process; restart without --skip-approvals to leave it.",
+			})
+		} else {
+			m.entries = append(m.entries, ChatEntry{
+				Kind: "system", Content: "Skip-approvals is a launch decision: restart with --skip-approvals to run without prompts.",
+			})
+		}
+		m.refreshTranscript()
+		return nil
 	case permissionsToggleAcceptEdits:
 		if m.skipApprovalsEnabled() {
 			m.entries = append(m.entries, ChatEntry{
@@ -432,4 +579,3 @@ func (m *Model) renderPermissionsPanel() string {
 	}
 	return m.renderPickerFrame(content, m.pickerNavigationFooter(false))
 }
-

@@ -100,3 +100,80 @@ func TestPermissionsPanelCommandAction(t *testing.T) {
 		t.Fatal("panel not open")
 	}
 }
+
+// The Codex-shaped posture section: a handful of presets described by what
+// runs without asking, the current one marked, selection committing mode and
+// approval posture together.
+func TestPermissionsPanelPostureRowsLeadThePanel(t *testing.T) {
+	m := newTestModel(t)
+	items := m.permissionsPanelItems()
+	if len(items) < 5 {
+		t.Fatalf("expected posture presets before management rows, got %d items", len(items))
+	}
+	wantOrder := []permissionsAction{
+		permissionsPostureReadOnly, permissionsPostureAsk,
+		permissionsPostureAcceptEdits, permissionsPostureAuto, permissionsPostureSkipInfo,
+	}
+	for i, action := range wantOrder {
+		if items[i].action != action {
+			t.Fatalf("row %d = %v, want %v", i, items[i].action, action)
+		}
+	}
+	// NORMAL + prompted is the default posture and must be the marked row.
+	if got := items[1].value; got != "current" {
+		t.Fatalf("Ask row should be current, value = %q", got)
+	}
+}
+
+func TestPermissionsPanelPostureSelectionCommitsModeAndPosture(t *testing.T) {
+	m := newTestModel(t)
+	m.openPermissionsPanel()
+	m.activatePermissionsItem(permissionsItem{action: permissionsPostureAuto})
+	if m.mode != ModeAuto {
+		t.Fatalf("mode = %v, want AUTO", m.mode)
+	}
+	if m.overlay == OverlayPermissions {
+		t.Fatal("panel should close after committing a posture")
+	}
+
+	m.openPermissionsPanel()
+	m.activatePermissionsItem(permissionsItem{action: permissionsPostureAcceptEdits})
+	if m.mode != ModeNormal || !m.acceptWorkspaceEditsEnabled() {
+		t.Fatalf("accept-edits posture: mode=%v acceptEdits=%t", m.mode, m.acceptWorkspaceEditsEnabled())
+	}
+
+	m.openPermissionsPanel()
+	m.activatePermissionsItem(permissionsItem{action: permissionsPostureReadOnly})
+	if m.mode != ModePlan || m.acceptWorkspaceEditsEnabled() {
+		t.Fatalf("read-only posture: mode=%v acceptEdits=%t", m.mode, m.acceptWorkspaceEditsEnabled())
+	}
+}
+
+func TestPermissionsPanelReSelectingCurrentPostureIsANoOp(t *testing.T) {
+	m := newTestModel(t)
+	m.openPermissionsPanel()
+	entriesBefore := len(m.entries)
+	m.activatePermissionsItem(permissionsItem{action: permissionsPostureAsk})
+	if m.mode != ModeNormal {
+		t.Fatalf("mode changed on re-selecting current posture: %v", m.mode)
+	}
+	if len(m.entries) != entriesBefore {
+		t.Fatal("re-selecting the current posture must not post a notice")
+	}
+}
+
+func TestPermissionsPanelSkipApprovalsRowIsInformational(t *testing.T) {
+	m := newTestModel(t)
+	m.openPermissionsPanel()
+	modeBefore := m.mode
+	m.activatePermissionsItem(permissionsItem{action: permissionsPostureSkipInfo})
+	if m.mode != modeBefore {
+		t.Fatal("skip-approvals row must not change mode")
+	}
+	if m.skipApprovalsEnabled() {
+		t.Fatal("skip-approvals must never be enabled from the panel")
+	}
+	if len(m.entries) == 0 || !strings.Contains(m.entries[len(m.entries)-1].Content, "--skip-approvals") {
+		t.Fatal("the row should explain the launch flag")
+	}
+}
