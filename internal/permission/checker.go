@@ -218,7 +218,14 @@ type ApprovalPreview struct {
 	// the host with its gateway knowledge, never re-parsed by the UI. It is
 	// the subject a whole-server grant binds to; empty means no such grant
 	// can be offered (for example, an inexact lazy target).
-	MCPServer         string
+	MCPServer string
+	// ShellReadDir is the host-resolved directory outside the workspace whose
+	// session read grant would cure THIS bash refusal. Set only when the
+	// refusal is a path-authority denial of a read-only-classified command
+	// and the directory is not a conventional secret path. Like
+	// CommandPrefix, it narrows an offer the host can prove correct — the UI
+	// must never derive a directory from the command text itself.
+	ShellReadDir      string
 	Path              string
 	SourcePath        string
 	DestinationPath   string
@@ -258,6 +265,16 @@ const (
 	// the rest of the process. Resource is the prefix string. Compound shell
 	// commands never match. Process-local only.
 	ScopeSessionBashPrefix = "session_bash_prefix"
+	// ScopeSessionShellReadDir grants read-only-classified shell commands the
+	// authority to name paths under one directory outside the workspace, for
+	// the rest of the process. Resource is the absolute directory. It cures
+	// only path-authority refusals of the AUTO scoped-shell catalog: the
+	// executable and its arguments must still be admitted on their own, an
+	// effectful command never consults it, and conventional secret paths stay
+	// refused underneath it. Process-local only — it is the answer to eight
+	// identical "operand outside the workspace" prompts in one audited
+	// session (4d01085), each approval curing exactly one command.
+	ScopeSessionShellReadDir = "session_shell_read_dir"
 	// ScopeSessionMCPTool grants one exact namespaced MCP tool (any args) for
 	// the rest of the process. Resource is empty. Process-local only.
 	ScopeSessionMCPTool = "session_mcp_tool"
@@ -284,7 +301,8 @@ const (
 func KnownSessionScopeKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
 	case "", ScopeExactRequest, ScopeSessionTool, ScopeSessionPath,
-		ScopeSessionBashPrefix, ScopeSessionMCPTool, ScopeSessionMCPServer:
+		ScopeSessionBashPrefix, ScopeSessionShellReadDir,
+		ScopeSessionMCPTool, ScopeSessionMCPServer:
 		return true
 	default:
 		return false
@@ -357,6 +375,17 @@ func AllowSessionBashPrefix() ApprovalResponse {
 		Allowed:   true,
 		Always:    true,
 		ScopeKind: ScopeSessionBashPrefix,
+	}
+}
+
+// AllowSessionShellReadDir returns a session grant letting read-only-classified
+// shell commands name paths under the request's ShellReadDir directory.
+func AllowSessionShellReadDir() ApprovalResponse {
+	return ApprovalResponse{
+		Decision:  DecisionAllowSession,
+		Allowed:   true,
+		Always:    true,
+		ScopeKind: ScopeSessionShellReadDir,
 	}
 }
 

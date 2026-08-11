@@ -227,6 +227,13 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 						if prefix := t.a.autoCommandGrantPrefix(t.authorityMode, command); prefix != "" {
 							detail += " · grant prefix: " + prefix
 						}
+						// Path refusals are curable by a shell-read-dir grant
+						// instead; naming the directory here is what made the
+						// 8-identical-prompts pattern in session 4d01085
+						// visible in the ledger.
+						if dir := t.a.autoCommandShellReadDir(t.authorityMode, command); dir != "" {
+							detail += " · grant read dir: " + dir
+						}
 					}
 				}
 				return appendExecutionEvent(ctx, t.execRuntime, executionEvent(*tracked, executionPkg.EventApprovalRequested, executionPkg.ApprovalRequested, "", detail))

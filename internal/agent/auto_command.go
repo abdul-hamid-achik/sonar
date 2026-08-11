@@ -91,6 +91,11 @@ type autoCommandAssessment struct {
 	refusedSegment      int
 	usesReadGrant       bool
 	workspaceExecutable bool
+	// deniedPath is the absolute operand behind a path-authority refusal. It
+	// exists to be shown: the approval preview names the directory a
+	// shell-read grant would cover, the same way preview.Path names a write
+	// target. Empty for every other refusal.
+	deniedPath string
 }
 
 func (assessment autoCommandAssessment) admitted() bool {
@@ -356,6 +361,9 @@ type autoSimpleCommandAssessment struct {
 	reason              autoCommandReason
 	usesReadGrant       bool
 	workspaceExecutable bool
+	// deniedPath is the absolute operand that failed path authority, so the
+	// approval preview can name the directory a shell-read grant would cover.
+	deniedPath string
 }
 
 type autoPathAuthority uint8
@@ -467,6 +475,7 @@ func (a *Agent) assessAutoScopedCommand(command string) autoCommandAssessment {
 		}
 		if !simple.allowed {
 			assessment.reason = simple.reason
+			assessment.deniedPath = simple.deniedPath
 			// Name the segment that objected, after the grant re-assessment
 			// above has already failed to cure it. This is the only refusal in
 			// this function a saved bash prefix can ever reach, so it is the
@@ -516,7 +525,7 @@ func (a *Agent) assessAutoScopedCommand(command string) autoCommandAssessment {
 			// would let > truncate an arbitrary file. Temporary external write
 			// grants are typed host capabilities and, like read grants above,
 			// deliberately never widen raw-shell authority.
-			if target == "" || a.autoCommandCandidatePathAssessment(target, baseDir, false) != autoPathWorkspace {
+			if target == "" || a.autoCommandCandidatePathAssessment(target, baseDir, false, false) != autoPathWorkspace {
 				assessment.reason = autoCommandReasonRedirectTarget
 				return assessment
 			}
@@ -955,19 +964,30 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 	// never become ambient raw-shell authority, even for otherwise read-only
 	// commands such as cat or sed.
 	allowReadGrants := false
+	// A session shell-read-dir grant is different: the user granted THE SHELL
+	// reads under one named directory, in a bash approval, for this process.
+	// It is consulted only when the command's own effect classification is
+	// read-only — `sort -o` and friends never reach it.
+	shellReadGrants := assessment.effect == autoCommandEffectReadOnly
 	for index, word := range args {
 		if autoCommandNonPathArgument(executable, args, index) {
 			continue
 		}
-		authority := a.autoCommandPathAssessment(word, baseDir, allowReadGrants)
+		authority := a.autoCommandPathAssessment(word, baseDir, allowReadGrants, shellReadGrants)
 		if authority == autoPathDenied {
 			assessment.reason = autoCommandReasonPathAuthority
+			// Recorded only for read-only-classified commands: the denied
+			// operand of an effectful command must never become a shell-read
+			// grant offer, because the grant could not cure it anyway.
+			if shellReadGrants {
+				assessment.deniedPath = autoCommandAbsoluteOperand(word, baseDir)
+			}
 			return assessment
 		}
 		assessment.usesReadGrant = assessment.usesReadGrant || authority == autoPathReadGrant
 	}
 
-	attachedAuthority, attachedOK := a.autoScopedAttachedPathOptionsAssessment(executable, args, baseDir, allowReadGrants)
+	attachedAuthority, attachedOK := a.autoScopedAttachedPathOptionsAssessment(executable, args, baseDir, allowReadGrants, shellReadGrants)
 	if !attachedOK {
 		assessment.reason = autoCommandReasonPathAuthority
 		return assessment
@@ -979,7 +999,7 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 		if len(args) == 2 && args[0] == "--" {
 			args = args[1:]
 		}
-		allowed = len(args) == 1 && a.autoCommandCandidatePathAssessment(args[0], baseDir, false) != autoPathDenied
+		allowed = len(args) == 1 && a.autoCommandCandidatePathAssessment(args[0], baseDir, false, false) != autoPathDenied
 	case "go":
 		allowed = autoScopedGoCommandAllowed(args)
 	case "git":
@@ -998,6 +1018,8 @@ func (a *Agent) assessAutoScopedSimpleCommand(words []string, baseDir string) au
 		allowed = autoScopedSwiftCommandAllowed(args)
 	case "sed":
 		allowed = autoScopedSedCommandAllowed(args)
+	case "awk":
+		allowed = autoScopedAwkCommandAllowed(args)
 	case "grep":
 		// Walking is the property that matters, not the executable's name.
 		//
@@ -1175,11 +1197,11 @@ func (a *Agent) grantAuthorizedSegmentAssessment(words []string, baseDir string)
 		if autoCommandNonPathArgument(executable, args, index) {
 			continue
 		}
-		if a.autoCommandPathAssessment(word, baseDir, false) == autoPathDenied {
+		if a.autoCommandPathAssessment(word, baseDir, false, false) == autoPathDenied {
 			return refused, false
 		}
 	}
-	if _, ok := a.autoScopedAttachedPathOptionsAssessment(executable, args, baseDir, false); !ok {
+	if _, ok := a.autoScopedAttachedPathOptionsAssessment(executable, args, baseDir, false, false); !ok {
 		return refused, false
 	}
 	return autoSimpleCommandAssessment{
@@ -1230,6 +1252,12 @@ func autoCommandNonPathArgument(executable string, args []string, index int) boo
 	}
 	if executable == "sed" {
 		return autoSedProgramArgument(args, index)
+	}
+	if executable == "awk" {
+		// awk PROGRAM text is data the same way sed programs and rg/grep
+		// patterns are: a pattern-action like `/error/ {print $2}` begins
+		// with a slash the operand loop would read as an absolute path.
+		return index == awkProgramIndex(args)
 	}
 	return false
 }
@@ -1611,7 +1639,7 @@ func autoScopedPrintfCommandAllowed(args []string) bool {
 	return true
 }
 
-func (a *Agent) autoScopedAttachedPathOptionsAssessment(executable string, args []string, baseDir string, allowReadGrants bool) (autoPathAuthority, bool) {
+func (a *Agent) autoScopedAttachedPathOptionsAssessment(executable string, args []string, baseDir string, allowReadGrants, shellReadGrants bool) (autoPathAuthority, bool) {
 	var options []string
 	switch executable {
 	case "find", "make", "just", "rg", "grep":
@@ -1644,7 +1672,7 @@ func (a *Agent) autoScopedAttachedPathOptionsAssessment(executable string, args 
 		if !attached {
 			continue
 		}
-		authority := a.autoCommandPathAssessment(value, baseDir, allowReadGrants)
+		authority := a.autoCommandPathAssessment(value, baseDir, allowReadGrants, shellReadGrants)
 		if authority == autoPathDenied {
 			return autoPathDenied, false
 		}
@@ -1845,8 +1873,15 @@ func autoScopedGitCommandAllowed(args []string) bool {
 	if autoScopedGitListingAllowed(args) {
 		return true
 	}
+	// merge-base sits with the inspection verbs: it prints commit ids and
+	// mutates nothing under any argument, including --is-ancestor and
+	// --fork-point. Its operands are refs, which resolve inside the workspace
+	// the same way log's do. Absent from the catalog it cost an approval in
+	// an audited AUTO session (4d01085) for a question git can only answer
+	// read-only.
 	if !firstArgIn(args,
 		"status", "log", "show", "diff", "rev-parse", "ls-files", "blame", "describe", "shortlog",
+		"merge-base",
 	) {
 		return false
 	}
@@ -1888,10 +1923,35 @@ func autoScopedGitListingAllowed(args []string) bool {
 	}
 	switch args[0] {
 	case "remote":
-		return len(args) == 1 || len(args) == 2 && stringIn(args[1], "-v", "--verbose")
+		if len(args) == 1 || len(args) == 2 && stringIn(args[1], "-v", "--verbose") {
+			return true
+		}
+		// get-url prints a configured URL without contacting the remote —
+		// unlike `remote show`, which is deliberately absent. Exact form: the
+		// verb, one remote name, nothing else.
+		return len(args) == 3 && args[1] == "get-url" && !strings.HasPrefix(args[2], "-")
 	case "stash", "worktree":
 		return len(args) == 2 && args[1] == "list"
+	case "config":
+		// config mutates through a positional value (`git config key value`),
+		// so only the two zero-value spellings are listings. --global and
+		// --file stay refused: they widen the read outside the workspace's
+		// own configuration.
+		if len(args) == 2 && args[1] == "--list" {
+			return true
+		}
+		return len(args) == 3 && args[1] == "--get" && !strings.HasPrefix(args[2], "-")
 	case "branch", "tag":
+		// Bare `git branch` and `git tag` cannot mutate: every mutating
+		// spelling of these verbs is reached through a positional operand or
+		// a flag, and these forms carry neither. Requiring --list here cost
+		// an approval for the most natural listing spelling there is.
+		if len(args) == 1 {
+			return true
+		}
+		if args[0] == "branch" && len(args) == 2 && args[1] == "--show-current" {
+			return true
+		}
 		listed := false
 		for _, argument := range args[1:] {
 			if argument == "--list" {
@@ -2078,6 +2138,90 @@ func autoScopedSedCommandAllowed(args []string) bool {
 	return true
 }
 
+// autoScopedAwkCommandAllowed admits the read-only slice of awk, following
+// sed's precedent: a narrow inline-program form, everything else stays
+// approval-gated. awk earned a place in the catalog the hard way — an audited
+// AUTO session (4d01085) prompted twice for column extraction, the exact job
+// the built-in tools cannot do.
+//
+// What keeps the admitted slice read-only:
+//   - the program must be inline; -f/--file program files and every
+//     unrecognized option are refused, so no dialect's exec mode is reachable.
+//   - the program text may not contain `|`, `>` or `<`. Pipes and redirects
+//     are how an awk program executes commands and writes files. The price is
+//     real: `>` and `<` are also awk's comparison operators, and programs
+//     using them stay gated — telling redirection from comparison apart
+//     requires parsing awk, and this catalog does not guess.
+//   - `system`, `getline`, `ENVIRON` and `PROCINFO` are refused as
+//     substrings: the first two execute and read beyond the operands, the
+//     last two disclose the host environment, which can carry credentials.
+func autoScopedAwkCommandAllowed(args []string) bool {
+	index := awkProgramIndex(args)
+	if index < 0 || index >= len(args) {
+		return false
+	}
+	program := args[index]
+	if program == "" || strings.HasPrefix(program, "-") {
+		return false
+	}
+	if !autoAwkProgramReadOnly(program) {
+		return false
+	}
+	// Everything after the program is an input file, assessed for path
+	// authority by the generic operand loop; option-looking words there are
+	// GNU getopt permutation bait and are refused, mirroring sed.
+	for _, file := range args[index+1:] {
+		if strings.HasPrefix(file, "-") {
+			return false
+		}
+	}
+	return true
+}
+
+// awkProgramIndex walks awk's option grammar — -F and -v, attached or
+// separate, then an optional `--` — and returns the index of the inline
+// program word, or -1 when an unrecognized option makes the position
+// ambiguous. Shared by admission and by the operand loop's program-text
+// exemption so the two cannot disagree about which word is the program.
+func awkProgramIndex(args []string) int {
+	index := 0
+	for index < len(args) {
+		argument := args[index]
+		if argument == "--" {
+			index++
+			break
+		}
+		if !strings.HasPrefix(argument, "-") || argument == "-" {
+			break
+		}
+		switch {
+		case argument == "-F" || argument == "-v":
+			index += 2
+		case strings.HasPrefix(argument, "-F") || strings.HasPrefix(argument, "-v"):
+			index++
+		default:
+			return -1
+		}
+	}
+	if index >= len(args) {
+		return -1
+	}
+	return index
+}
+
+func autoAwkProgramReadOnly(program string) bool {
+	if strings.ContainsAny(program, "|><") {
+		return false
+	}
+	lower := strings.ToLower(program)
+	for _, forbidden := range []string{"system", "getline", "environ", "procinfo"} {
+		if strings.Contains(lower, forbidden) {
+			return false
+		}
+	}
+	return true
+}
+
 func autoCommandAssignmentAllowed(assignment string) bool {
 	if !autoCommandAssignment.MatchString(assignment) {
 		return false
@@ -2086,13 +2230,13 @@ func autoCommandAssignmentAllowed(assignment string) bool {
 	return stringIn(name, "CI", "NO_COLOR", "FORCE_COLOR") && autoCommandAssignmentValue.MatchString(value)
 }
 
-func (a *Agent) autoCommandPathAssessment(word, baseDir string, allowReadGrants bool) autoPathAuthority {
-	result := a.autoCommandCandidatePathAssessment(word, baseDir, allowReadGrants)
+func (a *Agent) autoCommandPathAssessment(word, baseDir string, allowReadGrants, shellReadGrants bool) autoPathAuthority {
+	result := a.autoCommandCandidatePathAssessment(word, baseDir, allowReadGrants, shellReadGrants)
 	if result == autoPathDenied {
 		return autoPathDenied
 	}
 	if _, value, found := strings.Cut(word, "="); found {
-		valueResult := a.autoCommandCandidatePathAssessment(value, baseDir, allowReadGrants)
+		valueResult := a.autoCommandCandidatePathAssessment(value, baseDir, allowReadGrants, shellReadGrants)
 		if valueResult == autoPathDenied {
 			return autoPathDenied
 		}
@@ -2103,7 +2247,7 @@ func (a *Agent) autoCommandPathAssessment(word, baseDir string, allowReadGrants 
 	return result
 }
 
-func (a *Agent) autoCommandCandidatePathAssessment(candidate, baseDir string, allowReadGrants bool) autoPathAuthority {
+func (a *Agent) autoCommandCandidatePathAssessment(candidate, baseDir string, allowReadGrants, shellReadGrants bool) autoPathAuthority {
 	if candidate == "" || candidate == "/dev/null" {
 		return autoPathWorkspace
 	}
@@ -2117,6 +2261,9 @@ func (a *Agent) autoCommandCandidatePathAssessment(candidate, baseDir string, al
 	// apparently confined shell command into an external read or write.
 	if a.pathWithinWorkspace(candidate) {
 		return autoPathWorkspace
+	}
+	if shellReadGrants && a.shellReadDirGrantAdmits(candidate) {
+		return autoPathReadGrant
 	}
 	if !allowReadGrants {
 		return autoPathDenied
@@ -2252,4 +2399,99 @@ func containsClusteredShortOption(args []string, denied, valueTaking string) boo
 		}
 	}
 	return false
+}
+
+// autoCommandAbsoluteOperand renders a refused operand as the absolute path
+// the assessment actually judged, for display in the approval preview.
+func autoCommandAbsoluteOperand(word, baseDir string) string {
+	if _, value, found := strings.Cut(word, "="); found && (strings.HasPrefix(value, "/") || strings.HasPrefix(value, "./") || strings.HasPrefix(value, "../")) {
+		word = value
+	}
+	if filepath.IsAbs(word) {
+		return filepath.Clean(word)
+	}
+	if baseDir == "" {
+		return ""
+	}
+	return filepath.Clean(filepath.Join(baseDir, word))
+}
+
+// shellReadDirGrantAdmits reports whether a session shell-read-dir grant
+// covers the candidate path. The candidate is resolved through symlinks on
+// its deepest existing ancestor before containment is checked, so a link
+// inside a granted directory cannot smuggle a read from elsewhere, and
+// conventional secret paths stay refused under any grant — the same two
+// guards the typed read-grant path applies.
+func (a *Agent) shellReadDirGrantAdmits(candidate string) bool {
+	if a == nil {
+		return false
+	}
+	resolved := resolveExistingAncestorSymlinks(candidate)
+	if resolved == "" || config.HostSecretPathIgnored(resolved) {
+		return false
+	}
+	workspace := a.approvalScopeWorkspace()
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	for key := range a.approvalGrants {
+		parts := strings.Split(key, "\x00")
+		if len(parts) < 4 || parts[0] != workspace || parts[1] != "bash" ||
+			parts[2] != permissionpkg.ScopeSessionShellReadDir {
+			continue
+		}
+		dir := parts[3]
+		if dir != "" && (resolved == dir || strings.HasPrefix(resolved, dir+string(filepath.Separator))) {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveExistingAncestorSymlinks canonicalizes as much of the path as exists.
+// A refused operand often does not exist yet (a typo, a not-yet-created file),
+// but its directory usually does, and the directory is what containment and
+// grants bind to.
+func resolveExistingAncestorSymlinks(path string) string {
+	path = filepath.Clean(path)
+	if !filepath.IsAbs(path) {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	dir, base := filepath.Split(path)
+	resolvedDir, err := filepath.EvalSymlinks(filepath.Clean(dir))
+	if err != nil {
+		return path
+	}
+	return filepath.Join(resolvedDir, base)
+}
+
+// autoCommandShellReadDir names the directory a session shell-read grant must
+// cover to cure THIS refusal — the host-computed analogue of
+// autoCommandGrantPrefix for path-authority refusals. Empty unless the mode
+// is AUTO, the refusal is a path denial of a read-only-classified command,
+// and the directory is not a conventional secret path.
+func (a *Agent) autoCommandShellReadDir(mode AuthorityMode, command string) string {
+	if mode != AuthorityAutoScoped {
+		return ""
+	}
+	assessment := a.assessAutoScopedCommand(command)
+	// deniedPath is only ever recorded for a read-only-classified segment, so
+	// its presence already carries the effect check.
+	if assessment.admitted() || assessment.reason != autoCommandReasonPathAuthority ||
+		assessment.deniedPath == "" {
+		return ""
+	}
+	dir := resolveExistingAncestorSymlinks(assessment.deniedPath)
+	if dir == "" {
+		return ""
+	}
+	if info, err := os.Stat(dir); err != nil || !info.IsDir() {
+		dir = filepath.Dir(dir)
+	}
+	if config.HostSecretPathIgnored(dir) || a.pathWithinWorkspace(dir) {
+		return ""
+	}
+	return dir
 }

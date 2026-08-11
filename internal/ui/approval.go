@@ -130,6 +130,19 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 				ScopeKind:    permission.DurableBashPrefix,
 			})
 		}
+		// A path-authority refusal is not curable by a command prefix; the
+		// host names the outside directory instead, and the offer is "shell
+		// may READ under it" — the grant never covers an effectful command.
+		if dir := strings.TrimSpace(preview.ShellReadDir); dir != "" {
+			dirHint := compactApprovalHint(dir, 28)
+			choices = append(choices, approvalChoice{
+				Decision:     permission.DecisionAllowSession,
+				Key:          "r",
+				Label:        "shell reads under " + dirHint + " this session",
+				CompactLabel: "reads · " + dirHint,
+				ScopeKind:    permission.ScopeSessionShellReadDir,
+			})
+		}
 	case sessionMCPToolScopeEligibleUI(toolName):
 		toolHint := compactApprovalHint(toolName, 28)
 		sessionLabel := "this MCP tool again this session"
@@ -390,6 +403,8 @@ func approvalResponseForScope(scopeKind string) permission.ApprovalResponse {
 		// Workspace durable save is applied by the UI before the response is
 		// delivered; the agent still receives a process-local bash-prefix grant.
 		return permission.AllowSessionBashPrefix()
+	case permission.ScopeSessionShellReadDir:
+		return permission.AllowSessionShellReadDir()
 	case permission.ScopeSessionMCPTool, permission.DurableMCPTool:
 		return permission.AllowSessionMCPTool()
 	case permission.ScopeSessionMCPServer, permission.DurableMCPServer:
@@ -994,6 +1009,11 @@ func approvalScopeLabel(scope permission.ApprovalScope) string {
 			return "Bash pattern " + compactApprovalHint(resource, 32) + " · this process"
 		}
 		return "Bash prefix · this process"
+	case permission.ScopeSessionShellReadDir:
+		if resource := strings.TrimSpace(scope.Resource); resource != "" {
+			return "Shell reads under " + compactApprovalHint(resource, 36) + " · this process"
+		}
+		return "Shell reads under one directory · this process"
 	case permission.ScopeSessionMCPTool:
 		return "This MCP tool · any args · this process"
 	case permission.ScopeSessionMCPServer:

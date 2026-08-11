@@ -42,14 +42,17 @@ func TestGitReadSubcommandsAreAutoScoped(t *testing.T) {
 // operand-bearing forms here must stay gated either way, and
 // TestGitListingVerbsAreAdmittedOnlyInExactForms pins the other side.
 func TestGitMutatingSubcommandsStayGated(t *testing.T) {
+	// Bare `branch`/`tag` and `config --get` moved to the admitted side in the
+	// session-4d01085 widening: the exact-form contract this file already
+	// applies to listings — no positional operand, no mutation — covers them,
+	// and refusing the most natural listing spelling cost real approvals.
+	// Their operand-bearing spellings stay pinned refused below and in
+	// TestGitOrientationWideningAdmitsNoMutation.
 	for _, args := range [][]string{
 		{"branch", "-D", "main"},
-		{"branch"}, // bare lists, but the verb also deletes
-		{"tag"},    // bare lists, but `tag <name>` creates
 		{"tag", "v1.0.0"},
 		{"config", "user.email", "x@y.z"},
-		{"config", "--get", "user.email"}, // reads, but the verb also writes
-		{"stash"},                         // bare PUSHES the worktree
+		{"stash"}, // bare PUSHES the worktree
 		{"stash", "push"},
 		{"stash", "pop"},
 		{"remote", "add", "origin", "git@example.com:x/y"},
@@ -277,6 +280,49 @@ func TestGitEmptyAndUnknownArgsAreRefused(t *testing.T) {
 		{""},
 		{"not-a-subcommand"},
 		{"STATUS"}, // git subcommands are case-sensitive
+	} {
+		if autoScopedGitCommandAllowed(args) {
+			t.Errorf("git %v must stay approval-gated", args)
+		}
+	}
+}
+
+// Session 4d01085 prompted for `git branch` and `git merge-base` — pure
+// orientation reads. These pin the widened exact forms, and the refusal half
+// pins that the widening admitted no operand-carrying (mutating) spelling.
+func TestGitOrientationFormsAreAutoScoped(t *testing.T) {
+	for _, args := range [][]string{
+		{"merge-base", "main", "HEAD"},
+		{"merge-base", "--is-ancestor", "main", "HEAD"},
+		{"merge-base", "--fork-point", "origin/main"},
+		{"branch"},
+		{"tag"},
+		{"branch", "--show-current"},
+		{"config", "--list"},
+		{"config", "--get", "user.name"},
+		{"remote", "get-url", "origin"},
+	} {
+		if !autoScopedGitCommandAllowed(args) {
+			t.Errorf("git %v should be auto-scoped", args)
+		}
+	}
+}
+
+func TestGitOrientationWideningAdmitsNoMutation(t *testing.T) {
+	for _, args := range [][]string{
+		// config writes through positional value or scoped flags.
+		{"config", "user.name", "evil"},
+		{"config", "--get", "--global", "user.name"},
+		{"config", "--global", "--get", "user.name"},
+		{"config", "--unset", "user.name"},
+		// remote spellings that mutate or contact the network.
+		{"remote", "get-url"},
+		{"remote", "set-url", "origin", "https://example.com/x.git"},
+		{"remote", "get-url", "--push"},
+		// bare-form widening must not leak into operand forms.
+		{"branch", "newthing"},
+		{"tag", "v9.9"},
+		{"branch", "--show-current", "extra"},
 	} {
 		if autoScopedGitCommandAllowed(args) {
 			t.Errorf("git %v must stay approval-gated", args)

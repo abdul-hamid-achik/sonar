@@ -181,6 +181,7 @@ func (a *Agent) buildApprovalPreview(ctx context.Context, mode AuthorityMode, tc
 		preview.Reason = a.autoCommandApprovalReason(mode, preview.Command)
 		preview.CommandPrefix = a.autoCommandGrantPrefix(mode, preview.Command)
 		preview.CommandSegments = a.autoCommandSegmentBreakdown(mode, preview.Command)
+		preview.ShellReadDir = a.autoCommandShellReadDir(mode, preview.Command)
 	case "copy":
 		preview.Kind = permissionpkg.PreviewFilesystem
 		preview.ActionLabel = "Copy file"
@@ -346,6 +347,15 @@ func sessionBashPrefixGrantKey(workspace, prefix string) string {
 	return workspace + "\x00" + "bash" + "\x00" + permissionpkg.ScopeSessionBashPrefix + "\x00" + prefix
 }
 
+// sessionShellReadDirGrantKey stores a shell-read-dir grant. It is consulted
+// by the AUTO scoped-shell path assessment (shellReadDirGrantAdmits), never by
+// hasSessionApproval: the grant means "reads under this directory are fine",
+// and matching it against whole bash requests would approve arbitrary
+// commands that merely mention the directory.
+func sessionShellReadDirGrantKey(workspace, dir string) string {
+	return workspace + "\x00" + "bash" + "\x00" + permissionpkg.ScopeSessionShellReadDir + "\x00" + dir
+}
+
 func sessionMCPToolGrantKey(workspace, toolName string) string {
 	return workspace + "\x00" + toolName + "\x00" + permissionpkg.ScopeSessionMCPTool + "\x00"
 }
@@ -451,6 +461,9 @@ func (a *Agent) rememberSessionApproval(request permissionpkg.ApprovalRequest) {
 	if request.Scope.Kind == permissionpkg.ScopeSessionBashPrefix {
 		key = sessionBashPrefixGrantKey(request.Scope.Workspace, request.Scope.Resource)
 	}
+	if request.Scope.Kind == permissionpkg.ScopeSessionShellReadDir && request.Scope.Resource != "" {
+		key = sessionShellReadDirGrantKey(request.Scope.Workspace, request.Scope.Resource)
+	}
 	if request.Scope.Kind == permissionpkg.ScopeSessionMCPServer && request.Scope.Resource != "" {
 		key = sessionMCPServerGrantKey(request.Scope.Workspace, request.Scope.Resource)
 	}
@@ -496,6 +509,19 @@ func applySessionScope(request *permissionpkg.ApprovalRequest, scopeKind string)
 		}
 		request.Scope.Kind = permissionpkg.ScopeSessionBashPrefix
 		request.Scope.Resource = prefix
+	case permissionpkg.ScopeSessionShellReadDir:
+		if request.ToolName != "bash" {
+			return
+		}
+		// The directory comes from the host-computed preview field, never
+		// re-derived from the command text: the preview named what the user
+		// read and approved, and the grant must bind to exactly that.
+		dir := strings.TrimSpace(request.Preview.ShellReadDir)
+		if dir == "" {
+			return
+		}
+		request.Scope.Kind = permissionpkg.ScopeSessionShellReadDir
+		request.Scope.Resource = dir
 	case permissionpkg.ScopeSessionMCPTool:
 		if !sessionMCPToolScopeEligible(request.ToolName) {
 			return
