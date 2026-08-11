@@ -120,6 +120,15 @@ terminal:
       # Session public IDs are random 7-char hex handles. Normalize them so
       # committed snapshots stay stable across runs while still covering the
       # handle shape in screen text.
+      # Git branch names in the session top bar vary between local runs and CI
+      # (main, cursor/*, feature branches). The bar pads right-aligned provider
+      # identity based on left-side width, so different branch names misalign the
+      # meter. Strip the entire left portion (branch · workspace/sonar + padding)
+      # to keep only the right-aligned provider identity.
+      # Match: "   branch · workspace/sonar" followed by 2+ spaces (the gap)
+      # Replace with just the leading indent (3 spaces) to preserve alignment.
+      - regex: "^   [^·]+·\\s+(?:workspace|sonar)\\s{2,}"
+        with: "   "
 
       # Approval target wrap and proposed-change preview differ by cell metrics.
       - regex: "session-grant\\.\\n\\s+txt"
