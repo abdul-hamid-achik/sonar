@@ -9,7 +9,7 @@
 │  ✗ Write failed approval-probe.txt
 │  tool call denied: user denied tool executi…
 
-     Denied safely. No file was changed.
+   Denied safely. No file was changed.
 
 
 
