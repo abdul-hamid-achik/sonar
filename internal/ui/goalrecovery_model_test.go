@@ -201,6 +201,7 @@ func inspectorRecoveryAction(t *testing.T, inspector *GoalInspector) (int, bool,
 	t.Helper()
 	if inspector == nil {
 		t.Fatal("goal inspector is nil")
+		return 0, false, ""
 	}
 	for index, action := range inspector.actions {
 		if action.Spec.ID == goalInspectorRecoveryActionID {

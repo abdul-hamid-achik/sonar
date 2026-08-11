@@ -651,6 +651,7 @@ func TestGoalFormViewCachesUntilStateChanges(t *testing.T) {
 	}
 	if firstCursor == nil || secondCursor == nil {
 		t.Fatal("focused input should expose a cursor")
+		return
 	}
 	firstCursor.X = 999
 	_, cursor := form.ViewWithCursor()
@@ -754,6 +755,7 @@ func TestGoalFormCursorStaysInsideFrame(t *testing.T) {
 	view, cursor := form.ViewWithCursor()
 	if cursor == nil {
 		t.Fatal("focused field returned no cursor")
+		return
 	}
 	lines := strings.Split(view, "\n")
 	if cursor.Y < 0 || cursor.Y >= len(lines) {
