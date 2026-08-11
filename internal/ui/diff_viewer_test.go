@@ -507,6 +507,7 @@ func TestDiffViewerSearchCursorStaysInsideFrameAndEscapeIsLayered(t *testing.T) 
 	view, cursor := viewer.ViewWithCursor()
 	if cursor == nil {
 		t.Fatal("focused search omitted hardware cursor")
+		return
 	}
 	layout := viewer.Layout()
 	if cursor.X < 0 || cursor.X >= layout.OuterRect.Width() ||
