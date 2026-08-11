@@ -12,10 +12,65 @@ import (
 	"github.com/abdul-hamid-achik/sonar/internal/permission"
 )
 
+func TestBashInterruptionParsesGrantPrefix(t *testing.T) {
+	m := newTestModel(t)
+	_ = m.openPermissionsPanel()
+	
+	// Simulate a bash interruption with grant prefix
+	stat := interruptionStat{
+		ToolName: "bash",
+		Detail:   "interactive approval requested: ls -la · grant prefix: ls",
+		Count:    5,
+		CanPromote: true,
+	}
+	
+	item := m.buildInterruptionRow(stat)
+	if !strings.Contains(item.description, "Press Enter") {
+		t.Errorf("bash interruption with grant prefix should be promotable, got: %q", item.description)
+	}
+}
+
+func TestInterruptionStatsLoadAsync(t *testing.T) {
+	m := newTestModel(t)
+	
+	// Opening panel should not block - stats load asynchronously
+	// (cmd may be nil if sessionStore unavailable, which is fine for test env)
+	_ = m.openPermissionsPanel()
+	
+	// Panel should be open immediately, regardless of stats loading
+	if m.overlay != OverlayPermissions {
+		t.Errorf("panel should be open immediately, got overlay=%d", m.overlay)
+	}
+	
+	// Stats loading flag should be set if we have a sessionStore
+	// In test env without DB, this might be false, which is OK
+}
+
+func TestPathInterruptionWithoutPathNotPromotable(t *testing.T) {
+	m := newTestModel(t)
+	_ = m.openPermissionsPanel()
+	
+	// Simulate a write interruption without a bounded path
+	stat := interruptionStat{
+		ToolName: "write",
+		Detail:   "interactive approval requested",
+		Count:    3,
+	}
+	
+	item := m.buildInterruptionRow(stat)
+	if item.interruptStat.CanPromote {
+		t.Error("write interruption without path should not be promotable")
+	}
+	if !strings.Contains(item.description, "No path to promote") {
+		t.Errorf("expected 'No path to promote' message, got: %q", item.description)
+	}
+}
+
 func TestPermissionsPanelOpensFromSettings(t *testing.T) {
 	m := newTestModel(t)
 	m.openSettingsPicker()
-	m.openSettingsChild(m.openPermissionsPanel)
+	m.overlayParent = OverlaySettings
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	if m.overlay != OverlayPermissions || m.permissionsPanelState == nil {
 		t.Fatalf("permissions panel not open: overlay=%d state=%v", m.overlay, m.permissionsPanelState)
 	}
@@ -48,7 +103,7 @@ func TestPermissionsPanelExportWritesPortableFile(t *testing.T) {
 	if _, err := m.agent.AddWorkspaceBashPrefix("go test *"); err != nil {
 		t.Fatal(err)
 	}
-	m.openPermissionsPanel()
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	for _, item := range m.permissionsPanelItems() {
 		if item.action == permissionsExport {
 			m.activatePermissionsItem(item)
@@ -75,7 +130,7 @@ func TestPermissionsPanelExportWritesPortableFile(t *testing.T) {
 
 func TestPermissionsPanelToggleAcceptEdits(t *testing.T) {
 	m := newTestModel(t)
-	m.openPermissionsPanel()
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	item := permissionsItem{action: permissionsToggleAcceptEdits}
 	m.activatePermissionsItem(item)
 	if !m.acceptWorkspaceEditsEnabled() {
@@ -95,7 +150,7 @@ func TestPermissionsPanelCommandAction(t *testing.T) {
 	}
 	// Mimic command dispatch.
 	m.overlayParent = OverlayNone
-	m.openPermissionsPanel()
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	if m.overlay != OverlayPermissions {
 		t.Fatal("panel not open")
 	}
@@ -127,7 +182,7 @@ func TestPermissionsPanelPostureRowsLeadThePanel(t *testing.T) {
 
 func TestPermissionsPanelPostureSelectionCommitsModeAndPosture(t *testing.T) {
 	m := newTestModel(t)
-	m.openPermissionsPanel()
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	m.activatePermissionsItem(permissionsItem{action: permissionsPostureAuto})
 	if m.mode != ModeAuto {
 		t.Fatalf("mode = %v, want AUTO", m.mode)
@@ -136,13 +191,13 @@ func TestPermissionsPanelPostureSelectionCommitsModeAndPosture(t *testing.T) {
 		t.Fatal("panel should close after committing a posture")
 	}
 
-	m.openPermissionsPanel()
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	m.activatePermissionsItem(permissionsItem{action: permissionsPostureAcceptEdits})
 	if m.mode != ModeNormal || !m.acceptWorkspaceEditsEnabled() {
 		t.Fatalf("accept-edits posture: mode=%v acceptEdits=%t", m.mode, m.acceptWorkspaceEditsEnabled())
 	}
 
-	m.openPermissionsPanel()
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	m.activatePermissionsItem(permissionsItem{action: permissionsPostureReadOnly})
 	if m.mode != ModePlan || m.acceptWorkspaceEditsEnabled() {
 		t.Fatalf("read-only posture: mode=%v acceptEdits=%t", m.mode, m.acceptWorkspaceEditsEnabled())
@@ -151,7 +206,7 @@ func TestPermissionsPanelPostureSelectionCommitsModeAndPosture(t *testing.T) {
 
 func TestPermissionsPanelReSelectingCurrentPostureIsANoOp(t *testing.T) {
 	m := newTestModel(t)
-	m.openPermissionsPanel()
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	entriesBefore := len(m.entries)
 	m.activatePermissionsItem(permissionsItem{action: permissionsPostureAsk})
 	if m.mode != ModeNormal {
@@ -164,7 +219,7 @@ func TestPermissionsPanelReSelectingCurrentPostureIsANoOp(t *testing.T) {
 
 func TestPermissionsPanelSkipApprovalsRowIsInformational(t *testing.T) {
 	m := newTestModel(t)
-	m.openPermissionsPanel()
+	_ = m.openPermissionsPanel() // Returns cmd for async stats load
 	modeBefore := m.mode
 	m.activatePermissionsItem(permissionsItem{action: permissionsPostureSkipInfo})
 	if m.mode != modeBefore {

@@ -443,7 +443,8 @@ func (m *Model) activateSettings(action settingsAction) tea.Cmd {
 	case settingsRuntime:
 		m.openSettingsChild(m.openRuntimeStatus)
 	case settingsPermissions:
-		m.openSettingsChild(m.openPermissionsPanel)
+		m.overlayParent = OverlaySettings
+		return m.openPermissionsPanel()
 	case settingsHelp:
 		m.openSettingsChild(func() {
 			m.overlay = OverlayHelp

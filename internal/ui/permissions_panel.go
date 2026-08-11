@@ -45,10 +45,11 @@ type permissionsItem struct {
 }
 
 type interruptionStat struct {
-	ToolName string
-	Detail   string
-	Count    int64
-	LastAt   string
+	ToolName    string
+	Detail      string
+	Count       int64
+	LastAt      string
+	CanPromote  bool // Whether this interruption can be promoted to a durable rule
 }
 
 func (i permissionsItem) Title() string {
@@ -292,27 +293,36 @@ func (m *Model) permissionsPanelItems() []permissionsItem {
 		}
 	}
 
-	// Interruptions section
-	stats := m.fetchInterruptionStats()
-	if len(stats) > 0 {
+	// Interruptions section - use cached stats loaded asynchronously
+	if len(m.cachedInterruptionStats) > 0 {
 		items = append(items, permissionsItem{
 			action: permissionsSectionHeader, title: "Interruptions",
 			description: "Top approval prompts from ledger",
 		})
-		for _, stat := range stats {
+		for _, stat := range m.cachedInterruptionStats {
 			items = append(items, m.buildInterruptionRow(stat))
 		}
+	} else if m.interruptionStatsLoading {
+		// Show a placeholder while loading
+		items = append(items, permissionsItem{
+			action: permissionsSectionHeader, title: "Interruptions",
+			description: "Loading...",
+		})
 	}
 
 	return items
 }
 
-func (m *Model) openPermissionsPanel() {
+func (m *Model) openPermissionsPanel() tea.Cmd {
 	// openSettingsChild may set overlayParent=Settings before calling this.
 	m.permissionsPanelState = newPermissionsPanelState(m.permissionsPanelItems(), m.width, m.height, m.isDark, m.themeID, m.glyphProfile)
 	m.permissionsPanelState.List.Title = "Permissions · " + permissionsPostureLabel(m.permissionsCurrentPosture())
 	m.overlay = OverlayPermissions
 	m.input.Blur()
+	
+	// Trigger async load of interruption stats
+	m.interruptionStatsLoading = true
+	return m.loadInterruptionStatsCmd()
 }
 
 func (m *Model) refreshPermissionsPanel() {
@@ -507,30 +517,37 @@ func (m *Model) activatePermissionsItem(item permissionsItem) tea.Cmd {
 	return nil
 }
 
-func (m *Model) fetchInterruptionStats() []interruptionStat {
+// loadInterruptionStatsCmd loads interruption stats asynchronously
+func (m *Model) loadInterruptionStatsCmd() tea.Cmd {
 	if m.sessionStore == nil || m.agent == nil {
 		return nil
 	}
+	
 	workspaceID, err := canonicalWorkspaceID(m.agent.WorkDir())
 	if err != nil {
 		return nil
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
-	defer cancel()
-	dbStats, err := m.sessionStore.WorkspaceApprovalPromptStats(ctx, workspaceID, 10)
-	if err != nil || len(dbStats) == 0 {
-		return nil
+	
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		
+		dbStats, err := m.sessionStore.WorkspaceApprovalPromptStats(ctx, workspaceID, 10)
+		if err != nil || len(dbStats) == 0 {
+			return interruptionStatsLoadedMsg{Stats: nil}
+		}
+		
+		stats := make([]interruptionStat, 0, len(dbStats))
+		for _, s := range dbStats {
+			stats = append(stats, interruptionStat{
+				ToolName: s.ToolName,
+				Detail:   s.Detail,
+				Count:    s.Count,
+				LastAt:   s.LastAt,
+			})
+		}
+		return interruptionStatsLoadedMsg{Stats: stats}
 	}
-	stats := make([]interruptionStat, 0, len(dbStats))
-	for _, s := range dbStats {
-		stats = append(stats, interruptionStat{
-			ToolName: s.ToolName,
-			Detail:   s.Detail,
-			Count:    s.Count,
-			LastAt:   s.LastAt,
-		})
-	}
-	return stats
 }
 
 func (m *Model) buildInterruptionRow(stat interruptionStat) permissionsItem {
@@ -545,21 +562,36 @@ func (m *Model) buildInterruptionRow(stat interruptionStat) permissionsItem {
 	
 	// Suggest a grant type based on the tool
 	suggestedGrant := ""
+	canPromote := false
 	switch stat.ToolName {
 	case "bash":
-		suggestedGrant = "allow-bash pattern"
+		// Check if we have a grant prefix
+		if strings.Contains(stat.Detail, " · grant prefix: ") {
+			suggestedGrant = "allow-bash pattern"
+			canPromote = true
+		}
 	case "write", "edit", "mkdir":
-		suggestedGrant = "allow-path <path>"
+		// Only offer promotion if we can extract a path
+		if extractPathFromDetail(stat.Detail) != "" {
+			suggestedGrant = "allow-path <path>"
+			canPromote = true
+		}
 	default:
 		if strings.Contains(stat.ToolName, "__") {
 			suggestedGrant = "allow-mcp " + stat.ToolName
+			canPromote = true
 		}
 	}
 	
-	desc := "Press Enter to promote"
-	if suggestedGrant != "" {
+	desc := ""
+	if canPromote && suggestedGrant != "" {
 		desc = "Press Enter → " + suggestedGrant
+	} else if !canPromote && (stat.ToolName == "write" || stat.ToolName == "edit" || stat.ToolName == "mkdir") {
+		desc = "No path to promote — use /permissions allow-path manually"
 	}
+	
+	// Store canPromote in the stat for promotion logic
+	stat.CanPromote = canPromote
 	
 	return permissionsItem{
 		action:        permissionsInterruptionRow,
@@ -594,24 +626,35 @@ func (m *Model) exportWorkspaceRules(path string) tea.Cmd {
 }
 
 func (m *Model) openImportForm() tea.Cmd {
-	// For now, use composer prompt for path input
+	// Close fully to transcript/composer so import prefill works
+	// even when permissions panel was opened from Settings
 	m.closePermissionsPanel()
+	m.closeSettingsPicker() // Also close Settings if it was the parent
+	
 	m.entries = append(m.entries, ChatEntry{
 		Kind:    "system",
 		Content: "Enter import path with: /permissions import [--replace] <path>",
 	})
 	m.refreshTranscript()
-	if m.composerEditable() {
-		m.input.SetValue("/permissions import ")
-		m.input.CursorEnd()
-		m.input.Focus()
-	}
+	
+	// Now composer should be editable
+	m.input.SetValue("/permissions import ")
+	m.input.CursorEnd()
+	m.input.Focus()
+	
 	return nil
 }
 
 func (m *Model) promoteInterruption(item permissionsItem) tea.Cmd {
 	if m.agent == nil || item.interruptStat == nil {
 		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: "Agent or stat unavailable."})
+		m.refreshTranscript()
+		return nil
+	}
+	
+	// Check if this interruption can be promoted
+	if !item.interruptStat.CanPromote {
+		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "Cannot derive a safe rule from this interruption. Use /permissions allow-* manually."})
 		m.refreshTranscript()
 		return nil
 	}
@@ -626,10 +669,15 @@ func (m *Model) promoteInterruption(item permissionsItem) tea.Cmd {
 	
 	switch toolName {
 	case "bash":
-		// Try to extract a bash prefix from the detail
-		if prefix, ok := permission.ApprovalBashPrefix(permission.ApprovalPreview{Command: detail}, detail); ok {
-			// Add trailing glob if it looks like a simple command
-			if !strings.HasSuffix(prefix, "*") && len(strings.Fields(prefix)) > 0 {
+		// Extract the "grant prefix:" segment that loop_dispatch already computed
+		prefix := ""
+		if idx := strings.Index(detail, " · grant prefix: "); idx >= 0 {
+			prefix = strings.TrimSpace(detail[idx+len(" · grant prefix: "):])
+		}
+		
+		if prefix != "" {
+			// Add trailing glob if not already present
+			if !strings.HasSuffix(prefix, "*") {
 				prefix = prefix + " *"
 			}
 			_, err = m.agent.AddWorkspaceBashPrefix(prefix)
