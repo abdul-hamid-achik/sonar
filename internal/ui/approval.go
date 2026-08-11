@@ -45,7 +45,7 @@ var baseApprovalChoices = [...]approvalChoice{
 	{
 		Decision:     permission.DecisionAllowSession,
 		Key:          "s",
-		Label:        "same request again this session",
+		Label:        "same request this session",
 		CompactLabel: "same/session",
 	},
 }
@@ -61,16 +61,16 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 		choices = append(choices, approvalChoice{
 			Decision:     permission.DecisionAllowSession,
 			Key:          "a",
-			Label:        "this tool again this session",
+			Label:        "this tool this session",
 			CompactLabel: "tool/session",
 			ScopeKind:    permission.ScopeSessionTool,
 		})
 		if path := strings.TrimSpace(preview.Path); path != "" {
 			pathHint := compactApprovalHint(path, 28)
-			pathLabel := "this path again this session"
+			pathLabel := "this path this session"
 			pathCompact := "path/session"
 			if pathHint != "" {
-				pathLabel = "path again this session · " + pathHint
+				pathLabel = "path this session · " + pathHint
 				pathCompact = "path · " + pathHint
 			}
 			choices = append(choices, approvalChoice{
@@ -80,10 +80,10 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 				CompactLabel: pathCompact,
 				ScopeKind:    permission.ScopeSessionPath,
 			})
-			saveLabel := "save this path for this workspace"
+			saveLabel := "always allow path in workspace"
 			saveCompact := "path/workspace"
 			if pathHint != "" {
-				saveLabel = "save path for workspace · " + pathHint
+				saveLabel = "always allow in workspace · " + pathHint
 				saveCompact = "save · " + pathHint
 			}
 			choices = append(choices, approvalChoice{
@@ -116,10 +116,10 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 				durable = prefix + " *"
 			}
 			durableHint := compactApprovalHint(durable, 24)
-			saveLabel := "save bash pattern for this workspace"
+			saveLabel := "always allow pattern in workspace"
 			saveCompact := "bash/workspace"
 			if durableHint != "" {
-				saveLabel = "save for workspace · " + durableHint
+				saveLabel = "always allow in workspace · " + durableHint
 				saveCompact = "save · " + durableHint
 			}
 			choices = append(choices, approvalChoice{
@@ -145,7 +145,7 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 		}
 	case sessionMCPToolScopeEligibleUI(toolName):
 		toolHint := compactApprovalHint(toolName, 28)
-		sessionLabel := "this MCP tool again this session"
+		sessionLabel := "this MCP tool this session"
 		sessionCompact := "mcp/session"
 		if toolHint != "" {
 			sessionLabel = "MCP tool this session · " + toolHint
@@ -158,10 +158,10 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 			CompactLabel: sessionCompact,
 			ScopeKind:    permission.ScopeSessionMCPTool,
 		})
-		saveLabel := "save MCP tool for this workspace"
+		saveLabel := "always allow MCP tool in workspace"
 		saveCompact := "mcp/workspace"
 		if toolHint != "" {
-			saveLabel = "save MCP for workspace · " + toolHint
+			saveLabel = "always allow in workspace · " + toolHint
 			saveCompact = "save · " + toolHint
 		}
 		choices = append(choices, approvalChoice{
@@ -179,7 +179,7 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 			choices = append(choices, approvalChoice{
 				Decision:     permission.DecisionAllowSession,
 				Key:          "e",
-				Label:        "save every tool from this server · " + serverHint,
+				Label:        "always allow server in workspace · " + serverHint,
 				CompactLabel: "server · " + serverHint,
 				ScopeKind:    permission.DurableMCPServer,
 			})
