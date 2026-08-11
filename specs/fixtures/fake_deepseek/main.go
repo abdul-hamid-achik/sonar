@@ -148,6 +148,35 @@ func isTitleRequest(messages []wireMessage) bool {
 	return false
 }
 
+// diagramMarker triggers the canned mermaid answer, so a spec can assert what
+// the transcript does with a fenced diagram without depending on a live model
+// choosing to draw one.
+const diagramMarker = "Draw the fixture pipeline"
+
+// Only the newest user message is checked: chat requests resend the full
+// running transcript, so matching anywhere in the history would answer every
+// turn after the diagram prompt with the canned diagram, the way the title
+// check avoids by keying off its one synthetic system message.
+func isDiagramRequest(messages []wireMessage) bool {
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			return strings.Contains(messages[i].Content, diagramMarker)
+		}
+	}
+	return false
+}
+
+// diagramAnswer keeps the graph three nodes wide so it fits the 90-column
+// spec terminal with room to spare; the point under test is the fence being
+// replaced by art, not layout at the width boundary.
+const diagramAnswer = "The pipeline has three stages:\n\n" +
+	"```mermaid\n" +
+	"graph LR\n" +
+	"Parse --> Layout\n" +
+	"Layout --> Render\n" +
+	"```\n\n" +
+	"Each stage hands its output to the next."
+
 func main() { os.Exit(run()) }
 
 func run() int {
@@ -257,8 +286,11 @@ func handleChat(state *fixtureState, w http.ResponseWriter, r *http.Request) {
 
 	index := state.nextChat()
 	answer := fmt.Sprintf("Fixture answer %d.", index)
-	if isTitleRequest(request.Messages) {
+	switch {
+	case isTitleRequest(request.Messages):
 		answer = titleFor(request.Messages)
+	case isDiagramRequest(request.Messages):
+		answer = diagramAnswer
 	}
 
 	w.Header().Set("Content-Type", "text/event-stream")

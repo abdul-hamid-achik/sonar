@@ -1,0 +1,31 @@
+   main · sonar              DEEPSEEK · remote prompts · deepseek-v4-flash · 12/1.0M · 0%
+
+
+▌  Draw the fixture pipeline.
+
+
+   The pipeline has three stages:
+
+     ┌───────┐     ┌────────┐     ┌────────┐
+     │       │     │        │     │        │
+     │ Parse ├────►│ Layout ├────►│ Render │
+     │       │     │        │     │        │
+     └───────┘     └────────┘     └────────┘
+
+   Each stage hands its output to the next.
+
+
+
+
+
+
+
+
+
+
+
+
+─────────────────────────────────────────────────────────────────────────────────────────
+   approvals on · ✓ Done · <elapsed> · ↑ 4 · <session> · Draw the fixture pipeline
+▏❯ Ask
+   enter send · shift+tab mode · esc cancel · f1 help

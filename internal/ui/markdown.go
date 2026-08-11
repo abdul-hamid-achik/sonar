@@ -24,6 +24,18 @@ type MarkdownRenderer struct {
 	// safe boundary is crossed.
 	cachedStreamPrefix string
 	cachedStreamRender string
+
+	// Diagram art per mermaid source, including failed parses. A streaming
+	// prefix re-renders on every new safe boundary, and each pass would
+	// otherwise re-run diagram layout for every block already on screen.
+	// Bounded by mermaidCacheLimit and inherited across renderer rebuilds
+	// via inheritMermaidArt.
+	mermaidCache map[string]mermaidResult
+
+	// Measured on first use by mermaidPaintBudget; never inherited, because
+	// unlike the art it depends on this renderer's width and style path.
+	mermaidBudgetCols int
+	mermaidBudgetSet  bool
 }
 
 func glamourStyle(isDark bool) string {
@@ -152,6 +164,8 @@ func (mr *MarkdownRenderer) RenderFull(content string) string {
 	if content == "" || mr.renderer == nil {
 		return content
 	}
+
+	content = mr.preprocessMermaid(content)
 
 	renderer := mr.proseRenderer
 	if renderer == nil || markdownUsesWorkWidth(content) {
@@ -285,23 +299,10 @@ type markdownFenceState struct {
 // Closers must use the opening character, contain at least as many markers, and
 // have no trailing content. Backtick info strings may not contain a backtick.
 func (state *markdownFenceState) applyLine(line string) {
-	markerStart, ok := markdownFenceMarkerStart(line)
-	if !ok || markerStart >= len(line) {
+	char, runLength, rest, ok := markdownFenceMarker(line)
+	if !ok {
 		return
 	}
-	char := line[markerStart]
-	if char != '`' && char != '~' {
-		return
-	}
-	runLength := 0
-	for markerStart+runLength < len(line) && line[markerStart+runLength] == char {
-		runLength++
-	}
-	if runLength < 3 {
-		return
-	}
-
-	rest := line[markerStart+runLength:]
 	if !state.open {
 		if char == '`' && strings.ContainsRune(rest, '`') {
 			return
@@ -316,6 +317,30 @@ func (state *markdownFenceState) applyLine(line string) {
 		return
 	}
 	*state = markdownFenceState{}
+}
+
+// markdownFenceMarker parses a line's fence marker: up to three spaces of
+// indent, then a run of at least three backticks or tildes. It returns the
+// marker character, the run length, and everything after the run. It is the
+// single fence grammar — the streaming boundary scanner and the mermaid
+// preprocessor both build on it, so they cannot drift apart on what counts
+// as a fence.
+func markdownFenceMarker(line string) (char byte, length int, rest string, ok bool) {
+	markerStart, valid := markdownFenceMarkerStart(line)
+	if !valid || markerStart >= len(line) {
+		return 0, 0, "", false
+	}
+	char = line[markerStart]
+	if char != '`' && char != '~' {
+		return 0, 0, "", false
+	}
+	for markerStart+length < len(line) && line[markerStart+length] == char {
+		length++
+	}
+	if length < 3 {
+		return 0, 0, "", false
+	}
+	return char, length, line[markerStart+length:], true
 }
 
 func markdownFenceMarkerStart(line string) (int, bool) {

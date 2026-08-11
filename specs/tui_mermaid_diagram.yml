@@ -1,0 +1,64 @@
+version: 1
+name: sonar_tui_mermaid_diagram
+intent: |
+    a mermaid fence in an assistant answer renders in the transcript as a
+    box-drawing diagram instead of raw diagram source, with the prose around
+    it intact.
+target:
+    # Driven through the fake DeepSeek fixture, which answers the diagram
+    # marker prompt with a canned mermaid fence; see specs/fixtures/fake_deepseek.
+    cmd:
+        - "${projectRoot}/.glyphrun/tmp/fake-deepseek"
+        - "${projectRoot}/bin/sonar"
+        - "${projectRoot}/.glyphrun/tmp/mermaid-protocol.txt"
+    cwd: "."
+    env:
+        HOME: "${projectRoot}/.glyphrun/tmp/mermaid-home"
+        SONAR_AGENTS_DIR: "${projectRoot}/.glyphrun/tmp/mermaid-agents"
+        SONAR_REDUCED_MOTION: "1"
+        OLLAMA_HOST: "http://127.0.0.1:1"
+terminal:
+    cols: 90
+    rows: 32
+preconditions:
+    commands:
+        - run: "rm -rf .glyphrun/tmp/mermaid-protocol.txt .glyphrun/tmp/mermaid-home .glyphrun/tmp/mermaid-agents && mkdir -p .glyphrun/tmp/mermaid-home/.config/sonar .glyphrun/tmp/mermaid-agents && printf '%s\\n' 'model:' '  auto_select: false' 'ice:' '  enabled: false' > .glyphrun/tmp/mermaid-home/.config/sonar/config.yaml && go build -o ./bin/sonar ./cmd/sonar && go build -o .glyphrun/tmp/fake-deepseek ./specs/fixtures/fake_deepseek"
+          cwd: "."
+          timeoutMs: 30000
+steps:
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "remote prompts"
+        timeoutMs: 5000
+    - type: "Draw the fixture pipeline."
+    - press: "enter"
+    - wait:
+        screen:
+            contains: "Each stage hands its output to the next."
+        timeoutMs: 5000
+    - wait:
+        screen:
+            contains: "────►"
+        timeoutMs: 2000
+    - wait:
+        idle:
+            quietForMs: 50
+        timeoutMs: 2000
+    - snapshot: diagram_in_transcript
+    - press: "ctrl+c"
+    - wait:
+        process:
+            exitCode: 0
+        timeoutMs: 3000
+outcomes:
+    - id: mermaid_fence_becomes_a_diagram
+      description: the assistant's mermaid fence paints as boxed nodes and arrows, not as diagram source, with the surrounding prose readable
+      verify:
+        snapshot:
+            name: diagram_in_transcript
+            mode: text
+contractHash: sha256:63d0d724c9a38ba792b2394436826bed7ab6dd29e9a26f7b309f48add953bf6d

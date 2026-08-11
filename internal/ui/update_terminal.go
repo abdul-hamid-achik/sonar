@@ -66,10 +66,13 @@ func (m *Model) rebuildThemedSurfaces() {
 		// body on the old palette while the title and choices change.
 		m.resizeApproval(true)
 	}
-	// Recreate markdown renderer for new theme.
+	// Recreate markdown renderer for new theme. Diagram art is monochrome
+	// and width-independent, so it survives the rebuild.
 	if m.width > 0 {
 		m.markdownWidth = m.chatContentWidth()
+		previous := m.md
 		m.md = NewMarkdownRenderer(m.markdownWidth, m.isDark, m.themeID)
+		m.md.inheritMermaidArt(previous)
 		m.invalidateRenderedCache()
 	}
 	if m.ready {
@@ -132,7 +135,12 @@ func (m *Model) handleWindowSize(msg tea.WindowSizeMsg, cmds []tea.Cmd) []tea.Cm
 	markdownChanged := m.md == nil || contentWidth != m.markdownWidth
 	if markdownChanged {
 		m.markdownWidth = contentWidth
+		previous := m.md
 		m.md = NewMarkdownRenderer(contentWidth, m.isDark, m.themeID)
+		// A drag-resize delivers dozens of WindowSizeMsg; without carrying
+		// the art cache across rebuilds, every diagram on screen re-paid
+		// full layout on each one.
+		m.md.inheritMermaidArt(previous)
 	}
 
 	// Recalculate content height
