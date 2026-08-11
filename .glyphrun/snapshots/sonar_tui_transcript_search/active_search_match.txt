@@ -1,4 +1,4 @@
-   main · sonar                                   DEEPSEEK · remote prompts · deepseek-v4-flash · 0/1.0M · 0%
+   cursor/permissions-ux-rewrite-1f21 · workspace DEEPSEEK · remote prompts · deepseek-v4-flash · 0/1.0M · 0%
 
 
 ▌  Review the release receipts.
@@ -9,7 +9,7 @@
 │  ✗ Run failed command=go test ./internal/ui (310ms)
 │  exit status 1: fixture regression
 
-   The read completed, the test failure is visible, and the interrupted effect needs inspection.
+     The read completed, the test failure is visible, and the interrupted effect needs inspection.
 
    notice · Restored session <session> · Recovery receipt review
 

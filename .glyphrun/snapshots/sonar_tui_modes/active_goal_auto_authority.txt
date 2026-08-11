@@ -1,15 +1,15 @@
-   main · sonar                DEEPSEEK · remote prompts · 12/1.0M · 0%
+   DEEPSEEK · remote prompts · 12/1.0M · 0%
 
 
 ▌  design a safe migration
 
 
-   Fixture answer 1.
+     Fixture answer 1.
 
    notice · Goal saved · Cortex is not configured; starting one
    bounded local turn…
 
-   Fixture answer 3.
+     Fixture answer 3.
 
    notice · Goal paused · unproductive turn: assistant yielded
    without a concrete tool receipt
@@ -22,6 +22,6 @@
 plan · paused · 0/2 verified
   □ pending · Demonstrate every requested outcome and constraint in th…
   □ pending · Record passing evidence from focused or reproducible ver…
- [ AUTO ] · Ⅱ paused · ship a… · 0s/30m · <session> · ✓ Done · 0.0s · ↑ 4
+ [ AUTO ] · Ⅱ paused · ship a… · 0s/30m · <session> · ✓ Done · <elapsed> · ↑ 4
 ▌❯ Ask
    enter send · shift+tab mode · esc · f1

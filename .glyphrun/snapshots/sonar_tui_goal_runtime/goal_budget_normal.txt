@@ -1,8 +1,8 @@
-   main · sonar    DEEPSEEK · remote prompts · deepseek-v4-flash · 12/1.0M · 0%
+   DEEPSEEK · remote prompts · deepseek-v4-flash · 12/1.0M · 0%
    notice · Goal saved · Cortex is not configured; starting one bounded
    local turn…
 
-   Fixture answer 1.
+     Fixture answer 1.
 
    notice · Goal paused · unproductive turn: assistant yielded without a
    concrete tool receipt

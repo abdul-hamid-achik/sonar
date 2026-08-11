@@ -12,7 +12,7 @@
 │  evidence: none
 │  tool call denied: user denied tool executi…
 
-   Denied safely. No file was changed.
+     Denied safely. No file was changed.
 ─────────────────────────────────────────────────
    <session> · Follow paused · end latest
 ▏❯ Ask
