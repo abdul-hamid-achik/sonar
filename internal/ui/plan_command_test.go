@@ -52,6 +52,7 @@ func TestPlanCommandSubmissionUsesStructuredReadOnlyTurn(t *testing.T) {
 	m = updated.(*Model)
 	if cmd == nil {
 		t.Fatal("submitting the plan form did not dispatch a turn")
+		return
 	}
 	if m.mode != ModePlan || m.agent.AuthorityMode() != agent.AuthorityPlan {
 		t.Fatalf("submitted authority = mode %v agent %v", m.mode, m.agent.AuthorityMode())

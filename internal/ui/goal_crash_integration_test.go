@@ -255,6 +255,7 @@ func TestGoalAndExecutionLedgerRecoverTogetherAfterSubprocessCrash(t *testing.T)
 	m = updated.(*Model)
 	if recoveryCommand == nil {
 		t.Fatal("restored outcome-unknown goal did not schedule reconciliation group ensure")
+		return
 	}
 	recoveryResult := awaitCommandMessage[goalRecoveryLoadResultMsg](t, commandMessages(recoveryCommand), 3*time.Second)
 	if recoveryResult.err != nil {

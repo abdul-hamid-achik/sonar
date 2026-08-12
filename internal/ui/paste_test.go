@@ -71,6 +71,7 @@ func TestCtrlVPasteCannotBypassParentReview(t *testing.T) {
 	m = updated.(*Model)
 	if cmd == nil {
 		t.Fatal("Ctrl+V did not schedule the parent clipboard read")
+		return
 	}
 	message := cmd()
 	paste, ok := message.(tea.PasteMsg)

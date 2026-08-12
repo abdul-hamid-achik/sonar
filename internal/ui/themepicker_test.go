@@ -136,6 +136,7 @@ func selectThemePickerItem(t *testing.T, state *ThemePickerState, id string) {
 	t.Helper()
 	if state == nil {
 		t.Fatal("theme picker is not open")
+		return
 	}
 	for index, item := range state.List.Items() {
 		entry, ok := item.(themeItem)

@@ -224,6 +224,7 @@ func TestASCIIActivitySpinnerKeepsTheTranscriptASCII(t *testing.T) {
 	m = updated.(*Model)
 	if next == nil {
 		t.Fatal("ASCII activity spinner did not continue")
+		return
 	}
 	assertViewportBoundedRestage(t, probe, m.viewport.Height(), "ASCII spinner tick")
 	after := m.viewport.GetContent()

@@ -102,6 +102,7 @@ func TestActivityClocksDoNotPaintTenThousandEntryTranscript(t *testing.T) {
 		}
 		if next == nil {
 			t.Fatal("active tool spinner did not continue its footer clock")
+			return
 		}
 		assertViewportBoundedRestage(t, probe, m.viewport.Height(), "activity beat")
 		if after := m.viewport.GetContent(); after == beforeTranscript {

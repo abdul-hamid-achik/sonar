@@ -31,11 +31,13 @@ func TestNewSessionLogger(t *testing.T) {
 
 	if logger == nil {
 		t.Fatal("logger should not be nil")
+		return
 	}
 
 	// Verify the file was created in the expected directory.
 	if f == nil {
 		t.Fatal("file should not be nil")
+		return
 	}
 	if info, err := f.Stat(); err != nil {
 		t.Fatal(err)

@@ -292,6 +292,7 @@ func TestShowGoalCommandRequestsFullRepaint(t *testing.T) {
 	cmd := m.handleCommandAction(command.Result{Action: command.ActionShowGoal})
 	if cmd == nil {
 		t.Fatal("show goal command did not request a presentation repaint")
+		return
 	}
 	if msg := cmd(); msg == nil {
 		t.Fatal("show goal presentation command returned no message")

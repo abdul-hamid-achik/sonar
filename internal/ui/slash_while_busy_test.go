@@ -103,6 +103,7 @@ func TestQueuedSlashCommandExecutesAfterSettledTurn(t *testing.T) {
 	m = updated.(*Model)
 	if cmd == nil {
 		t.Fatal("settled turn did not schedule queued follow-up dispatch")
+		return
 	}
 	if m.queuedFollowUp != nil {
 		t.Fatalf("queued /clear left the queue occupied: %#v", m.queuedFollowUp)

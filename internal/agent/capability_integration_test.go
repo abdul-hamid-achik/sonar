@@ -401,6 +401,7 @@ func TestFailedRecommendedGatewayRouteIsReconsidered(t *testing.T) {
 	_, hint := agent.resolveTurnCapability(context.Background(), &capabilityOutputRecorder{}, activity)
 	if hint == nil {
 		t.Fatal("first recommendation was not resolved")
+		return
 	}
 	if !agent.markCapabilityRouteFailed(activity, "mcphub__mcphub_call_tool", map[string]any{
 		"server": "hitspec", "tool": "hitspec_capture_webpage", "arguments": map[string]any{"url": "https://example.com"},

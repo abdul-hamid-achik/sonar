@@ -317,6 +317,7 @@ func TestCtrlVPastesClipboardImageIntoPrivateAttachmentStore(t *testing.T) {
 	m = updated.(*Model)
 	if cmd == nil {
 		t.Fatal("Ctrl+V did not inspect the clipboard")
+		return
 	}
 	message, ok := cmd().(ClipboardImagePasteMsg)
 	if !ok || message.Err != nil || !bytes.Equal(message.Data, raw) {

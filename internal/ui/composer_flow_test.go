@@ -182,6 +182,7 @@ func TestSettledTurnDispatchesQueuedFollowUp(t *testing.T) {
 	m = updated.(*Model)
 	if cmd == nil {
 		t.Fatal("settled turn did not schedule queued follow-up")
+		return
 	}
 	if m.queuedFollowUp != nil || m.state != StateWaiting {
 		t.Fatalf("queued dispatch state = queue %#v state %v", m.queuedFollowUp, m.state)

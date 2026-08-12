@@ -868,6 +868,7 @@ func TestGoalRelinkChecksStatusBeforeManualProviderTurn(t *testing.T) {
 	})
 	if cmd == nil {
 		t.Fatal("successful relink did not schedule a Cortex status check")
+		return
 	}
 	if m.goalOperation != "Checking goal" || !m.goalOperationRunning || m.state != StateIdle || m.goalTurnID != "" {
 		t.Fatalf("relink skipped status: operation=%q running=%v state=%v turn=%q", m.goalOperation, m.goalOperationRunning, m.state, m.goalTurnID)
@@ -887,6 +888,7 @@ func TestGoalOpenWithoutConfiguredAdvisorStartsOneBoundedLocalTurn(t *testing.T)
 	cmd := m.beginGoalOpen(false)
 	if cmd == nil {
 		t.Fatal("unconfigured Cortex did not schedule the initial local goal turn")
+		return
 	}
 	if m.state != StateWaiting || m.goalTurnID == "" || m.goalOperationRunning {
 		t.Fatalf("local goal startup = state %v turn %q operation_running %v", m.state, m.goalTurnID, m.goalOperationRunning)

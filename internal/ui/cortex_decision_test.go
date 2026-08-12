@@ -260,6 +260,7 @@ func TestCortexDecisionSuccessfulAnswerSamePendingStatusRemainsReconciliationOnl
 	refreshCmd := m.resumeGoal()
 	if refreshCmd == nil {
 		t.Fatal("blocked decision did not request fresh status")
+		return
 	}
 	statusResult := awaitCommandMessage[goalStatusResultMsg](t, commandMessages(refreshCmd), time.Second)
 	if statusResult.ExpectedRequestSHA256 == "" || statusResult.ExpectedDecisionID != "decision_exact" {
@@ -379,6 +380,7 @@ func TestCortexDecisionAnswerErrorIsOutcomeUnknownAndRefreshOnly(t *testing.T) {
 	restartCmd := m.beginRestoredCortexDecisionRefresh()
 	if restartCmd == nil {
 		t.Fatal("restart did not schedule fresh Cortex status")
+		return
 	}
 	restartStatus := awaitCommandMessage[goalStatusResultMsg](t, commandMessages(restartCmd), time.Second)
 	m.handleGoalStatusResult(restartStatus)
@@ -671,6 +673,7 @@ func TestCortexDecisionRefreshClearsToPausedWithoutProcessingNonProgressPhase(t 
 	cmd := m.resumeGoal()
 	if cmd == nil {
 		t.Fatal("first resume did not request fresh Cortex status")
+		return
 	}
 	message := awaitCommandMessage[goalStatusResultMsg](t, commandMessages(cmd), time.Second)
 	if !message.DecisionOnly || !message.Manual {
@@ -726,6 +729,7 @@ func TestCortexDecisionControlOperationsIgnoreExpiredWallBudget(t *testing.T) {
 	refreshCmd := m.resumeGoal()
 	if refreshCmd == nil {
 		t.Fatal("expired wall budget prevented decision-only status refresh")
+		return
 	}
 	statusResult := awaitCommandMessage[goalStatusResultMsg](t, commandMessages(refreshCmd), time.Second)
 	if !statusResult.DecisionOnly {

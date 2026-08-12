@@ -225,6 +225,7 @@ func TestStandaloneRecoveryUsesHeldLeaseAndExplicitlyRechecksAgent(t *testing.T)
 	inspectCommand := m.handleCommandAction(command.Result{Action: command.ActionRecoverExecution})
 	if inspectCommand == nil {
 		t.Fatal("/recover did not schedule read-only inspection")
+		return
 	}
 	updated, _ = m.Update(inspectCommand())
 	m = updated.(*Model)
@@ -244,6 +245,7 @@ func TestStandaloneRecoveryUsesHeldLeaseAndExplicitlyRechecksAgent(t *testing.T)
 	})
 	if applyCommand == nil {
 		t.Fatalf("typed recovery evidence was not scheduled: %q", m.goalRecoveryState.errorText)
+		return
 	}
 	updated, _ = m.Update(applyCommand())
 	m = updated.(*Model)
@@ -326,6 +328,7 @@ func TestSessionLoadHydratesStandaloneRecoveryBeforeProviderTurn(t *testing.T) {
 	target := standaloneRecoveryTarget(projection.Hazards, state.ExecutionCursor, session.PublicID)
 	if target == nil {
 		t.Fatal("started effect did not produce a standalone recovery target")
+		return
 	}
 	lease, err := store.AcquireExecutionSessionLease(context.Background(), session.ID, workspace)
 	if err != nil {
@@ -356,6 +359,7 @@ func TestSessionLoadHydratesStandaloneRecoveryBeforeProviderTurn(t *testing.T) {
 	inspect := m.handleCommandAction(command.Result{Action: command.ActionRecoverExecution})
 	if inspect == nil {
 		t.Fatal("/recover was unavailable until another user prompt")
+		return
 	}
 	updated, _ = m.Update(inspect())
 	m = updated.(*Model)

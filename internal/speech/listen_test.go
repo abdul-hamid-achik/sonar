@@ -120,6 +120,7 @@ func TestDiagnosticsNameTheFixNotJustTheFault(t *testing.T) {
 	}
 	if model == nil {
 		t.Fatal("the report has no Model line")
+		return
 	}
 	if model.OK {
 		t.Fatal("a missing model reported OK")

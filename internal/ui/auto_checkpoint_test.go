@@ -184,6 +184,7 @@ func TestAgentDoneProductiveAutoCheckpointContinuesWithoutSettlement(t *testing.
 	m = updated.(*Model)
 	if command == nil {
 		t.Fatal("productive checkpoint did not schedule the next segment")
+		return
 	}
 	if m.state != StateWaiting || m.turnSegmentID == "turn-root" || m.turnLogicalID != "turn-root" {
 		t.Fatalf("continuation identity/state = state %v logical %q segment %q", m.state, m.turnLogicalID, m.turnSegmentID)

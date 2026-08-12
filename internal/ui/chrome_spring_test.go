@@ -87,6 +87,7 @@ func TestChromeSpringTickChainSelfTerminates(t *testing.T) {
 	cmd := m.maybeKickChromeSpring()
 	if cmd == nil {
 		t.Fatal("expected first chrome spring tick for context meter motion")
+		return
 	}
 	// Drain a few ticks through Update; must not hang.
 	for i := 0; i < 60; i++ {

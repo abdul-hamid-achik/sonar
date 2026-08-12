@@ -105,6 +105,7 @@ func TestImportReplacesHiddenHistoryAndStartsFreshSession(t *testing.T) {
 	cmd := m.handleCommandAction(command.Result{Action: command.ActionImport, Data: path})
 	if cmd == nil {
 		t.Fatal("import did not start an asynchronous read")
+		return
 	}
 	result := awaitCommandMessage[ImportResultMsg](t, commandMessages(cmd), 2*time.Second)
 	updated, _ := m.Update(result)

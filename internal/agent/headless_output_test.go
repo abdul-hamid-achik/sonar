@@ -195,6 +195,7 @@ func TestNewHeadlessOutput(t *testing.T) {
 	out := NewHeadlessOutput()
 	if out == nil {
 		t.Fatal("NewHeadlessOutput returned nil")
+		return
 	}
 	if out.stdout == nil || out.stderr == nil {
 		t.Error("NewHeadlessOutput: writers should not be nil")

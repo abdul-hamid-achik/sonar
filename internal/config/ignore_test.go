@@ -24,6 +24,7 @@ vendor/
 	ip := LoadIgnoreFile(dir)
 	if ip == nil {
 		t.Fatal("expected non-nil IgnorePatterns")
+		return
 	}
 
 	wantPatterns := []string{"node_modules", "*.log", ".git", "build/", "dist/", "vendor/"}
@@ -61,6 +62,7 @@ func TestLoadIgnoreFile_Empty(t *testing.T) {
 	ip := LoadIgnoreFile(dir)
 	if ip == nil {
 		t.Fatal("expected non-nil IgnorePatterns for empty file")
+		return
 	}
 	if len(ip.Patterns()) != 0 {
 		t.Errorf("expected 0 patterns, got %d", len(ip.Patterns()))
@@ -77,6 +79,7 @@ func TestLoadIgnoreFile_CommentsOnly(t *testing.T) {
 	ip := LoadIgnoreFile(dir)
 	if ip == nil {
 		t.Fatal("expected non-nil IgnorePatterns")
+		return
 	}
 	if len(ip.Patterns()) != 0 {
 		t.Errorf("expected 0 patterns for comments-only file, got %d", len(ip.Patterns()))

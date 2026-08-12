@@ -257,6 +257,7 @@ func TestSupersededCompletionSearchCancelsRunningContext(t *testing.T) {
 	cmd := m.scheduleCompletionSearch("first", "", false)
 	if cmd == nil {
 		t.Fatal("first search command was not scheduled")
+		return
 	}
 	done := make(chan struct{})
 	go func() {
@@ -314,6 +315,7 @@ func TestCompletionPreviewGenerationRejectsCloseReopenResult(t *testing.T) {
 	old := m.refreshCompletionPreview()
 	if old == nil {
 		t.Fatal("old preview was not scheduled")
+		return
 	}
 	m.closeCompletion()
 	m.completionGeneration++

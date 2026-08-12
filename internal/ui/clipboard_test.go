@@ -107,6 +107,7 @@ func TestCopyLast_OnlyWhenIdleAndEmpty(t *testing.T) {
 		_, cmd := m.Update(ctrlKey('y'))
 		if cmd == nil {
 			t.Fatal("expected copy command while streaming with empty draft")
+			return
 		}
 		if msg := cmd(); msg != nil {
 			if res, ok := msg.(clipboardResultMsg); ok && res.Err != nil {

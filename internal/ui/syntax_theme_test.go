@@ -14,6 +14,7 @@ func TestSyntaxHighlightingFollowsTheActiveScheme(t *testing.T) {
 		chroma := style.CodeBlock.Chroma
 		if chroma == nil {
 			t.Fatalf("%s: code blocks have no syntax colours", themeID)
+			return
 		}
 		palette := newSemanticPalette(true, themeID)
 

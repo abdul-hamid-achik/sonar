@@ -856,6 +856,7 @@ func TestReducedMotionActivityHeartbeatRefreshesElapsedInformation(t *testing.T)
 		m = updated.(*Model)
 		if next == nil {
 			t.Fatal("running tool heartbeat did not continue")
+			return
 		}
 		afterTranscript := m.viewport.View()
 		if afterTranscript != beforeTranscript {

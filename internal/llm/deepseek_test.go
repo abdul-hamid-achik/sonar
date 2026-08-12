@@ -40,6 +40,7 @@ func captureDeepSeekRequest(t *testing.T, dialect string, opts ChatOptions) map[
 	}
 	if body == nil {
 		t.Fatal("stub captured no request body")
+		return
 	}
 	return body
 }

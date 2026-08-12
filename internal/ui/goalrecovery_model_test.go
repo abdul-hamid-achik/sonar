@@ -201,6 +201,7 @@ func inspectorRecoveryAction(t *testing.T, inspector *GoalInspector) (int, bool,
 	t.Helper()
 	if inspector == nil {
 		t.Fatal("goal inspector is nil")
+		return
 	}
 	for index, action := range inspector.actions {
 		if action.Spec.ID == goalInspectorRecoveryActionID {
@@ -368,6 +369,7 @@ func TestGoalRecoveryMultiMemberPartialReceiptsRefreshThenFinalReceiptHydratesTo
 	})
 	if parentCommand == nil {
 		t.Fatal("final turn parent Apply did not start")
+		return
 	}
 	parentResult := awaitCommandMessage[goalRecoveryApplyResultMsg](t, commandMessages(parentCommand), 3*time.Second)
 	if parentResult.err != nil || !parentResult.receipt.GoalCleared {
@@ -433,6 +435,7 @@ func TestGoalRecoveryRejectsStaleLoadAndApplyTokens(t *testing.T) {
 	})
 	if command == nil {
 		t.Fatal("Apply did not start")
+		return
 	}
 	before := snapshotUIGoal(t, fixture.m.goalRuntime)
 	updated, _ = fixture.m.Update(goalRecoveryApplyResultMsg{
@@ -490,6 +493,7 @@ func TestGoalRecoveryLeaseFailureStaysInlineAndBlocked(t *testing.T) {
 	})
 	if command == nil {
 		t.Fatal("Apply did not start")
+		return
 	}
 	if err := fixture.lease.Close(); err != nil {
 		t.Fatal(err)

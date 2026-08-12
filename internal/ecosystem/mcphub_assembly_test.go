@@ -524,6 +524,7 @@ func assemblyEntry(t *testing.T, assembler *MCPHubResultAssembler, namespace, ca
 	entry := assembler.entries[mcphubResultKey{namespace: namespace, callID: callID}]
 	if entry == nil {
 		t.Fatalf("assembly %s/%s not found", namespace, callID)
+		return
 	}
 	return entry
 }

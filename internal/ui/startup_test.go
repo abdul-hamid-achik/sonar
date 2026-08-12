@@ -22,6 +22,7 @@ func TestStartupAcceptsDraftBeforeTurnAdmission(t *testing.T) {
 	m = updated.(*Model)
 	if cmd == nil {
 		t.Fatal("startup send did not surface a bounded draft-kept notice")
+		return
 	}
 	if got := m.input.Value(); got != "hello" {
 		t.Fatalf("startup send consumed draft = %q", got)

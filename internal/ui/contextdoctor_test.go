@@ -41,6 +41,7 @@ func TestContextDoctorOverlayLifecycle(t *testing.T) {
 	})
 	if tick == nil {
 		t.Fatal("loading a breakdown should start the spring animation")
+		return
 	}
 	m.contextDoctorState.snap()
 

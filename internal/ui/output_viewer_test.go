@@ -187,6 +187,7 @@ func TestOutputViewerRendersExactFrameAndSingleContainedCursor(t *testing.T) {
 			view, cursor = fixture.viewer.ViewWithCursor()
 			if cursor == nil {
 				t.Fatal("focused search omitted hardware cursor")
+				return
 			}
 			search := fixture.viewer.Layout().SearchRect
 			localSearch := NewCellRect(

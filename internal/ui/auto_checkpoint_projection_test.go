@@ -176,6 +176,7 @@ func TestAutoCheckpointSegmentBoundaryProjectsCompletedEffect(t *testing.T) {
 	m := updated.(*Model)
 	if command == nil {
 		t.Fatalf("checkpoint did not schedule segment 2: state=%v entries=%#v", m.state, m.entries)
+		return
 	}
 	if m.state != StateWaiting {
 		t.Fatalf("checkpoint state = %v, want StateWaiting", m.state)

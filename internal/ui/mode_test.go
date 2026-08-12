@@ -547,6 +547,7 @@ func TestConversationalPresetSubmitDispatchesImmediately(t *testing.T) {
 			cmd := m.submitInput()
 			if cmd == nil {
 				t.Fatal("ordinary prompt did not dispatch a provider command")
+				return
 			}
 			if m.overlay != OverlayNone || m.planFormState != nil || m.goalFormState != nil {
 				t.Fatalf("submit opened UI: overlay=%d plan=%v goal=%v", m.overlay, m.planFormState != nil, m.goalFormState != nil)

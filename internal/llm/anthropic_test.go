@@ -46,6 +46,7 @@ func captureAnthropicRequest(t *testing.T, opts ChatOptions) (map[string]any, ht
 	}
 	if body == nil {
 		t.Fatal("stub captured no request body")
+		return
 	}
 	return body, headers
 }
@@ -560,6 +561,7 @@ func TestAnthropicPingChatFallbackSendsMinimalRequest(t *testing.T) {
 	payload := stub.messagesPayload
 	if payload == nil {
 		t.Fatal("the fallback sent no messages payload")
+		return
 	}
 	if payload["model"] != "claude-sonnet-5" {
 		t.Errorf("model = %v, want the client's model", payload["model"])

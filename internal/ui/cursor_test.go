@@ -263,6 +263,7 @@ func TestOverlayCursorFollowsModalBlockColumn(t *testing.T) {
 	got := overlayCursor(base, overlay, 12, local)
 	if got == nil {
 		t.Fatal("expected translated cursor")
+		return
 	}
 	if got.X != 4 || got.Y != 3 {
 		t.Fatalf("translated cursor = (%d,%d), want (4,3)", got.X, got.Y)
