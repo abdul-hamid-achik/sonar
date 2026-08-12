@@ -187,7 +187,7 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 			label: "Running", elapsed: m.turnElapsed(), cancellable: true,
 		}, true
 	case m.ollamaInventoryCommitting:
-		return workingActivity{label: "Updating Ollama inventory", detail: "verifying model authority"}, true
+		return workingActivity{label: "Updating model inventory", detail: "verifying model authority"}, true
 	case m.standaloneRecovery != nil && m.standaloneRecovery.loading:
 		// Inspection is read-only and normally completes quickly. A static status
 		// both locks the composer and avoids introducing another animation clock

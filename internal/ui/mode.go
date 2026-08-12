@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
 	"github.com/abdul-hamid-achik/sonar/internal/config"
 )
@@ -144,6 +146,7 @@ func (m *Model) setMode(mode Mode) {
 		receipt := "After goal · " + ambientConfig.Label + " · active goal · AUTO"
 		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: receipt})
 	}
+	m.maybeWarnMissingApprovalTimeout(mode)
 	m.refreshTranscript()
 	m.resumeFollow()
 	if m.overlay == OverlaySettings && m.settingsPickerState != nil {
@@ -151,5 +154,25 @@ func (m *Model) setMode(mode Mode) {
 		// committed. Refresh again so the visible row never reports the mode we
 		// just left.
 		m.refreshSettingsPicker()
+	}
+}
+
+// maybeWarnMissingApprovalTimeout reminds once per process that AUTO without
+// tools.approval_timeout can park forever on the first modal. Timeout only
+// withholds permission — never grants it — so the notice is about wall-budget
+// waste, not safety. It uses the footer so Shift+Tab does not noise-fill the
+// transcript (mode already lives on the shortcuts row).
+func (m *Model) maybeWarnMissingApprovalTimeout(mode Mode) {
+	if m == nil || m.approvalTimeoutWarned || mode != ModeAuto {
+		return
+	}
+	if m.agent != nil && m.agent.ApprovalWaitTimeout() > 0 {
+		return
+	}
+	m.approvalTimeoutWarned = true
+	m.footerNotice = &footerNotice{
+		text: "No tools.approval_timeout set — first unanswered approval waits forever. Set approval_timeout: 2m for unattended runs.",
+		severity: noticeWarning,
+		expiresAt: m.nowTime().Add(12 * time.Second),
 	}
 }

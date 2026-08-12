@@ -226,10 +226,11 @@ func TestContentGridOriginSharedAcrossSurfaces(t *testing.T) {
 }
 
 // TestCollapsedToolFooterIsClickable closes a gap the receipt advertised
-// itself: "N lines hidden · ctrl+r" is the only row of a tool card that names
-// a key, and it was the only row a click could not reach — the pointer region
-// covered the header line alone. An affordance that states how to reach hidden
-// content and then ignores the pointer aimed at it is worse than a silent one.
+// itself: "N lines hidden · <expand chord>" is the only row of a tool card that
+// names a key, and it was the only row a click could not reach — the pointer
+// region covered the header line alone. An affordance that states how to reach
+// hidden content and then ignores the pointer aimed at it is worse than a
+// silent one.
 func TestCollapsedToolFooterIsClickable(t *testing.T) {
 	m := newTestModel(t)
 	m.entries = []ChatEntry{
@@ -242,8 +243,9 @@ func TestCollapsedToolFooterIsClickable(t *testing.T) {
 	}}
 
 	plain := ansi.Strip(m.renderEntries())
-	if !strings.Contains(plain, "lines hidden · ctrl+r") {
-		t.Fatalf("collapsed receipt did not advertise its hidden body:\n%s", plain)
+	wantCue := "lines hidden · " + m.keys.ToggleFocusedTool.Help().Key
+	if !strings.Contains(plain, wantCue) {
+		t.Fatalf("collapsed receipt did not advertise its hidden body (%q):\n%s", wantCue, plain)
 	}
 	if len(m.toolHitRegions) != 2 {
 		t.Fatalf("collapsed receipt has %d hit regions, want header and footer: %#v",
@@ -282,7 +284,7 @@ func TestCollapsedToolFooterRegionIgnoresExpandedBodyText(t *testing.T) {
 	}
 	m.toolEntries = []ToolEntry{{
 		ID: "one", Name: "bash", Status: ToolStatusDone, Collapsed: false,
-		Result: "grep output\n42 lines hidden · ctrl+r\ntail",
+		Result: "grep output\n42 lines hidden · ctrl+t\ntail",
 	}}
 
 	m.renderEntries()

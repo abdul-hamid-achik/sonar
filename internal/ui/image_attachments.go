@@ -841,5 +841,5 @@ func (m *Model) ensureVisionModel() error {
 		}
 		return nil
 	}
-	return fmt.Errorf("no admitted Ollama model advertises vision; open Ctrl+P and install or select a vision-capable model")
+	return fmt.Errorf("no admitted vision-capable model is available; open Ctrl+P and select a model that advertises vision")
 }

@@ -944,7 +944,7 @@ func TestManualOnlyCloudVisionModelIsNeverAutoSelected(t *testing.T) {
 	if m.model != "text-model" || m.input.Value() != "inspect it" || len(m.pendingImages) != 1 {
 		t.Fatalf("privacy rejection changed state: model=%q draft=%q pending=%d", m.model, m.input.Value(), len(m.pendingImages))
 	}
-	if got := m.entries[len(m.entries)-1].Content; !strings.Contains(got, "no admitted Ollama model advertises vision") {
+	if got := m.entries[len(m.entries)-1].Content; !strings.Contains(got, "no admitted vision-capable model") {
 		t.Fatalf("privacy rejection receipt = %q", got)
 	}
 }

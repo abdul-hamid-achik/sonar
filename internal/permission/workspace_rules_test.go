@@ -28,6 +28,13 @@ func TestWorkspaceRulesBashMCPAndPaths(t *testing.T) {
 		t.Fatal("unexpected bash allow")
 	}
 
+	if _, err := store.AddBashPrefix(workspace, "rm -rf *"); err == nil {
+		t.Fatal("destructive bash pattern was persisted")
+	}
+	if _, err := store.AddBashPrefix(workspace, "git reset --hard"); err == nil {
+		t.Fatal("destructive git pattern was persisted")
+	}
+
 	rules, err = store.AddMCPTool(workspace, "mcphub__mcphub_list_servers")
 	if err != nil {
 		t.Fatal(err)

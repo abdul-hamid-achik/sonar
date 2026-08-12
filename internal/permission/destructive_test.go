@@ -68,6 +68,18 @@ func TestDestructiveCommandWarningNamesTheDamage(t *testing.T) {
 	}
 }
 
+func TestDestructiveBashPatternCoversTrailingGlobs(t *testing.T) {
+	if got := DestructiveBashPattern("rm -rf *"); got == "" {
+		t.Fatal("trailing glob of a destructive prefix was accepted")
+	}
+	if got := DestructiveBashPattern("git reset --hard *"); !contains(got, "uncommitted") {
+		t.Fatalf("git reset --hard * warning = %q", got)
+	}
+	if got := DestructiveBashPattern("go test *"); got != "" {
+		t.Fatalf("ordinary pattern labelled destructive: %q", got)
+	}
+}
+
 func contains(haystack, needle string) bool {
 	return len(needle) == 0 || len(haystack) >= len(needle) &&
 		(haystack == needle || indexOf(haystack, needle) >= 0)

@@ -113,10 +113,25 @@ func TestShortcutsBarInFooter(t *testing.T) {
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	m = updated.(*Model)
 	footer := ansi.Strip(m.projectFrame().Footer.Content)
-	for _, want := range []string{"enter", "shift+tab", "esc"} {
+	for _, want := range []string{"enter", "shift+tab"} {
 		if !strings.Contains(strings.ToLower(footer), want) {
 			t.Fatalf("footer shortcuts missing %q:\n%s", want, footer)
 		}
+	}
+	// Idle with nothing to cancel must not advertise a dead "esc cancel".
+	if strings.Contains(strings.ToLower(footer), "esc") {
+		t.Fatalf("idle footer advertised esc with nothing to cancel:\n%s", footer)
+	}
+}
+
+func TestShortcutsBarShowsEscWhenCancelDoesSomething(t *testing.T) {
+	m := newTestModel(t)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
+	m = updated.(*Model)
+	m.queuedFollowUp = &queuedFollowUp{Prompt: "later"}
+	footer := ansi.Strip(m.projectFrame().Footer.Content)
+	if !strings.Contains(strings.ToLower(footer), "esc") {
+		t.Fatalf("queued follow-up should advertise esc cancel:\n%s", footer)
 	}
 }
 

@@ -264,7 +264,7 @@ func TestToolToggleMouseAndKeyboardUseSameActionSemantics(t *testing.T) {
 	}
 	toggle, ok := registry.Action(toolToggleActionID)
 	if !ok || toggle.Shortcut.Help().Key != "ctrl+t" {
-		t.Fatalf("toggle shortcut = %#v, want ctrl+r", toggle.Shortcut.Help())
+		t.Fatalf("toggle shortcut = %#v, want ctrl+t", toggle.Shortcut.Help())
 	}
 
 	updated, _ := keyboard.Update(ctrlKey('t'))

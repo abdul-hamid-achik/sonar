@@ -12,7 +12,7 @@ import (
 // handlePendingApprovalKey resolves keyboard input while a tool approval is
 // pending. Pending tool approval owns the keyboard before every other overlay.
 // Decisions remain typed so a host failure cannot be reported as a human
-// denial. Wider scopes (a/p/w/e) are only honored when offered for the tool.
+// denial. Wider scopes (a/p/w/e/m) are only honored when offered for the tool.
 func (m *Model) handlePendingApprovalKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	resumeActivity := false
 	switch {
@@ -20,33 +20,43 @@ func (m *Model) handlePendingApprovalKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		m.resolvePendingApproval(permission.Cancelled("application is shutting down"))
 		return m.beginShutdown(), true
 	case key.Matches(msg, m.keys.Cancel):
+		// Esc clears an armed confirm first: denying a wide grant mid-confirm
+		// should not also cancel the turn. A second Esc still cancels.
+		if m.clearApprovalConfirm() {
+			break
+		}
 		m.resolvePendingApproval(permission.Cancelled("approval cancelled by user"))
 		if m.cancel != nil {
 			m.cancel()
 		}
 	case strings.EqualFold(msg.String(), "y"):
+		m.clearApprovalConfirm()
 		m.resolvePendingApproval(permission.AllowOnce())
 		resumeActivity = true
 	case strings.EqualFold(msg.String(), "n"):
+		m.clearApprovalConfirm()
 		m.resolvePendingApproval(permission.Deny())
 		resumeActivity = true
 	case strings.EqualFold(msg.String(), "s"):
 		// Exact-request session grant: same tool + same canonical arguments only.
+		m.clearApprovalConfirm()
 		m.resolvePendingApproval(permission.AllowSession())
 		resumeActivity = true
 	case strings.EqualFold(msg.String(), "a"), strings.EqualFold(msg.String(), "p"),
-		strings.EqualFold(msg.String(), "w"), strings.EqualFold(msg.String(), "e"):
+		strings.EqualFold(msg.String(), "w"), strings.EqualFold(msg.String(), "e"),
+		strings.EqualFold(msg.String(), "m"), strings.EqualFold(msg.String(), "r"):
 		keyName := strings.ToLower(msg.String())
 		if choice, ok := m.approvalChoiceByKey(keyName); ok {
-			m.resolvePendingApprovalWithScope(approvalResponseForScope(choice.ScopeKind), choice.ScopeKind)
-			resumeActivity = true
+			if m.armOrResolveApprovalChoice(choice) {
+				resumeActivity = true
+			}
 			break
 		}
 		m.navigateApprovalViewport(msg.String())
 	case key.Matches(msg, m.keys.CompleteSelect):
-		resp, scope := m.selectedApprovalResponseAndScope()
-		m.resolvePendingApprovalWithScope(resp, scope)
-		resumeActivity = true
+		if m.resolveSelectedApprovalChoice() {
+			resumeActivity = true
+		}
 	case key.Matches(msg, m.keys.CompleteUp), strings.EqualFold(msg.String(), "k"):
 		m.moveApprovalChoice(-1)
 	case key.Matches(msg, m.keys.CompleteDown), strings.EqualFold(msg.String(), "j"):
@@ -69,6 +79,48 @@ func (m *Model) approvalChoiceByKey(keyName string) (approvalChoice, bool) {
 		}
 	}
 	return approvalChoice{}, false
+}
+
+func (m *Model) clearApprovalConfirm() bool {
+	if m == nil || m.approvalState == nil {
+		return false
+	}
+	if m.approvalState.ConfirmScope == "" && m.approvalState.ConfirmKey == "" {
+		return false
+	}
+	m.approvalState.ConfirmScope = ""
+	m.approvalState.ConfirmKey = ""
+	return true
+}
+
+// armOrResolveApprovalChoice either arms a confirm press or resolves the grant.
+// Returns true when the approval was resolved.
+func (m *Model) armOrResolveApprovalChoice(choice approvalChoice) bool {
+	if m == nil || m.approvalState == nil || m.pendingApproval == nil {
+		return false
+	}
+	preview := m.pendingApproval.Preview
+	if !approvalChoiceNeedsConfirm(choice, preview) {
+		m.clearApprovalConfirm()
+		m.resolvePendingApprovalWithScope(approvalResponseForScope(choice.ScopeKind), choice.ScopeKind)
+		return true
+	}
+	if m.approvalState.ConfirmScope == choice.ScopeKind &&
+		strings.EqualFold(m.approvalState.ConfirmKey, choice.Key) {
+		m.clearApprovalConfirm()
+		m.resolvePendingApprovalWithScope(approvalResponseForScope(choice.ScopeKind), choice.ScopeKind)
+		return true
+	}
+	m.approvalState.ConfirmScope = choice.ScopeKind
+	m.approvalState.ConfirmKey = choice.Key
+	// Focus the row being confirmed so Enter / second press stay aligned.
+	for index, candidate := range m.currentApprovalChoices() {
+		if candidate.ScopeKind == choice.ScopeKind && candidate.Key == choice.Key {
+			m.approvalState.ChoiceIndex = index
+			break
+		}
+	}
+	return false
 }
 
 // handleReadScopePromptKey resolves keyboard input while an external

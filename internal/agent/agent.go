@@ -1004,6 +1004,15 @@ func (a *Agent) SetToolsConfig(cfg config.ToolsConfig) {
 	a.toolsConfig = cfg
 }
 
+// ApprovalWaitTimeout returns how long a tool call waits for a human approval
+// before the host refuses it, or zero to wait indefinitely.
+func (a *Agent) ApprovalWaitTimeout() time.Duration {
+	if a == nil {
+		return 0
+	}
+	return a.toolsConfig.ApprovalWaitTimeout()
+}
+
 // SetContinuationsConfig installs the host policy used by future turns.
 // Invalid embedded-caller input fails closed to off; command/config callers
 // normally validate before reaching this boundary.

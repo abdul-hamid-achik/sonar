@@ -366,7 +366,7 @@ func (m *Model) appendEntryChunk(b *strings.Builder, entryIndex int, entry ChatE
 				EndCol:    endCol,
 			})
 		}
-		// The "N lines hidden · ctrl+r" row is the only part of a receipt that
+		// The "N lines hidden · <expand chord>" row is the only part of a receipt that
 		// names a key, and it was the only part that did not respond to a
 		// click: the region above covers the header line alone. Give the cue
 		// the same disclosure it advertises.
@@ -903,7 +903,7 @@ func (m *Model) liveTailSemanticSource() string {
 }
 
 // collapsedToolFooterRegion locates a collapsed receipt's "N lines hidden ·
-// ctrl+r" row inside its own rendered chunk.
+// <expand chord>" row inside its own rendered chunk.
 //
 // It reads the chunk rather than the render model on purpose: fresh renders
 // and memo hits both reach appendEntryChunk with nothing but the chunk, and
@@ -1202,6 +1202,9 @@ func (m *Model) renderToolGroup(b *strings.Builder, chat ChatEntry) {
 		invalidReceipt()
 		return
 	}
+	// Affordance must name the live ToggleFocusedTool binding. A hardcoded
+	// chord here once taught ctrl+r after the registry moved to ctrl+t.
+	card.ExpandChord = m.keys.ToggleFocusedTool.Help().Key
 	// LineWidth = accent + pad + content. ToolCard paints accent+pad internally.
 	availableWidth := max(4, grid.LineWidth())
 	cardView := card.ViewWithActivity(availableWidth, m.runningToolActivityGlyph(), 0)

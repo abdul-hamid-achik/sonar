@@ -350,11 +350,20 @@ func (m *Model) renderShortcutsBar(paneW int) string {
 
 	var hints []keyHint
 	if m.state == StateIdle && !m.composerIsBusy() {
+		// Idle has nothing to cancel unless voice/queue/mic already owns a
+		// gesture. Advertising "esc cancel" here taught a dead verb.
 		hints = []keyHint{
 			{Key: "enter", Action: "send"},
 			{Key: "shift+tab", Action: "mode"},
-			{Key: "esc", Action: "cancel"},
 			{Key: m.keys.Help.Help().Key, Action: "help"},
+		}
+		if m.idleCancelAffordanceActive() {
+			hints = []keyHint{
+				{Key: "enter", Action: "send"},
+				{Key: "shift+tab", Action: "mode"},
+				{Key: "esc", Action: "cancel"},
+				{Key: m.keys.Help.Help().Key, Action: "help"},
+			}
 		}
 		// The voice invite joins only when every hint keeps its label. This
 		// row is where first-run discovery happens — the welcome deliberately
@@ -393,6 +402,16 @@ func (m *Model) renderShortcutsBar(paneW int) string {
 		return lead + left
 	}
 	return lead + left + strings.Repeat(" ", gap) + right
+}
+
+// idleCancelAffordanceActive reports whether Escape currently cancels something
+// while the session is idle. Without that, the shortcuts row must not advertise
+// "esc cancel" — a verb with no effect.
+func (m *Model) idleCancelAffordanceActive() bool {
+	if m == nil {
+		return false
+	}
+	return m.listeningForVoice() || m.queuedFollowUp != nil || m.voiceStageActive()
 }
 
 // git branch cache — avoid spawning git every frame.

@@ -74,7 +74,7 @@ func visibleTranscriptMarker(t *testing.T, m *Model) (string, int, string) {
 	location := transcriptPaintMarkerPattern.FindStringIndex(view)
 	if location == nil {
 		t.Fatalf("fixture has no visible semantic marker:\n%s", view)
-		return
+		return "", 0, ""
 	}
 	return view[location[0]:location[1]], strings.Count(view[:location[0]], "\n"), view
 }

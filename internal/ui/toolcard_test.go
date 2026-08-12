@@ -90,18 +90,20 @@ func TestToolCardStripsTerminalControlsFromUntrustedFields(t *testing.T) {
 func TestCollapsedToolBodyFooterGrammar(t *testing.T) {
 	// Multi-line hidden bodies advertise size with the shared "N lines hidden"
 	// grammar (matches the output-viewer receipt) and name the primary key that
-	// reveals them. alt+t and header clicks still expand; hidden content with
-	// no stated way to reach it is a dead end for anyone who has not already
-	// read the help overlay.
-	if got := collapsedToolBodyFooter("one\ntwo\nthree"); got != "3 lines hidden · ctrl+r" {
-		t.Fatalf("collapsed body footer = %q, want \"3 lines hidden · ctrl+r\"", got)
+	// reveals them. Header clicks still expand; hidden content with no stated
+	// way to reach it is a dead end for anyone who has not already read help.
+	if got := collapsedToolBodyFooter("one\ntwo\nthree", "ctrl+t"); got != "3 lines hidden · ctrl+t" {
+		t.Fatalf("collapsed body footer = %q, want \"3 lines hidden · ctrl+t\"", got)
+	}
+	if got := collapsedToolBodyFooter("one\ntwo", ""); got != "2 lines hidden · ctrl+t" {
+		t.Fatalf("empty chord must fall back to ToggleFocusedTool default, got %q", got)
 	}
 	for name, body := range map[string]string{
 		"empty":       "",
 		"blank":       " \n\t\n",
 		"single line": "only line\n",
 	} {
-		if got := collapsedToolBodyFooter(body); got != "" {
+		if got := collapsedToolBodyFooter(body, "ctrl+t"); got != "" {
 			t.Fatalf("%s body produced footer %q, want none", name, got)
 		}
 	}

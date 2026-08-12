@@ -297,6 +297,7 @@ func (m *Model) applyGoalFormWithAuthority(event GoalFormEvent, explicitGoalComm
 	m.mode = ModeAuto
 	m.syncComposerAuthority()
 	m.setRouterMode(m.modeConfigs[ModeAuto].RouterMode)
+	m.maybeWarnMissingApprovalTimeout(ModeAuto)
 	if err := m.persistGoalSession(); err != nil {
 		m.goalRuntime = previous
 		m.mode = oldMode

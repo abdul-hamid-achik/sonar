@@ -35,10 +35,14 @@ func (m *Model) helpViewportHeight() int {
 }
 
 // buildHelpContent builds the raw help text (without border/viewport wrapper).
+//
+// Order is deliberate: keyboard / input / voice / waiting first (what you need
+// while looking at the screen), then the full slash registry. Slash stays in
+// the same overlay so chord documentation tests still see every command, but
+// it is no longer competing with the core chords at the top of the scroll.
 func (m *Model) buildHelpContent(innerW int) string {
 	var b strings.Builder
 
-	// Keyboard shortcuts, grouped by the task the reader is trying to do.
 	b.WriteString(m.styles.OverlayAccent.Render("Keyboard Shortcuts"))
 	b.WriteString("\n")
 
@@ -76,6 +80,7 @@ func (m *Model) buildHelpContent(innerW int) string {
 	// keyboard section can only name ctrl+g, and the registry list below only
 	// says "/voice" once — neither tells a reader the stage or the channels
 	// exist.
+	b.WriteString("\n")
 	b.WriteString(m.styles.OverlayAccent.Render("Voice"))
 	b.WriteString("\n")
 	m.writeHelpRows(&b, []helpRow{
@@ -84,12 +89,27 @@ func (m *Model) buildHelpContent(innerW int) string {
 		{"/voice view", "Listening stage: one panel with the state and the last line said aloud"},
 		{"/voice status", "Every voice setting, plus the config block that reproduces the session"},
 	}, innerW)
+
+	// The wait trace encodes a fact — is this wait normal for this model? —
+	// and a reader who has not been told what the glyphs mean sees decoration.
+	b.WriteString("\n")
+	b.WriteString(m.styles.OverlayAccent.Render("Waiting Indicator"))
 	b.WriteString("\n")
 
+	m.writeHelpRows(&b, []helpRow{
+		{"● position", "How far this wait has gone against this model's typical first response"},
+		{"│ marker", "Where the reply is expected — left of it is faster than usual"},
+		{"● at the edge", "The reply is late; the glyph warns past roughly twice typical"},
+		{"first wait", "No typical value yet — the baseline is learned from the second wait on"},
+		{"/runtime", "The same numbers without motion: last and typical response time"},
+	}, innerW)
+
+	b.WriteString("\n")
 	b.WriteString(m.styles.OverlayAccent.Render("Slash Commands"))
 	b.WriteString("\n")
+	b.WriteString(m.styles.OverlayDim.Render("  Full registry — scroll for actions and availability"))
+	b.WriteString("\n")
 
-	// Slash commands.
 	if m.cmdRegistry != nil {
 		commands := make([]helpRow, 0, len(m.cmdRegistry.All()))
 		ctx := m.buildCommandContext()
@@ -105,23 +125,6 @@ func (m *Model) buildHelpContent(innerW int) string {
 		}
 		m.writeHelpRows(&b, commands, innerW)
 	}
-
-	// The wait trace encodes a fact — is this wait normal for this model? —
-	// and a reader who has not been told what the glyphs mean sees decoration.
-	// The trace was designed to be legible from position alone, but "legible
-	// without the legend" and "meaningless without the legend" look identical
-	// until someone explains it once.
-	b.WriteString("\n")
-	b.WriteString(m.styles.OverlayAccent.Render("Waiting Indicator"))
-	b.WriteString("\n")
-
-	m.writeHelpRows(&b, []helpRow{
-		{"● position", "How far this wait has gone against this model's typical first response"},
-		{"│ marker", "Where the reply is expected — left of it is faster than usual"},
-		{"● at the edge", "The reply is late; the glyph warns past roughly twice typical"},
-		{"first wait", "No typical value yet — the baseline is learned from the second wait on"},
-		{"/runtime", "The same numbers without motion: last and typical response time"},
-	}, innerW)
 
 	b.WriteString("\n")
 

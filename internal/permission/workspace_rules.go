@@ -144,6 +144,9 @@ func (s *WorkspaceRulesStore) AddBashPrefix(workspace, prefix string) (Workspace
 	if !ok {
 		return WorkspaceRules{}, fmt.Errorf("invalid bash pattern %q (use a prefix or trailing glob like \"git status *\")", prefix)
 	}
+	if warning := DestructiveBashPattern(prefix); warning != "" {
+		return WorkspaceRules{}, fmt.Errorf("refusing durable bash pattern: %s", warning)
+	}
 	if len(prefix) > maxPrefixBytes {
 		return WorkspaceRules{}, fmt.Errorf("bash pattern exceeds %d bytes", maxPrefixBytes)
 	}

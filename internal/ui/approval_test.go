@@ -437,12 +437,13 @@ func TestPendingApprovalSessionDecisionIsExplicit(t *testing.T) {
 
 func TestApprovalChoiceSelectionDefaultsToDenyAndSupportsArrowsAndVim(t *testing.T) {
 	tests := []struct {
-		name         string
-		toolName     string
-		move         []tea.KeyPressMsg
-		wantIndex    int
-		wantDecision permission.ApprovalDecision
-		wantScope    string
+		name          string
+		toolName      string
+		move          []tea.KeyPressMsg
+		wantIndex     int
+		wantDecision  permission.ApprovalDecision
+		wantScope     string
+		confirmTwice  bool
 	}{
 		{name: "safe default", toolName: "write_file", wantIndex: 0, wantDecision: permission.DecisionUserDeny},
 		{name: "down to once", toolName: "write_file", move: []tea.KeyPressMsg{downKey()}, wantIndex: 1, wantDecision: permission.DecisionAllowOnce},
@@ -450,7 +451,8 @@ func TestApprovalChoiceSelectionDefaultsToDenyAndSupportsArrowsAndVim(t *testing
 		{name: "up wraps to session", toolName: "write_file", move: []tea.KeyPressMsg{upKey()}, wantIndex: 2, wantDecision: permission.DecisionAllowSession},
 		{name: "vim up wraps to session", toolName: "write_file", move: []tea.KeyPressMsg{charKey('k')}, wantIndex: 2, wantDecision: permission.DecisionAllowSession},
 		// write offers tool + path + durable path rows; wrap from deny goes to last (workspace path).
-		{name: "write up wraps to workspace path", toolName: "write", move: []tea.KeyPressMsg{upKey()}, wantIndex: 5, wantDecision: permission.DecisionAllowSession, wantScope: permission.ScopeSessionPath},
+		// Durable saves need a second Enter to confirm.
+		{name: "write up wraps to workspace path", toolName: "write", move: []tea.KeyPressMsg{upKey()}, wantIndex: 5, wantDecision: permission.DecisionAllowSession, wantScope: permission.ScopeSessionPath, confirmTwice: true},
 	}
 
 	for _, tt := range tests {
@@ -478,6 +480,16 @@ func TestApprovalChoiceSelectionDefaultsToDenyAndSupportsArrowsAndVim(t *testing
 
 			updated, _ := m.Update(enterKey())
 			m = updated.(*Model)
+			if tt.confirmTwice {
+				if m.pendingApproval == nil {
+					t.Fatal("durable choice resolved on the first Enter without confirm")
+				}
+				if m.approvalState.ConfirmScope == "" {
+					t.Fatal("first Enter did not arm confirm")
+				}
+				updated, _ = m.Update(enterKey())
+				m = updated.(*Model)
+			}
 			if m.pendingApproval != nil {
 				t.Fatal("Enter did not resolve the selected permission choice")
 			}
@@ -1112,5 +1124,120 @@ func TestApprovalDetailNoLongerRejectsLargeExactArguments(t *testing.T) {
 	detail, inspectable := approvalDetail("write", map[string]any{"content": strings.Repeat("x", 10_000)})
 	if !inspectable || !strings.Contains(detail, strings.Repeat("x", 256)) {
 		t.Fatal("large exact arguments were rejected instead of delegated to the viewport")
+	}
+}
+
+func TestDestructiveBashOmitsDurableWorkspaceChoice(t *testing.T) {
+	choices := approvalChoicesFor("bash", permission.ApprovalPreview{Command: "rm -rf ./build"})
+	for _, choice := range choices {
+		if choice.ScopeKind == permission.DurableBashPrefix {
+			t.Fatalf("destructive bash still offered durable save: %#v", choices)
+		}
+	}
+	foundSession := false
+	for _, choice := range choices {
+		if choice.ScopeKind == permission.ScopeSessionBashPrefix {
+			foundSession = true
+			if !approvalChoiceNeedsConfirm(choice, permission.ApprovalPreview{Command: "rm -rf ./build"}) {
+				t.Fatal("destructive session prefix did not require confirm")
+			}
+		}
+	}
+	if !foundSession {
+		t.Fatalf("destructive bash lost session prefix offer: %#v", choices)
+	}
+}
+
+func TestMCPApprovalOffersSessionServerBeforeDurable(t *testing.T) {
+	choices := approvalChoicesFor("blankcode__run", permission.ApprovalPreview{MCPServer: "blankcode"})
+	var keys []string
+	var kinds []string
+	for _, choice := range choices {
+		if choice.Key == "m" || choice.Key == "e" || choice.Key == "a" || choice.Key == "w" {
+			keys = append(keys, choice.Key)
+			kinds = append(kinds, choice.ScopeKind)
+		}
+	}
+	wantKeys := []string{"a", "w", "m", "e"}
+	wantKinds := []string{
+		permission.ScopeSessionMCPTool,
+		permission.DurableMCPTool,
+		permission.ScopeSessionMCPServer,
+		permission.DurableMCPServer,
+	}
+	if len(keys) != len(wantKeys) {
+		t.Fatalf("mcp wideners = keys %#v kinds %#v", keys, kinds)
+	}
+	for i := range wantKeys {
+		if keys[i] != wantKeys[i] || kinds[i] != wantKinds[i] {
+			t.Fatalf("mcp wideners = keys %#v kinds %#v, want keys %#v kinds %#v", keys, kinds, wantKeys, wantKinds)
+		}
+	}
+	durable := choices[len(choices)-1]
+	if !approvalChoiceNeedsConfirm(durable, permission.ApprovalPreview{MCPServer: "blankcode"}) {
+		t.Fatal("durable MCP server did not require confirm")
+	}
+	sessionServer := choices[len(choices)-2]
+	if approvalChoiceNeedsConfirm(sessionServer, permission.ApprovalPreview{MCPServer: "blankcode"}) {
+		t.Fatal("session MCP server unexpectedly required confirm")
+	}
+}
+
+func TestDurableApprovalRequiresSecondPress(t *testing.T) {
+	m := newTestModel(t)
+	responses := make(chan permission.ApprovalResponse, 1)
+	m = openApprovalForTest(t, m, ToolApprovalMsg{
+		ToolName: "blankcode__run",
+		Preview:  permission.ApprovalPreview{MCPServer: "blankcode"},
+		Response: responses,
+	})
+	updated, _ := m.Update(charKey('e'))
+	m = updated.(*Model)
+	if m.pendingApproval == nil {
+		t.Fatal("durable server grant resolved on first press")
+	}
+	if m.approvalState.ConfirmScope != permission.DurableMCPServer {
+		t.Fatalf("confirm scope = %q", m.approvalState.ConfirmScope)
+	}
+	if plain := ansi.Strip(m.renderApprovalChoices(m.approvalContentWidth())); !strings.Contains(plain, "press again to confirm") {
+		t.Fatalf("armed confirm was not advertised:\n%s", plain)
+	}
+	updated, _ = m.Update(charKey('e'))
+	m = updated.(*Model)
+	if m.pendingApproval != nil {
+		t.Fatal("second e did not resolve durable server grant")
+	}
+	response := (<-responses).Normalize()
+	if response.ScopeKind != permission.ScopeSessionMCPServer {
+		t.Fatalf("scope = %q, want session MCP server", response.ScopeKind)
+	}
+}
+
+func TestEscClearsApprovalConfirmWithoutDenying(t *testing.T) {
+	m := newTestModel(t)
+	responses := make(chan permission.ApprovalResponse, 1)
+	m = openApprovalForTest(t, m, ToolApprovalMsg{
+		ToolName: "write",
+		Args:     map[string]any{"path": "f.txt"},
+		Preview:  permission.ApprovalPreview{Path: "f.txt"},
+		Response: responses,
+	})
+	updated, _ := m.Update(charKey('w'))
+	m = updated.(*Model)
+	if m.approvalState.ConfirmScope == "" {
+		t.Fatal("w did not arm durable confirm")
+	}
+	updated, _ = m.Update(escKey())
+	m = updated.(*Model)
+	if m.pendingApproval == nil {
+		t.Fatal("esc denied the request instead of clearing confirm")
+	}
+	if m.approvalState.ConfirmScope != "" {
+		t.Fatal("esc did not clear confirm arm")
+	}
+	select {
+	case response := <-responses:
+		t.Fatalf("esc emitted decision %#v", response)
+	default:
 	}
 }

@@ -105,6 +105,14 @@ func (m *Model) voiceApprovalEligible() bool {
 	if command == "" && commandBearingTool(m.pendingApproval.ToolName) {
 		return false
 	}
+	// remove/move change the filesystem without a shell command string, so the
+	// DestructiveCommandWarning path never sees them. Refuse spoken allow for
+	// the same reason bash destructive is refused: a mis-hearing is not
+	// recoverable and the keyboard is one reach away.
+	switch strings.TrimSpace(m.pendingApproval.ToolName) {
+	case "remove", "move":
+		return false
+	}
 	// The host already decided which commands cause durable damage, and this
 	// reuses that decision rather than inventing a second list that could
 	// disagree with the one the prompt shows.

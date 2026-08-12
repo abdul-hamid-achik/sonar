@@ -84,6 +84,10 @@ type ToolCard struct {
 	Lifecycle       ToolLifecycle
 	Projection      ecosystem.ToolProjection
 	Styles          ToolCardStyles
+	// ExpandChord is the help key that expands a collapsed receipt body. Empty
+	// falls back to the ToggleFocusedTool default so isolated ToolCard tests
+	// stay truthful without wiring a Model keymap.
+	ExpandChord string
 }
 
 // ToolCardStyles holds styles for the tool card.
@@ -511,7 +515,7 @@ func (c ToolCard) ViewWithActivity(width int, activityGlyph string, elapsed time
 	} else if !c.Expanded && c.State != ToolCardRunning {
 		// Zero-style density: keep multi-line bodies collapsed and advertise
 		// the hidden size instead of dumping output into the transcript.
-		if footer := collapsedToolBodyFooter(safeResult); footer != "" {
+		if footer := collapsedToolBodyFooter(safeResult, c.expandChord()); footer != "" {
 			lines = append(lines, c.Styles.Dimmed.Render(truncate(footer, inner)))
 		}
 	}
@@ -539,7 +543,7 @@ const collapsedToolBodyFooterStem = " lines hidden"
 // collapsedToolBodyFooterLine reports whether one ANSI-stripped, rail-trimmed
 // transcript row is a collapsed receipt's hidden-body cue. It matches the head
 // rather than the whole line because a narrow pane truncates the tail — the
-// row is no less clickable for having lost its "· ctrl+r".
+// row is no less clickable for having lost its "· <chord>".
 func collapsedToolBodyFooterLine(plain string) bool {
 	digits := 0
 	for digits < len(plain) && plain[digits] >= '0' && plain[digits] <= '9' {
@@ -548,15 +552,26 @@ func collapsedToolBodyFooterLine(plain string) bool {
 	return digits > 0 && strings.HasPrefix(plain[digits:], collapsedToolBodyFooterStem)
 }
 
-// collapsedToolBodyFooter returns a "N lines hidden · ctrl+r" cue when a
+// defaultToolExpandChord matches keys.ToggleFocusedTool. Isolated ToolCard
+// renders use it so the affordance cannot drift back to a retired binding.
+const defaultToolExpandChord = "ctrl+t"
+
+func (c ToolCard) expandChord() string {
+	if chord := strings.TrimSpace(c.ExpandChord); chord != "" {
+		return chord
+	}
+	return defaultToolExpandChord
+}
+
+// collapsedToolBodyFooter returns a "N lines hidden · <chord>" cue when a
 // collapsed receipt has multi-line body content. Single-line or empty bodies
 // stay header-only so success receipts remain one log line.
 //
-// The key is named even though ctrl+b and a header click also expand. Hidden
-// content with no stated way to reach it is a dead end for anyone who has not
-// already read the help overlay, and naming the primary key does not make the
+// The key is named even though a header click also expands. Hidden content
+// with no stated way to reach it is a dead end for anyone who has not already
+// read the help overlay, and naming the primary key does not make the
 // alternatives stop working.
-func collapsedToolBodyFooter(result string) string {
+func collapsedToolBodyFooter(result, expandChord string) string {
 	result = strings.TrimRight(result, "\n")
 	if strings.TrimSpace(result) == "" {
 		return ""
@@ -570,7 +585,11 @@ func collapsedToolBodyFooter(result string) string {
 	if lines < 2 {
 		return ""
 	}
-	return fmt.Sprintf("%d%s · ctrl+r", lines, collapsedToolBodyFooterStem)
+	chord := strings.TrimSpace(expandChord)
+	if chord == "" {
+		chord = defaultToolExpandChord
+	}
+	return fmt.Sprintf("%d%s · %s", lines, collapsedToolBodyFooterStem, chord)
 }
 
 // toolCardSummaryWithoutRepeatedAction keeps a routed tool's specialist or

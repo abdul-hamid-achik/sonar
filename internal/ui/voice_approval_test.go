@@ -99,6 +99,15 @@ func TestVoiceCannotApproveSomethingDestructive(t *testing.T) {
 	if !m.voiceApprovalEligible() {
 		t.Fatal("an ordinary write was refused a spoken approval")
 	}
+
+	// remove has no command string, but still changes the filesystem.
+	m.pendingApproval = &ToolApprovalMsg{
+		ToolName: "remove",
+		Preview:  permission.ApprovalPreview{Path: "tmp/out"},
+	}
+	if m.voiceApprovalEligible() {
+		t.Fatal("remove was eligible for a spoken approval")
+	}
 }
 
 // The resolver derives the decision from the words, and refuses what it does

@@ -25,6 +25,11 @@ type ApprovalState struct {
 	Viewport      viewport.Model
 	ShowArguments bool
 	ChoiceIndex   int
+	// ConfirmScope / ConfirmKey arm a second press for wide or durable grants.
+	// Empty means the next allow shortcut resolves immediately. Esc clears the
+	// arm without denying the request (Cancel still cancels the turn).
+	ConfirmScope string
+	ConfirmKey   string
 }
 
 type approvalChoice struct {
@@ -53,8 +58,13 @@ var baseApprovalChoices = [...]approvalChoice{
 // approvalChoicesFor returns the decision rows for a tool. Wider session
 // scopes are offered only when the tool can bind them safely. Labels include
 // derived path/prefix hints when available so the user sees what "a"/"p"/"w" mean.
+//
+// Durable bash patterns that name a destructive command family are omitted
+// entirely — workspace rules would skip the modal on later sessions, and a
+// one-key save is the wrong pit for that. Session prefixes for those commands
+// still appear, but require a second confirmation press.
 func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []approvalChoice {
-	choices := make([]approvalChoice, 0, len(baseApprovalChoices)+3)
+	choices := make([]approvalChoice, 0, len(baseApprovalChoices)+4)
 	choices = append(choices, baseApprovalChoices[:]...)
 	switch {
 	case sessionToolScopeEligibleUI(toolName):
@@ -115,20 +125,25 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 			if fields := strings.Fields(strings.TrimSpace(preview.Command)); len(fields) > len(strings.Fields(prefix)) {
 				durable = prefix + " *"
 			}
-			durableHint := compactApprovalHint(durable, 24)
-			saveLabel := "save bash pattern for this workspace"
-			saveCompact := "bash/workspace"
-			if durableHint != "" {
-				saveLabel = "save for workspace · " + durableHint
-				saveCompact = "save · " + durableHint
+			// Refuse to offer a workspace rule for command families the host
+			// already labels as durable damage. Session prefix (a) still works
+			// with a confirm press; forever is the footgun.
+			if permission.DestructiveBashPattern(durable) == "" {
+				durableHint := compactApprovalHint(durable, 24)
+				saveLabel := "save bash pattern for this workspace"
+				saveCompact := "bash/workspace"
+				if durableHint != "" {
+					saveLabel = "save for workspace · " + durableHint
+					saveCompact = "save · " + durableHint
+				}
+				choices = append(choices, approvalChoice{
+					Decision:     permission.DecisionAllowSession,
+					Key:          "w",
+					Label:        saveLabel,
+					CompactLabel: saveCompact,
+					ScopeKind:    permission.DurableBashPrefix,
+				})
 			}
-			choices = append(choices, approvalChoice{
-				Decision:     permission.DecisionAllowSession,
-				Key:          "w",
-				Label:        saveLabel,
-				CompactLabel: saveCompact,
-				ScopeKind:    permission.DurableBashPrefix,
-			})
 		}
 		// A path-authority refusal is not curable by a command prefix; the
 		// host names the outside directory instead, and the offer is "shell
@@ -171,21 +186,46 @@ func approvalChoicesFor(toolName string, preview permission.ApprovalPreview) []a
 			CompactLabel: saveCompact,
 			ScopeKind:    permission.DurableMCPTool,
 		})
-		// Whole-server grant, only when the host could pin the call's
-		// effective namespace. One press makes the first prompt from a
-		// server the last one for this workspace.
+		// Session-wide server grant first: process-local, no disk write. The
+		// durable whole-server save stays behind e and a confirm press.
 		if server := strings.TrimSpace(preview.MCPServer); server != "" {
 			serverHint := compactApprovalHint(server, 24)
 			choices = append(choices, approvalChoice{
 				Decision:     permission.DecisionAllowSession,
+				Key:          "m",
+				Label:        "every tool from this server this session · " + serverHint,
+				CompactLabel: "server/session · " + serverHint,
+				ScopeKind:    permission.ScopeSessionMCPServer,
+			})
+			choices = append(choices, approvalChoice{
+				Decision:     permission.DecisionAllowSession,
 				Key:          "e",
 				Label:        "save every tool from this server · " + serverHint,
-				CompactLabel: "server · " + serverHint,
+				CompactLabel: "server/workspace · " + serverHint,
 				ScopeKind:    permission.DurableMCPServer,
 			})
 		}
 	}
 	return choices
+}
+
+// approvalChoiceNeedsConfirm reports whether this allow requires a second press.
+// Durable workspace saves always do. Session bash prefixes that name a
+// destructive family do too — once is still wide for the rest of the process.
+func approvalChoiceNeedsConfirm(choice approvalChoice, preview permission.ApprovalPreview) bool {
+	switch choice.ScopeKind {
+	case permission.DurableBashPrefix, permission.DurableMCPTool,
+		permission.DurableMCPServer, permission.DurableWritePath:
+		return true
+	case permission.ScopeSessionBashPrefix:
+		command := strings.TrimSpace(preview.Command)
+		if command == "" {
+			return false
+		}
+		return permission.DestructiveCommandWarning(command) != ""
+	default:
+		return false
+	}
 }
 
 func compactApprovalHint(value string, limit int) string {
@@ -360,6 +400,7 @@ func (m *Model) moveApprovalChoice(delta int) {
 	if m.approvalState == nil || len(choices) == 0 || delta == 0 {
 		return
 	}
+	m.clearApprovalConfirm()
 	index := m.approvalState.ChoiceIndex + delta
 	if index < 0 {
 		index = len(choices) - 1
@@ -373,23 +414,32 @@ func (m *Model) moveApprovalChoice(delta int) {
 func (m *Model) resetHiddenApprovalChoice() {
 	if m != nil && m.approvalState != nil {
 		m.approvalState.ChoiceIndex = 0
+		m.approvalState.ConfirmScope = ""
+		m.approvalState.ConfirmKey = ""
 	}
 }
 
-func (m *Model) selectedApprovalResponseAndScope() (permission.ApprovalResponse, string) {
+// resolveSelectedApprovalChoice settles or arms the focused row. Returns true
+// when the approval request was resolved.
+func (m *Model) resolveSelectedApprovalChoice() bool {
 	choices := m.currentApprovalChoices()
 	if m.approvalState == nil || m.approvalState.ChoiceIndex < 0 ||
 		m.approvalState.ChoiceIndex >= len(choices) {
-		return permission.Deny(), ""
+		m.resolvePendingApproval(permission.Deny())
+		return true
 	}
 	choice := choices[m.approvalState.ChoiceIndex]
 	switch choice.Decision {
 	case permission.DecisionAllowOnce:
-		return permission.AllowOnce(), ""
+		m.clearApprovalConfirm()
+		m.resolvePendingApproval(permission.AllowOnce())
+		return true
 	case permission.DecisionAllowSession:
-		return approvalResponseForScope(choice.ScopeKind), choice.ScopeKind
+		return m.armOrResolveApprovalChoice(choice)
 	default:
-		return permission.Deny(), ""
+		m.clearApprovalConfirm()
+		m.resolvePendingApproval(permission.Deny())
+		return true
 	}
 }
 
@@ -638,6 +688,15 @@ func (m *Model) renderApprovalChoices(width int) string {
 		if compact {
 			label = choice.CompactLabel
 		}
+		confirming := m.approvalState.ConfirmScope == choice.ScopeKind &&
+			strings.EqualFold(m.approvalState.ConfirmKey, choice.Key)
+		if confirming {
+			if compact {
+				label = "confirm · " + label
+			} else {
+				label = "press again to confirm · " + label
+			}
+		}
 		if m.glyphProfile == GlyphASCII {
 			label = strings.ReplaceAll(label, " · ", glyphSeparator(GlyphASCII))
 		}
@@ -649,7 +708,11 @@ func (m *Model) renderApprovalChoices(width int) string {
 			indicator = m.styles.FocusIndicator.Render(indicatorGlyph + " ")
 		}
 		keyView := m.styles.FocusIndicator.Render(choice.Key)
-		labelView := m.styles.OverlayDim.Render(label)
+		labelStyle := m.styles.OverlayDim
+		if confirming {
+			labelStyle = m.styles.OverlayAccent
+		}
+		labelView := labelStyle.Render(label)
 		return indicator + keyView + " " + labelView
 	}
 

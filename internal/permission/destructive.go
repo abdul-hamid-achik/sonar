@@ -191,3 +191,20 @@ func hasAnyFlagLetter(args []string, letters ...rune) bool {
 	}
 	return false
 }
+
+// DestructiveBashPattern reports whether a bash approval pattern (literal or
+// trailing " *") names a command whose durable damage the host already knows
+// how to describe. Used to refuse workspace-persisted prefixes that would
+// silently re-approve rm/git-reset/… families on later sessions.
+func DestructiveBashPattern(pattern string) string {
+	pattern = strings.TrimSpace(pattern)
+	if pattern == "" {
+		return ""
+	}
+	if strings.HasSuffix(pattern, " *") {
+		pattern = strings.TrimSpace(strings.TrimSuffix(pattern, " *"))
+	} else if strings.HasSuffix(pattern, "*") && !strings.HasSuffix(pattern, `\*`) {
+		pattern = strings.TrimSpace(strings.TrimSuffix(pattern, "*"))
+	}
+	return DestructiveCommandWarning(pattern)
+}
