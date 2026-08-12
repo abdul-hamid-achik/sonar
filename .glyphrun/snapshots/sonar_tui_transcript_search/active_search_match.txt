@@ -9,7 +9,7 @@
 │  ✗ Run failed command=go test ./internal/ui (310ms)
 │  exit status 1: fixture regression
 
-     The read completed, the test failure is visible, and the interrupted effect needs inspection.
+   The read completed, the test failure is visible, and the interrupted effect needs inspection.
 
    notice · Restored session <session> · Recovery receipt review
 

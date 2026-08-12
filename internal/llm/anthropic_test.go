@@ -46,7 +46,7 @@ func captureAnthropicRequest(t *testing.T, opts ChatOptions) (map[string]any, ht
 	}
 	if body == nil {
 		t.Fatal("stub captured no request body")
-		return
+		return nil, nil
 	}
 	return body, headers
 }
