@@ -8,14 +8,9 @@ permissions:
 
 jobs:
   verify:
-    name: Go 1.25 verification
+    name: Go verification
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # setup-go v6 prefers go.mod's toolchain directive. Pin the minimum
-      # supported application toolchain and prevent an automatic upgrade so
-      # this job proves the advertised Go 1.25 contract.
-      GOTOOLCHAIN: local
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -29,7 +24,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.25.12'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 
@@ -51,16 +46,12 @@ jobs:
         run: go test -tags=integration ./internal/integration -run '^$' -count=1
 
       - name: Run govulncheck
-        env:
-          GOTOOLCHAIN: local
         run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
 
   glyphrun-cli:
     name: Glyphrun deterministic terminal suite
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      GOTOOLCHAIN: local
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -85,13 +76,12 @@ jobs:
       - name: Install bubblewrap and espeak-ng
         run: sudo apt-get update && sudo apt-get install -y bubblewrap espeak-ng
 
-      - name: Set up Go for Glyphrun
+      - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.26.x'
-          # cache: false only disables this action's restore/save hooks. The
-          # install step below separately isolates every writable Go path.
-          cache: false
+          go-version-file: go.mod
+          cache: true
+          cache-dependency-path: go.sum
 
       - name: Install pinned Glyphrun
         env:
@@ -102,16 +92,6 @@ jobs:
         run: |
           go install github.com/abdul-hamid-achik/glyphrun/cmd/glyph@v0.14.3
           echo "${GOBIN}" >> "${GITHUB_PATH}"
-
-      # Glyphrun currently needs Go 1.26 to build, but the application contract
-      # is Go 1.25. Switch back before the specs compile sonar so the PTY
-      # surface is exercised with the same minimum toolchain as releases.
-      - name: Set up application Go
-        uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
-        with:
-          go-version: '1.25.12'
-          cache: true
-          cache-dependency-path: go.sum
 
       - name: Verify every Glyphrun contract hash
         run: |
@@ -147,8 +127,6 @@ jobs:
     name: Darwin build and POSIX smoke tests
     runs-on: macos-latest
     timeout-minutes: 10
-    env:
-      GOTOOLCHAIN: local
     steps:
       - name: Checkout
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
@@ -156,7 +134,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          go-version: '1.25.12'
+          go-version-file: go.mod
           cache: true
           cache-dependency-path: go.sum
 

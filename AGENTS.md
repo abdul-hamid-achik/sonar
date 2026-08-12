@@ -12,7 +12,7 @@ here. Nothing compares two prose files, so there is only one.
 ## What sonar is
 
 A terminal coding agent for hosted models, reached over an API with an API key.
-No local runtime. Go 1.25+, Charm v2 for the TUI, MCP servers for the extended
+No local runtime. Go 1.26+, Charm v2 for the TUI, MCP servers for the extended
 tool surface.
 
 Forked from [`local-agent`](https://github.com/abdul-hamid-achik/local-agent)
