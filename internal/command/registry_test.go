@@ -64,7 +64,7 @@ func TestRegistryExecuteProvidesEmptyContextWhenNil(t *testing.T) {
 		Handler: func(ctx *Context, _ []string) Result {
 			if ctx == nil {
 				t.Fatal("handler received a nil context")
-				return
+				return Result{}
 			}
 			return Result{Text: "ok"}
 		},
