@@ -20,8 +20,8 @@
 
    › n deny
      y once
-     s same request again this session
-     a this tool again this session
-     p path again this session · approval-probe.txt
-     w save path for workspace · approval-probe.txt
+     s same request this session
+     a this tool this session
+     p path this session · approval-probe.txt
+     w always allow in workspace · approval-probe.txt
    esc cancel turn · enter select · ↑/↓/j/k move · d arguments · pgup/dn scroll

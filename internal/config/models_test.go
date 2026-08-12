@@ -213,10 +213,11 @@ func TestModelConfig_GetDefaultModel(t *testing.T) {
 					t.Errorf("expected nil, got %+v", got)
 				}
 			} else {
-				if got == nil {
-					t.Fatal("expected non-nil model, got nil")
-				}
-				if got.Name != tt.want {
+			if got == nil {
+				t.Fatal("expected non-nil model, got nil")
+				return
+			}
+			if got.Name != tt.want {
 					t.Errorf("GetDefaultModel().Name = %q, want %q", got.Name, tt.want)
 				}
 			}

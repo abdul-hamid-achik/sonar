@@ -108,6 +108,7 @@ func TestSelectAutoReadOnlyContinuationRequiresCompleteExactReadContract(t *test
 	prepared := fixture.selectCandidate()
 	if prepared == nil {
 		t.Fatal("exact closed-world idempotent read was not prepared")
+		return
 	}
 	if prepared.continuation.SourceDomain != ecosystem.DomainSucceeded ||
 		prepared.continuation.Effect != executionpkg.EffectReadOnly ||

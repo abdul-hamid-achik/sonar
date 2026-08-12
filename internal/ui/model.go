@@ -285,7 +285,9 @@ type Model struct {
 	modelPickerState         *ModelPickerState
 	manualOnlyModels         map[string]struct{}
 	settingsPickerState      *SettingsPickerState
-	permissionsPanelState    *PermissionsPanelState
+	permissionsPanelState       *PermissionsPanelState
+	cachedInterruptionStats     []interruptionStat
+	interruptionStatsLoading    bool
 	agentPickerState         *AgentPickerState
 	providerPickerState      *ProviderPickerState
 	providerSwitchToken      uint64
@@ -736,6 +738,11 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 		if cmd := m.handleStandaloneRecoveryInspect(msg); cmd != nil {
 			cmds = append(cmds, cmd)
 		}
+	
+	case interruptionStatsLoadedMsg:
+		m.interruptionStatsLoading = false
+		m.cachedInterruptionStats = msg.Stats
+		m.refreshPermissionsPanel()
 
 	case standaloneRecoveryApplyResultMsg:
 		if cmd := m.handleStandaloneRecoveryApply(msg); cmd != nil {

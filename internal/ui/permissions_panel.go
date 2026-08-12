@@ -23,21 +23,33 @@ const (
 	permissionsPostureSkipInfo
 	permissionsClearSession
 	permissionsExport
-	permissionsImportHint
+	permissionsImport
 	permissionsClearRules
 	permissionsRevokeSession
 	permissionsForgetBash
 	permissionsForgetMCP
 	permissionsForgetMCPServer
 	permissionsForgetPath
+	permissionsInterruptionRow
+	permissionsPromoteInterruption
+	permissionsSectionHeader
 )
 
 type permissionsItem struct {
-	action      permissionsAction
-	title       string
-	value       string
-	description string
-	data        string // tool name, pattern, or path for revoke/forget
+	action       permissionsAction
+	title        string
+	value        string
+	description  string
+	data         string // tool name, pattern, or path for revoke/forget
+	interruptStat *interruptionStat // for interruption rows
+}
+
+type interruptionStat struct {
+	ToolName    string
+	Detail      string
+	Count       int64
+	LastAt      string
+	CanPromote  bool // Whether this interruption can be promoted to a durable rule
 }
 
 func (i permissionsItem) Title() string {
@@ -187,83 +199,130 @@ func (m *Model) permissionsPostureItems() []permissionsItem {
 }
 
 func (m *Model) permissionsPanelItems() []permissionsItem {
-	items := make([]permissionsItem, 0, 20)
+	items := make([]permissionsItem, 0, 40)
 	items = append(items, m.permissionsPostureItems()...)
 
+	// This session section
 	sessionCount := 0
 	if m.agent != nil {
 		sessionCount = len(m.agent.ListSessionApprovalSummary())
 	}
-	items = append(items, permissionsItem{
-		action: permissionsClearSession, title: "Clear session grants",
-		value:       fmt.Sprintf("%d", sessionCount),
-		description: "Drop every process-local session approval grant",
-	})
+	if sessionCount > 0 {
+		items = append(items, permissionsItem{
+			action: permissionsSectionHeader, title: "This session",
+			value: fmt.Sprintf("%d", sessionCount),
+		})
+		items = append(items, permissionsItem{
+			action: permissionsClearSession, title: "[Clear all]",
+			description: "Drop every process-local session approval grant",
+		})
 
-	if m.agent != nil {
-		for _, grant := range m.agent.ListSessionApprovalSummary() {
-			tool := strings.SplitN(grant, " · ", 2)[0]
-			items = append(items, permissionsItem{
-				action: permissionsRevokeSession, title: "Revoke session",
-				value: grant, description: "Remove this process-local grant", data: tool,
-			})
+		if m.agent != nil {
+			for _, grant := range m.agent.ListSessionApprovalSummary() {
+				tool := strings.SplitN(grant, " · ", 2)[0]
+				items = append(items, permissionsItem{
+					action: permissionsRevokeSession, title: "Session · " + grant,
+					value: "revoke", description: "Remove this process-local grant", data: tool,
+				})
+			}
 		}
 	}
 
+	// This workspace section
 	var rules permission.WorkspaceRules
 	if m.agent != nil {
 		rules = m.agent.WorkspaceRulesSnapshot()
 	}
+	ruleTotal := len(rules.BashPrefixes) + len(rules.MCPTools) + len(rules.MCPServers) + len(rules.WritePaths)
+	
 	items = append(items, permissionsItem{
-		action: permissionsExport, title: "Export workspace rules",
+		action: permissionsSectionHeader, title: "This workspace",
+		value: fmt.Sprintf("%d", ruleTotal),
+	})
+	
+	items = append(items, permissionsItem{
+		action: permissionsExport, title: "Export",
 		value:       "JSON",
 		description: "Write portable rules to " + permission.DefaultExportFileName,
 	})
 	items = append(items, permissionsItem{
-		action: permissionsImportHint, title: "Import workspace rules",
-		value:       "slash",
-		description: "Use /permissions import [--replace] <path>",
+		action: permissionsImport, title: "Import",
+		description: "Load rules from file (merge or replace)",
 	})
-	ruleTotal := len(rules.BashPrefixes) + len(rules.MCPTools) + len(rules.MCPServers) + len(rules.WritePaths)
-	items = append(items, permissionsItem{
-		action: permissionsClearRules, title: "Clear workspace rules",
-		value:       fmt.Sprintf("%d", ruleTotal),
-		description: "Remove every durable bash/MCP/path rule for this workspace",
-	})
+	if ruleTotal > 0 {
+		items = append(items, permissionsItem{
+			action: permissionsClearRules, title: "[Clear all]",
+			description: "Remove every durable bash/MCP/path rule for this workspace",
+		})
+	}
 
-	for _, prefix := range rules.BashPrefixes {
+	// Bash subgroup
+	if len(rules.BashPrefixes) > 0 {
+		for _, prefix := range rules.BashPrefixes {
+			items = append(items, permissionsItem{
+				action: permissionsForgetBash, title: "Bash · " + prefix,
+				value: "forget", description: "Remove this durable bash pattern", data: prefix,
+			})
+		}
+	}
+	
+	// MCP subgroup
+	mcpTotal := len(rules.MCPTools) + len(rules.MCPServers)
+	if mcpTotal > 0 {
+		for _, tool := range rules.MCPTools {
+			items = append(items, permissionsItem{
+				action: permissionsForgetMCP, title: "MCP · " + tool,
+				value: "forget", description: "Remove this durable MCP tool allow", data: tool,
+			})
+		}
+		for _, server := range rules.MCPServers {
+			items = append(items, permissionsItem{
+				action: permissionsForgetMCPServer, title: "MCP server · " + server,
+				value: "forget", description: "Remove this whole-server allow (every tool, approval only)", data: server,
+			})
+		}
+	}
+	
+	// Path subgroup
+	if len(rules.WritePaths) > 0 {
+		for _, path := range rules.WritePaths {
+			items = append(items, permissionsItem{
+				action: permissionsForgetPath, title: "Path · " + path,
+				value: "forget", description: "Remove this durable write/edit/mkdir path", data: path,
+			})
+		}
+	}
+
+	// Interruptions section - use cached stats loaded asynchronously
+	if len(m.cachedInterruptionStats) > 0 {
 		items = append(items, permissionsItem{
-			action: permissionsForgetBash, title: "Bash rule",
-			value: prefix, description: "Remove this durable bash pattern", data: prefix,
+			action: permissionsSectionHeader, title: "Interruptions",
+			description: "Top approval prompts from ledger",
+		})
+		for _, stat := range m.cachedInterruptionStats {
+			items = append(items, m.buildInterruptionRow(stat))
+		}
+	} else if m.interruptionStatsLoading {
+		// Show a placeholder while loading
+		items = append(items, permissionsItem{
+			action: permissionsSectionHeader, title: "Interruptions",
+			description: "Loading...",
 		})
 	}
-	for _, tool := range rules.MCPTools {
-		items = append(items, permissionsItem{
-			action: permissionsForgetMCP, title: "MCP rule",
-			value: tool, description: "Remove this durable MCP tool allow", data: tool,
-		})
-	}
-	for _, server := range rules.MCPServers {
-		items = append(items, permissionsItem{
-			action: permissionsForgetMCPServer, title: "MCP server rule",
-			value: server, description: "Remove this whole-server allow (every tool, approval only)", data: server,
-		})
-	}
-	for _, path := range rules.WritePaths {
-		items = append(items, permissionsItem{
-			action: permissionsForgetPath, title: "Path rule",
-			value: path, description: "Remove this durable write/edit/mkdir path", data: path,
-		})
-	}
+
 	return items
 }
 
-func (m *Model) openPermissionsPanel() {
+func (m *Model) openPermissionsPanel() tea.Cmd {
 	// openSettingsChild may set overlayParent=Settings before calling this.
 	m.permissionsPanelState = newPermissionsPanelState(m.permissionsPanelItems(), m.width, m.height, m.isDark, m.themeID, m.glyphProfile)
 	m.permissionsPanelState.List.Title = "Permissions · " + permissionsPostureLabel(m.permissionsCurrentPosture())
 	m.overlay = OverlayPermissions
 	m.input.Blur()
+	
+	// Trigger async load of interruption stats
+	m.interruptionStatsLoading = true
+	return m.loadInterruptionStatsCmd()
 }
 
 func (m *Model) refreshPermissionsPanel() {
@@ -382,12 +441,8 @@ func (m *Model) activatePermissionsItem(item permissionsItem) tea.Cmd {
 		m.refreshPermissionsPanel()
 	case permissionsExport:
 		return m.exportWorkspaceRules("")
-	case permissionsImportHint:
-		m.entries = append(m.entries, ChatEntry{
-			Kind:    "system",
-			Content: "Import with: /permissions import [--replace] <path>",
-		})
-		m.refreshTranscript()
+	case permissionsImport:
+		return m.openImportForm()
 	case permissionsClearRules:
 		if m.agent == nil {
 			m.entries = append(m.entries, ChatEntry{Kind: "error", Content: "Agent is unavailable."})
@@ -453,8 +508,97 @@ func (m *Model) activatePermissionsItem(item permissionsItem) tea.Cmd {
 		}
 		m.refreshTranscript()
 		m.refreshPermissionsPanel()
+	case permissionsInterruptionRow:
+		return m.promoteInterruption(item)
+	case permissionsSectionHeader:
+		// Section headers are non-interactive
+		return nil
 	}
 	return nil
+}
+
+// loadInterruptionStatsCmd loads interruption stats asynchronously
+func (m *Model) loadInterruptionStatsCmd() tea.Cmd {
+	if m.sessionStore == nil || m.agent == nil {
+		return nil
+	}
+	
+	workspaceID, err := canonicalWorkspaceID(m.agent.WorkDir())
+	if err != nil {
+		return nil
+	}
+	
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+		defer cancel()
+		
+		dbStats, err := m.sessionStore.WorkspaceApprovalPromptStats(ctx, workspaceID, 10)
+		if err != nil || len(dbStats) == 0 {
+			return interruptionStatsLoadedMsg{Stats: nil}
+		}
+		
+		stats := make([]interruptionStat, 0, len(dbStats))
+		for _, s := range dbStats {
+			stats = append(stats, interruptionStat{
+				ToolName: s.ToolName,
+				Detail:   s.Detail,
+				Count:    s.Count,
+				LastAt:   s.LastAt,
+			})
+		}
+		return interruptionStatsLoadedMsg{Stats: stats}
+	}
+}
+
+func (m *Model) buildInterruptionRow(stat interruptionStat) permissionsItem {
+	detail := strings.TrimSpace(strings.TrimPrefix(stat.Detail, "interactive approval requested"))
+	detail = strings.TrimSpace(strings.TrimPrefix(detail, ":"))
+	
+	// Build a compact title showing count and kind
+	title := fmt.Sprintf("%d× %s", stat.Count, stat.ToolName)
+	if detail != "" {
+		title += " — " + detail
+	}
+	
+	// Suggest a grant type based on the tool
+	suggestedGrant := ""
+	canPromote := false
+	switch stat.ToolName {
+	case "bash":
+		// Check if we have a grant prefix
+		if strings.Contains(stat.Detail, " · grant prefix: ") {
+			suggestedGrant = "allow-bash pattern"
+			canPromote = true
+		}
+	case "write", "edit", "mkdir":
+		// Only offer promotion if we can extract a path
+		if extractPathFromDetail(stat.Detail) != "" {
+			suggestedGrant = "allow-path <path>"
+			canPromote = true
+		}
+	default:
+		if strings.Contains(stat.ToolName, "__") {
+			suggestedGrant = "allow-mcp " + stat.ToolName
+			canPromote = true
+		}
+	}
+	
+	desc := ""
+	if canPromote && suggestedGrant != "" {
+		desc = "Press Enter → " + suggestedGrant
+	} else if !canPromote && (stat.ToolName == "write" || stat.ToolName == "edit" || stat.ToolName == "mkdir") {
+		desc = "No path to promote — use /permissions allow-path manually"
+	}
+	
+	// Store canPromote in the stat for promotion logic
+	stat.CanPromote = canPromote
+	
+	return permissionsItem{
+		action:        permissionsInterruptionRow,
+		title:         title,
+		description:   desc,
+		interruptStat: &stat,
+	}
 }
 
 func (m *Model) exportWorkspaceRules(path string) tea.Cmd {
@@ -479,6 +623,119 @@ func (m *Model) exportWorkspaceRules(path string) tea.Cmd {
 	m.refreshTranscript()
 	m.refreshPermissionsPanel()
 	return nil
+}
+
+func (m *Model) openImportForm() tea.Cmd {
+	// Close fully to transcript/composer so import prefill works
+	// even when permissions panel was opened from Settings
+	m.closePermissionsPanel()
+	m.closeSettingsPicker() // Also close Settings if it was the parent
+	
+	m.entries = append(m.entries, ChatEntry{
+		Kind:    "system",
+		Content: "Enter import path with: /permissions import [--replace] <path>",
+	})
+	m.refreshTranscript()
+	
+	// Now composer should be editable
+	m.input.SetValue("/permissions import ")
+	m.input.CursorEnd()
+	m.input.Focus()
+	
+	return nil
+}
+
+func (m *Model) promoteInterruption(item permissionsItem) tea.Cmd {
+	if m.agent == nil || item.interruptStat == nil {
+		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: "Agent or stat unavailable."})
+		m.refreshTranscript()
+		return nil
+	}
+	
+	// Check if this interruption can be promoted
+	if !item.interruptStat.CanPromote {
+		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: "Cannot derive a safe rule from this interruption. Use /permissions allow-* manually."})
+		m.refreshTranscript()
+		return nil
+	}
+	
+	stat := item.interruptStat
+	toolName := stat.ToolName
+	detail := strings.TrimSpace(strings.TrimPrefix(stat.Detail, "interactive approval requested"))
+	detail = strings.TrimSpace(strings.TrimPrefix(detail, ":"))
+	
+	var err error
+	var message string
+	
+	switch toolName {
+	case "bash":
+		// Extract the "grant prefix:" segment that loop_dispatch already computed
+		prefix := ""
+		if idx := strings.Index(detail, " · grant prefix: "); idx >= 0 {
+			prefix = strings.TrimSpace(detail[idx+len(" · grant prefix: "):])
+		}
+		
+		if prefix != "" {
+			// Add trailing glob if not already present
+			if !strings.HasSuffix(prefix, "*") {
+				prefix = prefix + " *"
+			}
+			_, err = m.agent.AddWorkspaceBashPrefix(prefix)
+			if err == nil {
+				message = fmt.Sprintf("Saved durable bash rule: %s", prefix)
+			}
+		} else {
+			message = "Cannot derive a safe bash pattern from this interruption. Use /permissions allow-bash <pattern> manually."
+		}
+		
+	case "write", "edit", "mkdir":
+		// Try to extract path from detail
+		if path := extractPathFromDetail(detail); path != "" {
+			_, err = m.agent.AddWorkspaceWritePath(path)
+			if err == nil {
+				message = fmt.Sprintf("Saved durable path rule: %s", path)
+			}
+		} else {
+			message = "Cannot derive a path from this interruption. Use /permissions allow-path <path> manually."
+		}
+		
+	default:
+		// Check if it's an MCP tool
+		if strings.Contains(toolName, "__") {
+			_, err = m.agent.AddWorkspaceMCPTool(toolName)
+			if err == nil {
+				message = fmt.Sprintf("Saved durable MCP rule: %s", toolName)
+			}
+		} else {
+			message = fmt.Sprintf("Cannot derive a workspace rule for %q. Use /permissions allow-* manually.", toolName)
+		}
+	}
+	
+	if err != nil {
+		m.entries = append(m.entries, ChatEntry{Kind: "error", Content: err.Error()})
+	} else if message != "" {
+		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: message})
+	}
+	
+	m.refreshTranscript()
+	m.refreshPermissionsPanel()
+	return nil
+}
+
+func extractPathFromDetail(detail string) string {
+	// Look for common path patterns in detail
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return ""
+	}
+	// Simple heuristic: if it starts with / or contains /, treat as path
+	if strings.HasPrefix(detail, "/") || strings.Contains(detail, "/") {
+		fields := strings.Fields(detail)
+		if len(fields) > 0 {
+			return fields[0]
+		}
+	}
+	return ""
 }
 
 func (m *Model) importWorkspaceRules(data string) tea.Cmd {

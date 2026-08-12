@@ -199,6 +199,7 @@ func TestAutoReadOnlyOpaqueContextDispatchesBeforeProviderGeneration(t *testing.
 	)
 	if continuation == nil {
 		t.Fatal("exact external source did not produce an opaque continuation")
+		return
 	}
 
 	if err := agent.RunTurnWithOptions(context.Background(), &outputRecorder{}, "turn_auto_opaque", TurnOptions{
@@ -244,6 +245,7 @@ func TestOpaqueContextAdmissionFailureDoesNotConsumeOrReserveLA2History(t *testi
 	)
 	if continuation == nil {
 		t.Fatal("exact external source did not produce an opaque continuation")
+		return
 	}
 	fingerprint := continuation.continuation.Fingerprint
 	if fingerprint == "" {
@@ -309,6 +311,7 @@ func TestAutoReadOnlyPreflightRejectedHostContinuationDoesNotCountAsMalformedMod
 	)
 	if continuation == nil {
 		t.Fatal("exact external source did not produce an opaque continuation")
+		return
 	}
 
 	// The opaque type prevents this in production. Corrupt its private test-only

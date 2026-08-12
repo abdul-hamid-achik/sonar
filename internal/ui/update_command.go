@@ -895,8 +895,7 @@ func (m *Model) handleCommandActionWithDraft(result command.Result, draft string
 		m.preemptTranscriptSearch()
 		m.clearViewerModals(false)
 		m.overlayParent = OverlayNone
-		m.openPermissionsPanel()
-		return nil
+		return m.openPermissionsPanel()
 
 	case command.ActionSubagentsStatus:
 		m.preemptTranscriptSearch()

@@ -163,6 +163,7 @@ func TestAutoProgressCountsEffectfulSuccesses(t *testing.T) {
 	checkpoint := progress.checkpoint("turn", 40, 1, time.Second)
 	if checkpoint == nil {
 		t.Fatal("productive iteration produced no checkpoint")
+		return
 	}
 	if checkpoint.EffectfulSuccessfulCalls != 1 || checkpoint.SuccessfulToolCalls != 2 {
 		t.Fatalf("checkpoint counters = %#v", checkpoint)

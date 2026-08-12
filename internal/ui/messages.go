@@ -28,6 +28,11 @@ type StreamDoneMsg struct {
 	PromptTokens int
 }
 
+// interruptionStatsLoadedMsg delivers loaded interruption stats for the permissions panel.
+type interruptionStatsLoadedMsg struct {
+	Stats []interruptionStat
+}
+
 // ToolCallStartMsg signals a tool invocation has begun.
 type ToolCallStartMsg struct {
 	ID                      string
