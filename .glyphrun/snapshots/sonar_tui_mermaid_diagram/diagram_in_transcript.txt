@@ -4,15 +4,15 @@
 ▌  Draw the fixture pipeline.
 
 
-     The pipeline has three stages:
+   The pipeline has three stages:
 
-       ┌───────┐     ┌────────┐     ┌────────┐
-       │       │     │        │     │        │
-       │ Parse ├────►│ Layout ├────►│ Render │
-       │       │     │        │     │        │
-       └───────┘     └────────┘     └────────┘
+     ┌───────┐     ┌────────┐     ┌────────┐
+     │       │     │        │     │        │
+     │ Parse ├────►│ Layout ├────►│ Render │
+     │       │     │        │     │        │
+     └───────┘     └────────┘     └────────┘
 
-     Each stage hands its output to the next.
+   Each stage hands its output to the next.
 
 
 
