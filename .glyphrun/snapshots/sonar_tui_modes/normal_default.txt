@@ -24,4 +24,4 @@
 
 ───────────────────────────────────────────────────────────────────────
 ▏❯ Ask
-   enter send · shift+tab mode · esc · f1
+   enter send · shift+tab mode · f1 help

@@ -36,4 +36,4 @@
 
 
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
-   enter send · shift+tab mode · esc cancel · f1 help · ctrl+g voice
+   enter send · shift+tab mode · f1 help · ctrl+g voice

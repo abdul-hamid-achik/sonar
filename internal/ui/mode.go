@@ -146,7 +146,6 @@ func (m *Model) setMode(mode Mode) {
 		receipt := "After goal · " + ambientConfig.Label + " · active goal · AUTO"
 		m.entries = append(m.entries, ChatEntry{Kind: "system", Content: receipt})
 	}
-	m.maybeWarnMissingApprovalTimeout(mode)
 	m.refreshTranscript()
 	m.resumeFollow()
 	if m.overlay == OverlaySettings && m.settingsPickerState != nil {
@@ -157,11 +156,12 @@ func (m *Model) setMode(mode Mode) {
 	}
 }
 
-// maybeWarnMissingApprovalTimeout reminds once per process that AUTO without
-// tools.approval_timeout can park forever on the first modal. Timeout only
-// withholds permission — never grants it — so the notice is about wall-budget
-// waste, not safety. It uses the footer so Shift+Tab does not noise-fill the
-// transcript (mode already lives on the shortcuts row).
+// maybeWarnMissingApprovalTimeout reminds once per process that an unattended
+// AUTO path without tools.approval_timeout can park forever on the first modal.
+// It is deliberately NOT called from ordinary Shift+Tab mode cycling: that
+// notice would displace the status strip (approvals on · Done · …) and break
+// every snapshot that owns ambient chrome. Goal creation is the unattended
+// entry that needs the reminder.
 func (m *Model) maybeWarnMissingApprovalTimeout(mode Mode) {
 	if m == nil || m.approvalTimeoutWarned || mode != ModeAuto {
 		return

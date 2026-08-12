@@ -28,4 +28,4 @@
 ─────────────────────────────────────────────────────────────────────────────────────────
 ▏❯ Review the first receipt.
  │ Keep the second line while I check Settings.
-   enter send · shift+tab mode · esc cancel · f1 help
+   enter send · shift+tab mode · f1 help · ctrl+g voice

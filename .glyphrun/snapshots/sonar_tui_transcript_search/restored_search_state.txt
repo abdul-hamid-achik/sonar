@@ -4,18 +4,18 @@
 ▌  Review the release receipts.
 
 
-   I checked the saved verification receipts.
+     I checked the saved verification receipts.
 
 │  ✓ Read path=internal/ui/view.go (42ms)
-│  2 lines hidden · ctrl+r
+│  2 lines hidden · ctrl+t
 │  ✗ Run failed command=go test ./internal/ui (310ms)
 │  exit status 1: fixture regression
 
-   The read completed, the test failure is visible, and the interrupted effect needs inspection.
+     The read completed, the test failure is visible, and the interrupted effect needs inspection.
 
    notice · Restored session <session> · Recovery receipt review
 
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
    <session> · Recovery receipt review · Follow paused · end latest
 ▏❯ draft survives transcript search
-   enter send · shift+tab mode · esc cancel · f1 help · ctrl+g voice
+   enter send · shift+tab mode · f1 help · ctrl+g voice

@@ -1,4 +1,4 @@
-   DEEPSEEK · remote…
+   DEEPSEEK · remote prompts · 0/1.0M …
 
    PLAN · read-only
 
@@ -16,4 +16,4 @@
 
 ───────────────────────────────────────
 ▌❯ /
-   enter send · shift+tab · esc · f1
+   enter send · shift+tab mode · f1

@@ -1,6 +1,7 @@
                      ╭────────────────────────────────────────────────────────────────────────────╮
                      │ Help                                                                       │
                      │                                                                            │
+                     │                                                                            │
                      │ Voice                                                                      │
                      │   ctrl+g            Open the mic; the same key closes it and the           │
                      │                     transcription lands in the composer                    │
@@ -11,25 +12,24 @@
                      │   /voice status     Every voice setting, plus the config block that        │
                      │                     reproduces the session                                 │
                      │                                                                            │
+                     │ Waiting Indicator                                                          │
+                     │   ● position        How far this wait has gone against this model's        │
+                     │                     typical first response                                 │
+                     │   │ marker          Where the reply is expected — left of it is faster     │
+                     │                     than usual                                             │
+                     │   ● at the edge     The reply is late; the glyph warns past roughly twice  │
+                     │                     typical                                                │
+                     │   first wait        No typical value yet — the baseline is learned from    │
+                     │                     the second wait on                                     │
+                     │   /runtime          The same numbers without motion: last and typical      │
+                     │                     response time                                          │
+                     │                                                                            │
                      │ Slash Commands                                                             │
+                     │   Full registry — scroll for actions and availability                      │
                      │   /help             Show help overlay with shortcuts and commands          │
                      │   /clear            Clear conversation history                             │
                      │   /plan             Open a guided read-only planning form                  │
                      │   /goal             Create, inspect, pause, resume, budget, or drop a      │
                      │                     durable goal                                           │
-                     │   /goal new         Define a durable objective, acceptance, and budget     │
-                     │   /goal show        Unavailable · No goal is configured.                   │
-                     │   /goal pause       Unavailable · No goal is configured.                   │
-                     │   /goal resume      Unavailable · No goal is configured.                   │
-                     │   /goal budget      Unavailable · No goal is configured.                   │
-                     │   /goal drop        Unavailable · No goal is configured.                   │
-                     │   /model            Show, switch, or list models                           │
-                     │   /theme            Show, switch, or list color schemes                    │
-                     │   /provider         Show or switch inference provider profiles             │
-                     │   /recover          Review a paused execution and record typed evidence    │
-                     │   /agent            Show or switch agent profile                           │
-                     │   /load             Load a markdown file as context                        │
-                     │   /image            Attach or manage pending and historical images         │
-                     │   /image list       Show images attached to the pending prompt             │
-                     │ esc/q close · j/k scroll · pgup/pgdn page · 48%                            │
+                     │ esc/q close · j/k scroll · pgup/pgdn page · 47%                            │
                      ╰────────────────────────────────────────────────────────────────────────────╯

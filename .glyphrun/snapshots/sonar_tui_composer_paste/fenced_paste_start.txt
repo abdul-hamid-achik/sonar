@@ -28,4 +28,4 @@
  │ fixture line 03
  │ fixture line 04
  │ fixture line 05
-   enter send · shift+tab mode · esc cancel · f1 help
+   enter send · shift+tab mode · f1 help · ctrl+g voice
