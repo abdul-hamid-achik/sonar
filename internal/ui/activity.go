@@ -154,7 +154,7 @@ func (m *Model) currentWorkingActivity() (workingActivity, bool) {
 			activity.label = fmt.Sprintf("%d tools running", m.toolsPending)
 		}
 		return activity, true
-	case m.autoCheckpoints.segmentsContinued > 0 && (m.state == StateWaiting || m.state == StateStreaming):
+	case m.autoCheckpoints.SegmentsContinued > 0 && (m.state == StateWaiting || m.state == StateStreaming):
 		return workingActivity{
 			label:        "Continuing automatically",
 			compactLabel: "AUTO continuing",
@@ -433,7 +433,7 @@ func (m *Model) renderWorkingLine() string {
 		}
 		// The continuation counter is progress, not authority: it survives even
 		// when the badge itself belongs to another surface.
-		if continued := m.autoCheckpoints.segmentsContinued; continued > 0 {
+		if continued := m.autoCheckpoints.SegmentsContinued; continued > 0 {
 			authority = fmt.Sprintf("%s · seg %d", authority, continued+1)
 		}
 	case ModePlan:
@@ -710,15 +710,15 @@ func (m *Model) autoContinuationBudgetDetail() string {
 		return ""
 	}
 	segments := fmt.Sprintf("checkpoint %d/%d",
-		m.autoCheckpoints.segmentsContinued, m.autoCheckpoints.segmentCeiling())
-	if m.autoCheckpoints.startedAt.IsZero() {
+		m.autoCheckpoints.SegmentsContinued, m.autoCheckpoints.segmentCeiling())
+	if m.autoCheckpoints.StartedAt.IsZero() {
 		return segments
 	}
 	ceiling := m.autoCheckpoints.elapsedCeiling()
 	if ceiling <= 0 {
 		return segments
 	}
-	spent := m.nowTime().Sub(m.autoCheckpoints.startedAt)
+	spent := m.nowTime().Sub(m.autoCheckpoints.StartedAt)
 	if spent < 0 {
 		spent = 0
 	}

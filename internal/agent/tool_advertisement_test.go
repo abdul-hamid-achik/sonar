@@ -76,6 +76,22 @@ func TestApprovalCallbackKeepsTheFullCatalog(t *testing.T) {
 	}
 }
 
+func TestPlanAdvertisesOnlyTrustedReadOnlyMCP(t *testing.T) {
+	ag := advertisementFixture(t, false, true)
+	got := advertisedNames(ag.filterTrustedReadOnlyMCP(candidateDefs()))
+	if !got["vecgrep__vecgrep_search"] {
+		t.Fatal("PLAN hid a host-trusted read-only MCP route")
+	}
+	for _, unwanted := range []string{"vecgrep__vecgrep_clean", "vecgrep__vecgrep_index", "mcphub__mcphub_call_tool"} {
+		if got[unwanted] {
+			t.Errorf("PLAN advertised %s, which is not a trusted read-only route", unwanted)
+		}
+	}
+	if got["read"] || got["bash"] {
+		t.Fatal("read-only MCP filter must not keep built-ins; those come from the plan policy")
+	}
+}
+
 // skip-approvals lives inside the checker, so a tool that would have asked now
 // resolves to allow. Dropping it would break the documented posture.
 func TestSkipApprovalsKeepsTheFullCatalog(t *testing.T) {

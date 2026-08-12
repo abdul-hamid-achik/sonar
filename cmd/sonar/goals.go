@@ -332,8 +332,9 @@ func handleGoalOpen(store *db.Store, workspace string, args []string, stdout, st
 	jsonOutput := flags.Bool("json", false, "print machine-readable JSON")
 	objective := flags.String("objective", "", "bounded goal objective")
 	criterion := flags.String("criterion", "", "acceptance criterion (defaults to the objective)")
-	maxTurns := flags.Int64("max-continuation-turns", 3, "maximum automatic continuation turns")
-	maxTokens := flags.Int64("max-eval-tokens", 1000, "maximum evaluation tokens")
+	maxTurns := flags.Int64("max-continuation-turns", goal.DefaultContinuationTurns, "maximum automatic continuation turns")
+	maxTokens := flags.Int64("max-eval-tokens", goal.DefaultEvalTokens, "maximum evaluation tokens")
+	maxWall := flags.Duration("max-wall-time", goal.DefaultWallTime, "maximum wall time")
 	if code, done := flagParseExitCode(flags.Parse(args)); done {
 		return code
 	}
@@ -368,7 +369,11 @@ func handleGoalOpen(store *db.Store, workspace string, args []string, stdout, st
 	runtime, err := goal.New(goal.Spec{
 		SessionID: session.ID, Objective: objectiveText,
 		AcceptanceCriteria: []goal.AcceptanceCriterion{{ID: "criterion_1", Description: criterionText}},
-		Budget:             goal.BudgetLimits{MaxContinuationTurns: *maxTurns, MaxEvalTokens: *maxTokens},
+		Budget: goal.BudgetLimits{
+			MaxContinuationTurns: *maxTurns,
+			MaxEvalTokens:        *maxTokens,
+			MaxWallTime:          *maxWall,
+		},
 	})
 	if err != nil {
 		_ = store.DeleteSession(context.Background(), session.ID)
@@ -988,8 +993,9 @@ func writeGoalOpenUsage(writer io.Writer) {
 	_, _ = fmt.Fprintln(writer, "Options:")
 	_, _ = fmt.Fprintln(writer, "  --objective TEXT             Bounded goal objective (required)")
 	_, _ = fmt.Fprintln(writer, "  --criterion TEXT             Acceptance criterion (defaults to objective)")
-	_, _ = fmt.Fprintln(writer, "  --max-continuation-turns N   Automatic continuation budget (default 3)")
-	_, _ = fmt.Fprintln(writer, "  --max-eval-tokens N          Evaluation token budget (default 1000)")
+	_, _ = fmt.Fprintf(writer, "  --max-continuation-turns N   Automatic continuation budget (default %d)\n", goal.DefaultBudget.MaxContinuationTurns)
+	_, _ = fmt.Fprintf(writer, "  --max-eval-tokens N          Evaluation token budget (default %d)\n", goal.DefaultBudget.MaxEvalTokens)
+	_, _ = fmt.Fprintf(writer, "  --max-wall-time DURATION     Wall-time budget (default %s)\n", goal.DefaultBudget.MaxWallTime)
 	_, _ = fmt.Fprintln(writer, "  --json                       Print machine-readable JSON")
 	_, _ = fmt.Fprintln(writer, "  -h, --help                   Show this help")
 }

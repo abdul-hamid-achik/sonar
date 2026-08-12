@@ -447,6 +447,25 @@ func (snapshot ToolSnapshot) ServerAvailable(name string) bool {
 	return index < len(snapshot.AvailableServers) && snapshot.AvailableServers[index] == name
 }
 
+// ModelVisibleTools is the catalog a provider turn may advertise. Snapshot
+// retains failed-server definitions for UI/metrics; those routes cannot
+// succeed this turn, so offering them only teaches the model by wasting a
+// hosted call.
+func (snapshot ToolSnapshot) ModelVisibleTools() []llm.ToolDef {
+	if len(snapshot.Tools) == 0 {
+		return nil
+	}
+	visible := make([]llm.ToolDef, 0, len(snapshot.Tools))
+	for _, tool := range snapshot.Tools {
+		server, _, namespaced := strings.Cut(tool.Name, "__")
+		if !namespaced || !snapshot.ServerAvailable(server) {
+			continue
+		}
+		visible = append(visible, tool)
+	}
+	return visible
+}
+
 // SnapshotTools returns the current exposed definitions and epoch under one
 // registry lock. Tool parameter maps are detached so callers cannot mutate the
 // registry-owned catalog.

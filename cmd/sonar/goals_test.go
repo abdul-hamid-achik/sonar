@@ -336,6 +336,26 @@ func TestGoalOpenPersistsValidatedHeadlessRuntime(t *testing.T) {
 	}
 }
 
+func TestGoalOpenWithoutFlagsUsesTheSameBudgetsAsTheTUI(t *testing.T) {
+	store := openGoalCommandTestStore(t)
+	workspace := t.TempDir()
+	var stdout, stderr bytes.Buffer
+	if code := handleGoalOpen(store, workspace, []string{
+		"--objective", "Ship the durable run",
+		"--json",
+	}, &stdout, &stderr); code != 0 {
+		t.Fatalf("goal open code=%d stderr=%s", code, stderr.String())
+	}
+	var result goalOpenResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		t.Fatalf("decode goal open result: %v (%s)", err, stdout.String())
+	}
+	want := goal.DefaultBudget
+	if result.Goal.Budget != want {
+		t.Fatalf("unflagged goal open budget = %#v, want %#v", result.Goal.Budget, want)
+	}
+}
+
 func TestLoadHeadlessGoalStateRestoresContextPromptFloorFromSQLite(t *testing.T) {
 	store := openGoalCommandTestStore(t)
 	workspace := t.TempDir()

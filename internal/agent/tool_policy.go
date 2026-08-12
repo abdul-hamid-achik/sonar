@@ -38,7 +38,9 @@ func AskToolPolicy() ToolPolicy {
 }
 
 func PlanToolPolicy() ToolPolicy {
-	return AskToolPolicy()
+	policy := AskToolPolicy()
+	policy.AllowMCP = true
+	return policy
 }
 
 func BuildToolPolicy() ToolPolicy {

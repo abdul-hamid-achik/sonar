@@ -168,6 +168,21 @@ func TestDecideEstablishesAuthorityBeforeRefreshingGoalRuntime(t *testing.T) {
 	}
 }
 
+func TestHighestPriorityIssueMatchesDecide(t *testing.T) {
+	issues := []Issue{
+		{ID: "dep", Kind: IssueDependency, Summary: "blocked"},
+		{ID: "unknown", Kind: IssueOutcomeUnknown, Summary: "inspect it"},
+		{ID: "ask", Kind: IssueApproval, Summary: "approve"},
+	}
+	got, ids := HighestPriorityIssue(issues)
+	if got == nil || got.Kind != IssueOutcomeUnknown || got.ID != "unknown" {
+		t.Fatalf("highest = %#v", got)
+	}
+	if len(ids) != 3 {
+		t.Fatalf("ids = %#v", ids)
+	}
+}
+
 func TestDecideInitialManualAndRunningTurns(t *testing.T) {
 	runtime := newRuntime(t, true, goal.BudgetLimits{MaxContinuationTurns: 3})
 	decision, err := Decide(context.Background(), runtime, authority())

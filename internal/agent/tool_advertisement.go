@@ -32,6 +32,28 @@ import (
 //
 // Everything it removes would have been refused at dispatch with
 // approval_ui_unavailable, so nothing that could have succeeded is hidden.
+// filterTrustedReadOnlyMCP keeps only host-catalogued read-only MCP routes.
+// PLAN uses this so Cortex/Bob/search companions can inform a plan without
+// advertising anything that can mutate.
+func (a *Agent) filterTrustedReadOnlyMCP(defs []llm.ToolDef) []llm.ToolDef {
+	if len(defs) == 0 {
+		return defs
+	}
+	kept := make([]llm.ToolDef, 0, len(defs))
+	for _, def := range defs {
+		kind, _ := a.executionKind(def.Name)
+		if kind != executionpkg.KindMCP {
+			continue
+		}
+		contract, ok := a.trustedMCPContract(llm.ToolCall{Name: def.Name})
+		if !ok || !contract.auto || contract.effect != executionpkg.EffectReadOnly {
+			continue
+		}
+		kept = append(kept, def)
+	}
+	return kept
+}
+
 func (a *Agent) dropUnapprovableTools(defs []llm.ToolDef) []llm.ToolDef {
 	if len(defs) == 0 || !a.approvalSurfaceMissing() {
 		return defs

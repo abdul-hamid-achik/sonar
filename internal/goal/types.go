@@ -99,6 +99,22 @@ type BudgetLimits struct {
 	MaxWallTime          time.Duration `json:"max_wall_time,omitempty"`
 }
 
+const (
+	// DefaultContinuationTurns / DefaultEvalTokens / DefaultWallTime are the
+	// unflagged /goal and `goal open` starting budget. A goal is durable
+	// unattended work, so these must not be tighter than a casual AUTO turn.
+	DefaultContinuationTurns int64 = 24
+	DefaultEvalTokens        int64 = 250_000
+	DefaultWallTime                = 90 * time.Minute
+)
+
+// DefaultBudget is the unflagged /goal and `goal open` starting budget.
+var DefaultBudget = BudgetLimits{
+	MaxContinuationTurns: DefaultContinuationTurns,
+	MaxEvalTokens:        DefaultEvalTokens,
+	MaxWallTime:          DefaultWallTime,
+}
+
 func (b BudgetLimits) Validate() error {
 	if b.MaxContinuationTurns < 0 {
 		return fmt.Errorf("%w: continuation-turn budget must not be negative", ErrInvalid)

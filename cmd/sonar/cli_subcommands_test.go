@@ -107,7 +107,7 @@ func TestGoalSubcommandHelpDoesNotOpenDurableStore(t *testing.T) {
 		},
 		{
 			name: "open", command: "open", args: []string{"--help"},
-			want: []string{"sonar goal open --objective TEXT [options]", "--criterion TEXT", "--max-eval-tokens N"},
+			want: []string{"sonar goal open --objective TEXT [options]", "--criterion TEXT", "--max-eval-tokens N", "--max-wall-time DURATION"},
 		},
 		{
 			name: "run after positional", command: "run", args: []string{"42", "--help"},

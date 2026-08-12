@@ -685,6 +685,10 @@ func run() int {
 				fmt.Fprintf(os.Stderr, "goal run: inspect runtime: %v\n", snapshotErr)
 				return 1
 			}
+			if headlessRefusesCortexLinkedGoal(snapshot) {
+				fmt.Fprintf(os.Stderr, "goal run: not admitted: %s · headless has no Cortex evaluation loop\n", supervisor.StopCortexUnavailable)
+				return 1
+			}
 			if snapshot.State == goal.StatePaused {
 				// An explicit `goal run` is the resume authority; the supervisor
 				// then decides on the resumed state.
@@ -827,7 +831,25 @@ func run() int {
 			}
 			return 1
 		}
-		runErr := ag.RunTurnWithOptions(ctx, out, headlessTurnID, agent.TurnOptions{Limits: goalTurnLimits})
+		runErr := error(nil)
+		headlessTurnID, runErr = runHeadlessAutoChain(
+			ctx, ag, out, headlessTurnID, agent.TurnOptions{Limits: goalTurnLimits},
+			goalRuntime == nil && headlessMode == ui.ModeAuto,
+			time.Now(),
+			func(segmentTurnID string, _ *agent.AutoIterationCheckpointError) error {
+				cursorCtx, cancelCursor := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancelCursor()
+				nextCursor, cursorErr := headlessSnapshotExecutionCursor(cursorCtx, dbStore, ag, session.ID, workspace, executionCursor)
+				if cursorErr != nil {
+					return cursorErr
+				}
+				if err := persistHeadlessState(cursorCtx, nextCursor); err != nil {
+					return err
+				}
+				executionCursor = nextCursor
+				return nil
+			},
+		)
 		if goalRuntime != nil {
 			pending, snapshotErr := goalRuntime.Snapshot(context.Background())
 			if snapshotErr != nil {

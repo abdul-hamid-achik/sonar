@@ -8,9 +8,11 @@
 #
 #   provider: { type: groq }        # or cerebras, moonshot, fireworks, ...
 #
-# NOTE: only the OpenAI-compatible dialect exists today. That covers 27 of the
-# catalog's 40 providers; anthropic, google, azure, bedrock, and vertex need
-# their own dialects and will not work yet.
+# Dialects are chosen from provider identity, not endpoint shape. DeepSeek
+# has its own contract (thinking toggle + reasoning_content round-trip).
+# The Anthropic Messages API covers anthropic, kimi-coding, minimax, and
+# minimax-china. 27 other catalog providers ride OpenAI-compatible.
+# google, azure, bedrock, and vertex still need their own dialects.
 #
 # The whole block below is optional — the defaults already resolve to:
 #

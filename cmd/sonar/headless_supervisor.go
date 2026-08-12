@@ -6,6 +6,7 @@ import (
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
 	"github.com/abdul-hamid-achik/sonar/internal/controlplane"
 	"github.com/abdul-hamid-achik/sonar/internal/db"
+	"github.com/abdul-hamid-achik/sonar/internal/goal"
 	"github.com/abdul-hamid-achik/sonar/internal/supervisor"
 )
 
@@ -29,6 +30,13 @@ func headlessSupervisorIssues(ctx context.Context, store *db.Store, sessionID in
 // receiptDecision projects a supervisor decision into the bounded receipt
 // field. The goal snapshot inside the decision stays out of the receipt; the
 // goal store owns that state.
+// headlessRefusesCortexLinkedGoal is the fail-closed Cortex policy: headless
+// has no evaluation loop, so a linked goal must not burn a provider turn
+// and then stop with cortex_unavailable.
+func headlessRefusesCortexLinkedGoal(snapshot goal.Snapshot) bool {
+	return !snapshot.Cortex.Empty()
+}
+
 func receiptDecision(decision supervisor.Decision) *agent.TurnReceiptDecision {
 	return &agent.TurnReceiptDecision{
 		Action:   string(decision.Action),

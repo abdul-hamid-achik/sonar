@@ -88,7 +88,7 @@ func TestMinimumTerminalWorkingStatesFit(t *testing.T) {
 func TestAutoCheckpointActivityExplainsInvisibleContinuation(t *testing.T) {
 	m := newTestModel(t)
 	m.state = StateWaiting
-	m.autoCheckpoints.segmentsContinued = 2
+	m.autoCheckpoints.SegmentsContinued = 2
 	activity, ok := m.currentWorkingActivity()
 	if !ok || activity.label != "Continuing automatically" ||
 		activity.detail != "checkpoint 2/8" || !activity.cancellable {

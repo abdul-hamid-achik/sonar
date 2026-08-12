@@ -205,6 +205,30 @@ func TestRepeatedCompactionCarriesOnlyHostOwnedPriorSummary(t *testing.T) {
 	}
 }
 
+func TestCompactionDisablesReasoning(t *testing.T) {
+	client := &repeatedCompactionClient{}
+	ag := New(client, nil, 4_096)
+	ag.ReplaceMessages([]llm.Message{
+		{Role: "user", Content: "question one"},
+		{Role: "assistant", Content: "answer one"},
+		{Role: "user", Content: "question two"},
+		{Role: "assistant", Content: "answer two"},
+		{Role: "user", Content: "question three"},
+		{Role: "assistant", Content: "answer three"},
+		{Role: "user", Content: "question four"},
+		{Role: "assistant", Content: "answer four"},
+	})
+	if !ag.compactForContext(context.Background(), &mockOutput{}, 4_096) {
+		t.Fatal("compaction failed")
+	}
+	if len(client.summaryPrompts) != 1 {
+		t.Fatalf("summary requests = %d", len(client.summaryPrompts))
+	}
+	if !client.summaryPrompts[0].DisableReasoning {
+		t.Fatal("compaction paid for chain-of-thought; host-owned summaries must opt out")
+	}
+}
+
 func TestRepeatedCompactionCarriesSummaryAfterPersistedRoundTrip(t *testing.T) {
 	client := &repeatedCompactionClient{}
 	ag := New(client, nil, 4_096)

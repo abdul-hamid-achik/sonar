@@ -423,6 +423,13 @@ func validateEvaluationBasis(snapshot goal.Snapshot, basis EvaluationBasis) erro
 	return nil
 }
 
+// HighestPriorityIssue is the same issue ranking Decide uses, so TUI and
+// headless can refuse the same class of pending control-plane items before
+// they invent a second priority list.
+func HighestPriorityIssue(issues []Issue) (*Issue, []string) {
+	return highestPriorityIssue(issues)
+}
+
 func highestPriorityIssue(issues []Issue) (*Issue, []string) {
 	if len(issues) == 0 {
 		return nil, nil

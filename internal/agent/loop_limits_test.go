@@ -316,14 +316,16 @@ func (*reasoningOnlyTerminalClient) Embed(context.Context, string, []string) ([]
 }
 
 type emptyTerminalRepairClient struct {
-	calls          atomic.Int64
-	emptyResponses int
-	systems        []string
+	calls             atomic.Int64
+	emptyResponses    int
+	systems           []string
+	disableReasoning  []bool
 }
 
 func (c *emptyTerminalRepairClient) ChatStream(_ context.Context, options llm.ChatOptions, emit func(llm.StreamChunk) error) error {
 	call := int(c.calls.Add(1))
 	c.systems = append(c.systems, options.System)
+	c.disableReasoning = append(c.disableReasoning, options.DisableReasoning)
 	if call == 1 {
 		return emit(llm.StreamChunk{
 			Done: true, EvalCount: 1, PromptEvalCount: 10,
@@ -562,6 +564,9 @@ func TestRunTurnRepairsOneEmptyTerminalResponseAfterToolResult(t *testing.T) {
 		strings.Contains(client.systems[1], emptyTerminalRepairPrompt) ||
 		!strings.Contains(client.systems[2], emptyTerminalRepairPrompt) {
 		t.Fatalf("repair prompt scope = %#v", client.systems)
+	}
+	if len(client.disableReasoning) != 3 || client.disableReasoning[0] || client.disableReasoning[1] || !client.disableReasoning[2] {
+		t.Fatalf("repair DisableReasoning = %#v, want only the host-owned repair opted out", client.disableReasoning)
 	}
 
 	messages := agent.Messages()

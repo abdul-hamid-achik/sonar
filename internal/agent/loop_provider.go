@@ -86,12 +86,13 @@ func (t *turnRuntime) providerStage(ctx context.Context, i int) (string, []llm.T
 		requestMessageTokens = estimateMessagesPromptTokens(msgsSnapshot)
 
 		err := t.a.chatStreamWithResolvedImages(ctx, llm.ChatOptions{
-			Messages:        msgsSnapshot,
-			Tools:           t.tools,
-			System:          t.system,
-			MaxEvalTokens:   requestEvalLimit,
-			ExpectedContext: t.turnNumCtx,
-			ExpectedModel:   t.turnModel,
+			Messages:         msgsSnapshot,
+			Tools:            t.tools,
+			System:           t.system,
+			MaxEvalTokens:    requestEvalLimit,
+			ExpectedContext:  t.turnNumCtx,
+			ExpectedModel:    t.turnModel,
+			DisableReasoning: repairRequest,
 		}, func(chunk llm.StreamChunk) error {
 			callbackSeen = true
 			select {

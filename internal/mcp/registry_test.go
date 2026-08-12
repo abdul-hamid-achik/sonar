@@ -437,12 +437,18 @@ func TestRegistryToolSnapshotIsCoherentDetachedAndVersioned(t *testing.T) {
 	if failed.Epoch <= second.Epoch || len(failed.Tools) != 1 || failed.ServerAvailable("demo") {
 		t.Fatalf("failure did not advance epoch: before=%d after=%d", second.Epoch, failed.Epoch)
 	}
+	if visible := failed.ModelVisibleTools(); len(visible) != 0 {
+		t.Fatalf("failed server still advertised to the model: %#v", visible)
+	}
 	r.mu.Lock()
 	r.registerConnectedServerLocked("demo", &MCPClient{name: "demo"}, []llm.ToolDef{{Name: "inspect"}})
 	r.mu.Unlock()
 	reconnected := r.SnapshotTools()
 	if reconnected.Epoch <= failed.Epoch {
 		t.Fatalf("reconnect did not advance epoch: before=%d after=%d", failed.Epoch, reconnected.Epoch)
+	}
+	if visible := reconnected.ModelVisibleTools(); len(visible) != 1 || visible[0].Name != "demo__inspect" {
+		t.Fatalf("reconnect did not restore model-visible tools: %#v", visible)
 	}
 }
 

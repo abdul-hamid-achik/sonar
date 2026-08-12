@@ -68,10 +68,11 @@ func (a *Agent) compactForContext(ctx context.Context, out Output, numCtx int) b
 }
 
 func (a *Agent) compactForContextAndModel(ctx context.Context, out Output, numCtx int, expectedModel string) bool {
-	return a.compactForContextAndModelWithICE(ctx, out, numCtx, expectedModel, a.ICEEngine())
+	compacted, _ := a.compactForContextAndModelWithICE(ctx, out, numCtx, expectedModel, a.ICEEngine())
+	return compacted
 }
 
-func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output, numCtx int, expectedModel string, iceEngine *ice.Engine) bool {
+func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output, numCtx int, expectedModel string, iceEngine *ice.Engine) (bool, int64) {
 	a.mu.RLock()
 	messages := make([]llm.Message, len(a.messages))
 	copy(messages, a.messages)
@@ -79,12 +80,12 @@ func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output
 	msgCount := len(messages)
 
 	if msgCount <= keepMessages+1 {
-		return false // Not enough messages to compact.
+		return false, 0 // Not enough messages to compact.
 	}
 
 	splitAt := recentConversationBoundary(messages, keepMessages)
 	if splitAt <= 0 {
-		return false
+		return false, 0
 	}
 	older := append([]llm.Message(nil), messages[:splitAt]...)
 	recent := append([]llm.Message(nil), messages[splitAt:]...)
@@ -95,7 +96,7 @@ func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output
 	durableRecoveryContexts, err := collectDurableRecoveryContexts(messages)
 	if err != nil {
 		out.Error(fmt.Sprintf("compaction preserved full history because durable recovery context is invalid: %v", err))
-		return false
+		return false, 0
 	}
 	// Prefix text alone is never authority. Remove every prefixed system
 	// message from the ordinary transcript, then reinsert only the deduplicated
@@ -104,14 +105,14 @@ func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output
 	recent = stripDurableRecoveryPrefixMessages(recent)
 	if !hasSummarizableConversationContent(older) {
 		out.Error("compaction preserved full history because no older conversation content can be summarized")
-		return false
+		return false, 0
 	}
 
 	summary := summarizeMessages(older)
 	summary, maxSummaryTokens, ok := boundCompactionPrompt(summary, numCtx)
 	if !ok {
 		out.Error("compaction preserved full history because the summarizer prompt cannot reserve generation space in the active context window")
-		return false
+		return false, 0
 	}
 
 	if reporter, ok := out.(contextCompactionLifecycleOutput); ok {
@@ -121,24 +122,30 @@ func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output
 
 	// Ask LLM to produce a compact summary.
 	var summaryBuf strings.Builder
+	var summaryEvalTokens int64
 	err = a.chatStreamWithResolvedImages(ctx, llm.ChatOptions{
 		Messages: []llm.Message{
 			{Role: "user", Content: summary, HostOwned: true},
 		},
-		System:          compactionSystemPrompt,
-		MaxEvalTokens:   maxSummaryTokens,
-		ExpectedContext: numCtx,
-		ExpectedModel:   expectedModel,
+		System:           compactionSystemPrompt,
+		MaxEvalTokens:    maxSummaryTokens,
+		ExpectedContext:  numCtx,
+		ExpectedModel:    expectedModel,
+		DisableReasoning: true,
 	}, func(chunk llm.StreamChunk) error {
 		if chunk.Text != "" {
 			summaryBuf.WriteString(chunk.Text)
+		}
+		if chunk.Done && chunk.EvalCount > 0 {
+			summaryEvalTokens = int64(chunk.EvalCount)
+			out.StreamDone(chunk.EvalCount, chunk.PromptEvalCount)
 		}
 		return nil
 	})
 
 	if err != nil {
 		out.Error(fmt.Sprintf("compaction failed: %v", providerBoundaryError(err)))
-		return false
+		return false, 0
 	}
 
 	summaryText := strings.TrimSpace(summaryBuf.String())
@@ -147,7 +154,7 @@ func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output
 	// exact context window.
 	summaryText = boundPromptTextByEstimatedTokens(summaryText, min(maxConversationSummaryTokens, maxSummaryTokens))
 	if summaryText == "" {
-		return false
+		return false, 0
 	}
 
 	// ICE: persist summary for cross-session retrieval.
@@ -168,7 +175,7 @@ func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output
 				a.logger.Warn("pre-compaction checkpoint failed", "err", err)
 			}
 			out.Error(fmt.Sprintf("compaction preserved full history because its recovery checkpoint failed: %v", err))
-			return false
+			return false, 0
 		}
 	}
 
@@ -188,7 +195,7 @@ func (a *Agent) compactForContextAndModelWithICE(ctx context.Context, out Output
 		reporter.ContextCompacted()
 	}
 	out.SystemMessage(fmt.Sprintf("Context compacted: %d messages summarized, %d kept", len(older), len(recent)+len(durableRecoveryContexts)))
-	return true
+	return true, summaryEvalTokens
 }
 
 // boundCompactionPrompt keeps the summarizer request beneath the same 75%

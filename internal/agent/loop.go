@@ -162,6 +162,9 @@ func (a *Agent) RunTurnWithOptions(ctx context.Context, out Output, turnID strin
 	var turnMCPSnapshot mcpPkg.ToolSnapshot
 	if turnToolPolicy.AllowMCP && a.registry != nil {
 		turnMCPSnapshot = a.mcpToolSnapshot()
+		if authorityMode == AuthorityPlan {
+			turnMCPSnapshot.Tools = a.filterTrustedReadOnlyMCP(turnMCPSnapshot.Tools)
+		}
 		tools = append(tools, turnMCPSnapshot.Tools...)
 	}
 	// Merge memory built-in tools if available.

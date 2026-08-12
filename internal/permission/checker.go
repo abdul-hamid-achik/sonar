@@ -448,10 +448,10 @@ func (r ApprovalResponse) Normalize() ApprovalResponse {
 	case DecisionAllowSession:
 		r.Allowed, r.Always = true, true
 		// Empty ScopeKind means exact_request. Unknown kinds fail closed.
-		switch r.ScopeKind {
-		case ScopeSessionTool, ScopeSessionPath, ScopeSessionBashPrefix, ScopeSessionMCPTool:
-			// keep
-		default:
+		// Empty ScopeKind means exact_request. Unknown kinds fail closed.
+		// KnownSessionScopeKind is the single allowlist so a new session
+		// scope cannot be offered by the TUI and then stripped here.
+		if !KnownSessionScopeKind(r.ScopeKind) {
 			r.ScopeKind = ""
 		}
 	default:

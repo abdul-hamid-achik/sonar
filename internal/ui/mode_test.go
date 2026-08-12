@@ -491,8 +491,8 @@ func TestDefaultModeConfigs(t *testing.T) {
 	if configs[ModePlan].Label != "PLAN" {
 		t.Errorf("ModePlan label should be PLAN, got %q", configs[ModePlan].Label)
 	}
-	if configs[ModePlan].ToolPolicy.AllowMCP {
-		t.Error("ModePlan should not allow MCP tools")
+	if !configs[ModePlan].ToolPolicy.AllowMCP {
+		t.Error("ModePlan should advertise host-trusted read-only MCP tools")
 	}
 
 	if configs[ModeAuto].Label != "AUTO" {

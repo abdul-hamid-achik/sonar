@@ -15,7 +15,7 @@ func TestAutoContinuationShowsBothBudgetDimensions(t *testing.T) {
 	m := newTestModel(t)
 	started := time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC)
 	m.autoCheckpoints.reset("turn-long", started, 40, 6*time.Hour)
-	m.autoCheckpoints.segmentsContinued = 13
+	m.autoCheckpoints.SegmentsContinued = 13
 	m.now = func() time.Time { return started.Add(2*time.Hour + 30*time.Minute) }
 
 	detail := m.autoContinuationBudgetDetail()
@@ -32,7 +32,7 @@ func TestDefaultCeilingStillReportsTime(t *testing.T) {
 	m := newTestModel(t)
 	started := time.Date(2026, 8, 5, 9, 0, 0, 0, time.UTC)
 	m.autoCheckpoints.reset("turn", started, 0, 0)
-	m.autoCheckpoints.segmentsContinued = 2
+	m.autoCheckpoints.SegmentsContinued = 2
 	m.now = func() time.Time { return started.Add(12 * time.Minute) }
 
 	detail := m.autoContinuationBudgetDetail()
@@ -45,7 +45,7 @@ func TestDefaultCeilingStillReportsTime(t *testing.T) {
 // would read as a run that just began. The segment counter stands alone.
 func TestMissingStartTimeReportsSegmentsOnly(t *testing.T) {
 	m := newTestModel(t)
-	m.autoCheckpoints.segmentsContinued = 1
+	m.autoCheckpoints.SegmentsContinued = 1
 	detail := m.autoContinuationBudgetDetail()
 	if strings.Contains(detail, "/") != true {
 		t.Fatalf("detail lost the segment counter: %q", detail)

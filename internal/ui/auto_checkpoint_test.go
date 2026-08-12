@@ -225,8 +225,8 @@ func TestAgentDoneRepeatedAutoCheckpointStopsAndSettles(t *testing.T) {
 	m.turnAuthority = ModeAuto
 	m.turnRunContext = context.Background()
 	m.autoCheckpoints.reset("turn-root", started, config.DefaultAutoMaxSegments, config.DefaultAutoMaxWallTime)
-	m.autoCheckpoints.lastDigest = "same-progress"
-	m.autoCheckpoints.segmentsContinued = 1
+	m.autoCheckpoints.LastDigest = "same-progress"
+	m.autoCheckpoints.SegmentsContinued = 1
 
 	updated, command := m.Update(AgentDoneMsg{
 		TurnID: "turn-root", SegmentTurnID: "turn-segment",

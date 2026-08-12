@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,47 +25,23 @@ import (
 // constants, so an unconfigured harness behaves exactly as before.
 
 type autoCheckpointSupervisor struct {
-	logicalTurnID     string
-	startedAt         time.Time
-	segmentsContinued int
-	lastDigest        string
-	maxSegments       int
-	maxElapsed        time.Duration
+	agent.AutoSegmentState
 }
 
 func (s *autoCheckpointSupervisor) reset(logicalTurnID string, startedAt time.Time, maxSegments int, maxElapsed time.Duration) {
-	if maxSegments <= 0 {
-		maxSegments = config.DefaultAutoMaxSegments
-	}
-	if maxElapsed <= 0 {
-		maxElapsed = config.DefaultAutoMaxWallTime
-	}
-	*s = autoCheckpointSupervisor{
-		logicalTurnID: strings.TrimSpace(logicalTurnID),
-		startedAt:     startedAt,
-		maxSegments:   maxSegments,
-		maxElapsed:    maxElapsed,
-	}
+	s.Reset(logicalTurnID, startedAt, maxSegments, maxElapsed)
 }
 
-// segmentCeiling and elapsedCeiling answer for a zero-valued supervisor, which
-// is what a test fixture or a pre-reset frame holds.
 func (s *autoCheckpointSupervisor) segmentCeiling() int {
-	if s == nil || s.maxSegments <= 0 {
-		return config.DefaultAutoMaxSegments
-	}
-	return s.maxSegments
+	return s.SegmentCeiling()
 }
 
 func (s *autoCheckpointSupervisor) elapsedCeiling() time.Duration {
-	if s == nil || s.maxElapsed <= 0 {
-		return config.DefaultAutoMaxWallTime
-	}
-	return s.maxElapsed
+	return s.ElapsedCeiling()
 }
 
 func (s *autoCheckpointSupervisor) clear() {
-	*s = autoCheckpointSupervisor{}
+	s.Clear()
 }
 
 func (s *autoCheckpointSupervisor) admit(
@@ -74,66 +49,15 @@ func (s *autoCheckpointSupervisor) admit(
 	checkpoint *agent.AutoIterationCheckpointError,
 	now time.Time,
 ) error {
-	if s == nil || checkpoint == nil {
-		return errors.New("checkpoint receipt is unavailable")
-	}
-	if strings.TrimSpace(logicalTurnID) == "" || logicalTurnID != s.logicalTurnID {
-		return errors.New("checkpoint does not belong to the active turn")
-	}
-	digest := strings.TrimSpace(checkpoint.ProgressDigest)
-	if digest == "" {
-		return errors.New("checkpoint has no progress identity")
-	}
-	if digest == s.lastDigest && checkpoint.EffectfulSuccessfulCalls == 0 {
-		// A read-only replay of the previous segment's exact work set is a
-		// stall. A repeated set that includes verified effects (for example a
-		// build/test cycle run again after new edits landed earlier in the
-		// logical turn) may legitimately recur; the segment and time budgets
-		// still bound it.
-		return errors.New("the last AUTO segment repeated without new progress")
-	}
-	if s.segmentsContinued >= s.segmentCeiling() {
-		return fmt.Errorf("the %d-segment AUTO continuation budget was exhausted", s.segmentCeiling())
-	}
-	if !s.startedAt.IsZero() && now.Sub(s.startedAt) >= s.elapsedCeiling() {
-		return fmt.Errorf("the %s AUTO continuation time budget was exhausted", s.elapsedCeiling())
-	}
-	s.segmentsContinued++
-	s.lastDigest = digest
-	return nil
+	return s.Admit(logicalTurnID, checkpoint, now)
 }
 
-// defaultPlainAutoTurnLimits gives an otherwise-unbounded AUTO turn the same
-// wall ceiling the checkpoint supervisor already enforces across segments.
-// Without it, one wedged segment — for example an approval prompt that never
-// receives an answer — could hold the logical turn open forever. Goals and
-// other bounded callers keep their own budgets; interactive NORMAL and PLAN
-// turns stay unbounded because the user is watching them.
 func defaultPlainAutoTurnLimits(limits agent.TurnLimits, authority Mode, wallTime time.Duration) agent.TurnLimits {
-	if authority != ModeAuto {
-		return limits
-	}
-	if limits.MaxEvalTokens > 0 || !limits.Deadline.IsZero() || limits.MaxWallTime > 0 {
-		return limits
-	}
-	if wallTime <= 0 {
-		wallTime = config.DefaultAutoMaxWallTime
-	}
-	limits.MaxWallTime = wallTime
-	return limits
+	return agent.ApplyDefaultAutoTurnLimits(limits, authority == ModeAuto, wallTime)
 }
 
 func normalizeLogicalTurnLimits(limits agent.TurnLimits, now time.Time) agent.TurnLimits {
-	if limits.MaxWallTime <= 0 {
-		return limits
-	}
-	deadline := now.Add(limits.MaxWallTime)
-	if limits.Deadline.IsZero() || deadline.Before(limits.Deadline) {
-		limits.Deadline = deadline
-	}
-	// A relative limit must not restart at every AUTO segment.
-	limits.MaxWallTime = 0
-	return limits
+	return agent.NormalizeLogicalTurnLimits(limits, now)
 }
 
 func newAgentSegmentCmd(
@@ -203,18 +127,15 @@ func (m *Model) handleAutoIterationCheckpoint(message AgentDoneMsg) (tea.Cmd, bo
 
 	// Preserve a logical eval budget across segment boundaries. The agent owns
 	// the exact usage receipt; no provider prose or tool result crosses here.
-	if remaining := m.turnRunOptions.Limits.MaxEvalTokens; remaining > 0 {
-		remaining -= checkpoint.EvalTokens
-		if remaining <= 0 {
-			err := errors.New("the logical turn evaluation-token budget was exhausted")
-			m.entries = append(m.entries, ChatEntry{
-				Kind: "error", Content: "AUTO stopped safely at a continuation checkpoint: " + err.Error() + ".",
-			})
-			m.invalidateEntryCache()
-			return nil, false, fmt.Errorf("AUTO continuation stopped: %w", err)
-		}
-		m.turnRunOptions.Limits.MaxEvalTokens = remaining
+	continuedLimits, limitsErr := agent.ContinueAutoLimits(m.turnRunOptions.Limits, checkpoint)
+	if limitsErr != nil {
+		m.entries = append(m.entries, ChatEntry{
+			Kind: "error", Content: "AUTO stopped safely at a continuation checkpoint: " + limitsErr.Error() + ".",
+		})
+		m.invalidateEntryCache()
+		return nil, false, fmt.Errorf("AUTO continuation stopped: %w", limitsErr)
 	}
+	m.turnRunOptions.Limits = continuedLimits
 	// Host continuations are one-shot capabilities. Re-presenting one on a later
 	// segment would be stale even if the agent's claim guard rejected it.
 	m.turnRunOptions.Continuation = nil
@@ -249,7 +170,7 @@ func (m *Model) handleAutoIterationCheckpoint(message AgentDoneMsg) (tea.Cmd, bo
 		Kind: "system",
 		Content: fmt.Sprintf(
 			"AUTO checkpoint · continuing segment %d · %d/%d tools ok · %s",
-			m.autoCheckpoints.segmentsContinued+1, checkpoint.SuccessfulToolCalls,
+			m.autoCheckpoints.SegmentsContinued+1, checkpoint.SuccessfulToolCalls,
 			checkpoint.ToolCalls, formatWorkingElapsed(checkpoint.Elapsed),
 		),
 	})

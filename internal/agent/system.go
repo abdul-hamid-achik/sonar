@@ -30,14 +30,8 @@ const (
 // a hung network mount or slow repository cannot stall the turn.
 const gitProbeTimeout = 750 * time.Millisecond
 
-const systemTemplate = `You are a helpful personal assistant running locally on the user's machine.
+const systemTemplate = `You are a terminal coding agent. Inference is hosted; tools run on this machine.
 You have access to tools via MCP servers. You MUST use tools to accomplish tasks — do not guess or make up answers when a tool can provide the real information.
-%s
-Current date: %s
-%s%s
-%s%s%s
-## Available Tools
-%s
 ## Guidelines
 - **ALWAYS use your tools** when the user asks you to read, explore, search, or modify files. You have filesystem tools — use them.
 - When the user says "read this codebase" or similar, use list/read tools starting from the working directory shown above.
@@ -48,13 +42,15 @@ Current date: %s
 - If you're unsure about something, say so rather than guessing.
 - Never fabricate tool results — always call the actual tool.
 - Do NOT claim you cannot access files or the filesystem. You have tools for that — use them.
-%s`
+## Available Tools
+%s
+%s
+%sCurrent date: %s
+%s%s
+%s%s%s`
 
 // smallModelTemplate is a more concise template for small models (0.8B, 2B).
-const smallModelTemplate = `You are a local AI assistant. Use tools to read/write files and run commands.
-%sDate: %s
-%s%s
-%s%s%s
+const smallModelTemplate = `You are a terminal coding agent. Inference is hosted; tools run on this machine. Use tools to read/write files and run commands.
 ## Tools
 %s
 Guidelines:
@@ -63,7 +59,10 @@ Guidelines:
 - If a tool fails, continue with available information
 - Don't guess - use tools to verify
 - You can complete tasks even if some tools fail
-%s`
+%s
+%sDate: %s
+%s%s
+%s%s%s`
 
 var modelSizePattern = regexp.MustCompile(`(?:^|[^0-9.])(\d+(?:\.\d+)?)b(?:$|[^a-z0-9])`)
 
@@ -232,7 +231,11 @@ func formatSystemPrompt(modelName string, sections boundedPromptSections) string
 		template = smallModelTemplate
 	}
 	dateStr := time.Now().Format("Monday, January 2, 2006")
+	// Stable identity, guidelines, and tool count come first so DeepSeek's
+	// prefix cache survives mode, date, and loaded-context changes.
 	return fmt.Sprintf(template,
+		sections.ToolList,
+		sections.MemoryGuidelines,
 		sections.ModePrefixSection,
 		dateStr,
 		sections.EnvSection,
@@ -240,8 +243,6 @@ func formatSystemPrompt(modelName string, sections boundedPromptSections) string
 		sections.SkillSection,
 		sections.CtxSection,
 		sections.MemorySection,
-		sections.ToolList,
-		sections.MemoryGuidelines,
 	)
 }
 

@@ -790,6 +790,7 @@ func (a *Agent) mcpToolSnapshot() mcp.ToolSnapshot {
 		return mcp.ToolSnapshot{}
 	}
 	snapshot := a.registry.SnapshotTools()
+	snapshot.Tools = snapshot.ModelVisibleTools()
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	if !a.mcpScopeSet {

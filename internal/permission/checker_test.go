@@ -293,3 +293,32 @@ func TestAllowSessionToolNormalizesWithScopeKind(t *testing.T) {
 		t.Fatalf("unknown scope retained: %#v", cleared)
 	}
 }
+
+// The TUI offers "shell reads under this directory this session" and
+// "this MCP server this session". Those answers travel through
+// ResolveApprovalContextWithTimeout, which Normalize()s every host
+// response. Dropping the kinds here collapses them to exact-request.
+func TestSessionReadDirAndMCPServerSurviveNormalize(t *testing.T) {
+	for _, want := range []string{ScopeSessionShellReadDir, ScopeSessionMCPServer} {
+		var constructor func() ApprovalResponse
+		switch want {
+		case ScopeSessionShellReadDir:
+			constructor = AllowSessionShellReadDir
+		case ScopeSessionMCPServer:
+			constructor = AllowSessionMCPServer
+		}
+		got := constructor().Normalize()
+		if got.Decision != DecisionAllowSession || got.ScopeKind != want {
+			t.Fatalf("Normalize(%s) = %#v", want, got)
+		}
+		live := ResolveApprovalContextWithTimeout(
+			context.Background(),
+			ApprovalRequest{ToolName: "bash"},
+			func(request ApprovalRequest) { request.Response <- constructor() },
+			time.Second,
+		)
+		if live.Decision != DecisionAllowSession || live.ScopeKind != want {
+			t.Fatalf("live approval %s = %#v", want, live)
+		}
+	}
+}

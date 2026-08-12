@@ -28,7 +28,7 @@ func TestBuildSystemPrompt(t *testing.T) {
 		{
 			name:        "no optional sections",
 			contains:    []string{"No tools currently available.", "Current date:"},
-			notContains: []string{"Active Skills", "Loaded Context", "Remembered Facts"},
+			notContains: []string{"Active Skills", "Loaded Context", "Remembered Facts", "running locally", "local AI assistant"},
 		},
 		{
 			name: "with tools",
@@ -84,6 +84,32 @@ func TestBuildSystemPrompt(t *testing.T) {
 			t.Error("expected memory content in prompt")
 		}
 	})
+}
+
+func TestSystemPromptIsHostedAndCacheStable(t *testing.T) {
+	got := buildSystemPrompt(context.Background(), systemPromptOptions{
+		ModePrefix:    "PLAN MODE — read only.",
+		LoadedContext: "turn-specific loaded context",
+		Tools:         []llm.ToolDef{{Name: "read"}},
+	})
+	for _, banned := range []string{"running locally", "local AI assistant", "locally on the user's machine"} {
+		if strings.Contains(got, banned) {
+			t.Fatalf("system prompt still claims locality (%q)", banned)
+		}
+	}
+	if !strings.Contains(got, "hosted") {
+		t.Fatal("system prompt does not say inference is hosted")
+	}
+	toolsAt := strings.Index(got, "## Available Tools")
+	dateAt := strings.Index(got, "Current date:")
+	modeAt := strings.Index(got, "PLAN MODE")
+	loadedAt := strings.Index(got, "turn-specific loaded context")
+	if toolsAt < 0 || dateAt < 0 || modeAt < 0 || loadedAt < 0 {
+		t.Fatalf("missing expected sections: tools=%d date=%d mode=%d loaded=%d", toolsAt, dateAt, modeAt, loadedAt)
+	}
+	if toolsAt >= dateAt || toolsAt >= modeAt || toolsAt >= loadedAt {
+		t.Fatalf("unstable turn text precedes the stable tool prefix: tools=%d date=%d mode=%d loaded=%d", toolsAt, dateAt, modeAt, loadedAt)
+	}
 }
 
 func TestSystemPromptMemoryGuidelinesMatchAdvertisedTools(t *testing.T) {

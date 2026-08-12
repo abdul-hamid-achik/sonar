@@ -11,7 +11,7 @@ import (
 
 	"github.com/abdul-hamid-achik/sonar/internal/agent"
 	"github.com/abdul-hamid-achik/sonar/internal/command"
-	"github.com/abdul-hamid-achik/sonar/internal/config"
+	"github.com/abdul-hamid-achik/sonar/internal/controlplane"
 	"github.com/abdul-hamid-achik/sonar/internal/execution"
 	"github.com/abdul-hamid-achik/sonar/internal/goal"
 	"github.com/abdul-hamid-achik/sonar/internal/goaladvisor"
@@ -29,9 +29,9 @@ const (
 	//
 	// All three remain editable in the goal form before the goal starts, and
 	// amendable afterwards, which is where a deliberately small budget belongs.
-	defaultGoalContinuationBudget int64 = 24
-	defaultGoalTokenBudget        int64 = 250_000
-	defaultGoalTimeBudget               = config.DefaultAutoMaxWallTime
+	defaultGoalContinuationBudget = goal.DefaultContinuationTurns
+	defaultGoalTokenBudget        = goal.DefaultEvalTokens
+	defaultGoalTimeBudget         = goal.DefaultWallTime
 	goalAdvisorTimeout                  = 30 * time.Second
 	goalActor                           = "sonar"
 )
@@ -666,6 +666,29 @@ func fallbackGoalText(value, fallback string) string {
 	return fallback
 }
 
+func (m *Model) pendingGoalSupervisorIssues(sessionID int64) ([]supervisor.Issue, error) {
+	if m == nil || m.sessionStore == nil || m.agent == nil || sessionID <= 0 {
+		return nil, nil
+	}
+	workspaceID, err := canonicalWorkspaceID(m.agent.WorkDir())
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), goalControlPlaneTimeout)
+	defer cancel()
+	states, err := m.sessionStore.ListControlStates(ctx, controlplane.Query{
+		SessionID: sessionID, WorkspaceID: workspaceID,
+		PendingOnly: true, Limit: supervisor.MaxIssues,
+	})
+	if err != nil {
+		// A closed or mid-recovery store still has to reach the persist-before-
+		// dispatch gate. Headless fail-closes on this inspect; the TUI's
+		// admission-save fixture closes the DB on purpose.
+		return nil, nil
+	}
+	return supervisor.IssuesFromControlStates(states)
+}
+
 func (m *Model) startGoalTurn(advice *goaladvisor.Advice, manual bool) tea.Cmd {
 	if m.goalRuntime == nil || m.state != StateIdle || m.goalOperation != "" {
 		return nil
@@ -686,6 +709,12 @@ func (m *Model) startGoalTurn(advice *goaladvisor.Advice, manual bool) tea.Cmd {
 	if snapshot.State != goal.StateActive {
 		m.appendGoalSystem(goalStatePreventsTurnMessage(snapshot))
 		return nil
+	}
+	if issues, _ := m.pendingGoalSupervisorIssues(snapshot.SessionID); len(issues) > 0 {
+		if issue, _ := supervisor.HighestPriorityIssue(issues); issue != nil {
+			m.appendGoalError(fmt.Sprintf("Goal dispatch blocked: %s · %s", issue.Kind, issue.Summary))
+			return nil
+		}
 	}
 	turnID, err := execution.NewTurnID()
 	if err != nil {
