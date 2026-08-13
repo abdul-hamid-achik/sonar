@@ -13,8 +13,8 @@
                      │   ctrl+e            Open in $VISUAL/$EDITOR                                │
                      │                                                                            │
                      │   Select                                                                   │
-                     │   alt+m             Mouse capture off/on — turn off to select and copy ·   │
-                     │                     /mouse also                                            │
+                     │   alt+m             Mouse capture on/off — on for wheel scroll · /mouse    │
+                     │                     also                                                   │
                      │   ctrl+y            Copy last response (empty input)                       │
                      │                                                                            │
                      │   Read                                                                     │

@@ -12,7 +12,7 @@
 │   /plan · Open a guided read-only… │
 │   /goal · Create, inspect, pause,… │
 │   /model · Show, switch, or list … │
-│   /mouse · Toggle mouse capture s… │
+│   /mouse · Toggle mouse capture f… │
 │   /theme · Show, switch, or list … │
 │ esc cancel · enter select · ↑/↓    │
 ╰────────────────────────────────────╯

@@ -50,19 +50,21 @@ process.
 | `ctrl+f` | search the transcript |
 | `ctrl+g` | dictate into the composer |
 | `f1` | every key and command |
-| `/mouse` | turn mouse capture off so the terminal can select and copy; `alt+m` is the same chord when the terminal actually sends it |
+| `/mouse` | turn mouse capture on for wheel-scroll and click-to-expand; `alt+m` is the same chord when the terminal actually sends it |
 | `ctrl+y` | copy the last reply when the draft is empty — including over tmux and SSH |
 
 Run `/help` for the rest.
 
 ## Select and copy
 
-Mouse reporting is on so the wheel scrolls the transcript. That is also what
-stops the terminal from drag-selecting.
+Drag-select is the default. Mouse reporting stays off so the terminal owns
+press and release, the way any other program in a terminal works.
 
-Most terminals hand the mouse back with a modifier: `shift+drag` in Ghostty,
-kitty, WezTerm, Alacritty and xterm; `option+drag` in iTerm2. Terminal.app has
-none. `/mouse` turns capture off in every terminal; `pgup`/`pgdn` still scroll.
+`/mouse` (or `alt+m`) turns capture on when you want the wheel to scroll the
+transcript or a click to expand a tool card. `pgup`/`pgdn` always scroll.
+While capture is on, most terminals still hand the mouse back with a
+modifier: `shift+drag` in Ghostty, kitty, WezTerm, Alacritty and xterm;
+`option+drag` in iTerm2. Terminal.app has none — toggle capture off again.
 
 Stock macOS terminals compose Option+M into µ instead of sending `alt+m`.
 `/mouse` is the binding that still works. To make `alt+m` itself work:

@@ -172,7 +172,7 @@ func RegisterBuiltins(r *Registry) {
 	r.Register(&Command{
 		Name:        "mouse",
 		Aliases:     []string{"select"},
-		Description: "Toggle mouse capture so the terminal can select and copy text",
+		Description: "Toggle mouse capture for wheel scrolling (select is the default)",
 		Usage:       "/mouse",
 		Handler: func(_ *Context, args []string) Result {
 			if err := noArguments(args, "/mouse"); err != "" {

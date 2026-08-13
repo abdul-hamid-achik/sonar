@@ -73,8 +73,9 @@ type Model struct {
 	// restores this value without persisting, Enter persists the previewed one.
 	themePickerBase string
 	// mouseCaptureOff disables mouse reporting so the terminal can do native
-	// text selection. Presentation-only and deliberately not persisted: it is
-	// a "let me grab this one thing" gesture, not a preference.
+	// text selection. Default true: drag-select is the ordinary gesture.
+	// Turning capture on (wheel scroll, click-to-expand) is the session
+	// gesture, and is deliberately not persisted.
 	mouseCaptureOff       bool
 	reducedMotion         bool
 	glyphProfile          GlyphProfile
@@ -375,7 +376,7 @@ type Model struct {
 	modelList                 []string
 	ollamaModels              []OllamaModelDescriptor
 	ollamaVersion             string
-	providerOffline             bool
+	providerOffline           bool
 	ollamaInventoryAttempted  bool
 	pendingOllamaInventory    *OllamaModelInventoryMsg
 	ollamaInventoryCommitting bool
@@ -404,16 +405,16 @@ type Model struct {
 	fileChanges map[string]int // path → number of modifications
 
 	// Tool approval prompt
-	pendingApproval    *ToolApprovalMsg
-	approvalState      *ApprovalState
-	queuedFollowUp     *queuedFollowUp
+	pendingApproval *ToolApprovalMsg
+	approvalState   *ApprovalState
+	queuedFollowUp  *queuedFollowUp
 	// iterationLimitContinue arms enter-on-empty-composer to continue the
 	// work an interactive turn left unfinished at its iteration ceiling.
 	// AUTO chains segments automatically; here the human is the chain link.
 	iterationLimitContinue bool
 	// turnUnseen marks a turn that finished while the window was unfocused;
 	// the tab title carries the attention marker until focus returns.
-	turnUnseen bool
+	turnUnseen         bool
 	turnMessagesBefore []llm.Message
 	turnPromptFloor    agent.ContextPromptFloor
 	turnPrompt         string
@@ -527,6 +528,7 @@ func New(ag *agent.Agent, cmdReg *command.Registry, skillMgr *skill.Manager, com
 		receiptInspectToolIndex: -1,
 		turnEntryIndex:          -1,
 		commitRunner:            runCommit,
+		mouseCaptureOff:         true,
 	}
 }
 
