@@ -1,10 +1,10 @@
    workspace                       OLLAMA · remote prompts · qwen3.5:0.8b · 7/128.0k · 0%
 
-
 ▌  Write session-grant.txt with the exact text session scoped approval.
 
-
    Waiting for model…
+
+
 
 
 

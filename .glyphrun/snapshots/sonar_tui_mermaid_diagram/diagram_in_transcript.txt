@@ -1,8 +1,6 @@
    main · sonar              DEEPSEEK · remote prompts · deepseek-v4-flash · 12/1.0M · 0%
 
-
 ▌  Draw the fixture pipeline.
-
 
    The pipeline has three stages:
 
@@ -13,6 +11,8 @@
      └───────┘     └────────┘     └────────┘
 
    Each stage hands its output to the next.
+
+
 
 
 

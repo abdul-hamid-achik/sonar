@@ -1,8 +1,6 @@
    main · sonar                DEEPSEEK · remote prompts · 12/1.0M · 0%
 
-
 ▌  design a safe migration
-
 
    Fixture answer 1.
 
@@ -15,6 +13,8 @@
    without a concrete tool receipt
 
    notice · After goal · NORMAL · active goal · AUTO
+
+
 
 
 

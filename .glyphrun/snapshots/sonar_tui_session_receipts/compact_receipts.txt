@@ -1,11 +1,8 @@
    main · sonar                                   DEEPSEEK · remote prompts · deepseek-v4-flash · 0/1.0M · 0%
 
-
 ▌  Review the release receipts.
 
-
    I checked the saved verification receipts.
-
 │  ✓ Read path=internal/ui/view.go (42ms)
 │  2 lines hidden · ctrl+t
 │  ✗ Run failed command=go test ./internal/ui (310ms)
@@ -18,6 +15,9 @@
     ✗ error
    Recovery blocked: write_file has a durable dispatch marker but no terminal receipt. Its outcome is
    unknown; use /recover to inspect and record exact evidence.
+
+
+
 
 
 
