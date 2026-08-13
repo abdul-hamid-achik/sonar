@@ -44,6 +44,14 @@ steps:
         screen:
             contains: "────►"
         timeoutMs: 2000
+    # The diagram appearing is not the turn finishing. Snapshotting here caught
+    # "Running · Routing unavailable" on Linux CI and the settled "✓ Done"
+    # footer on the next pass: wait for the idle composer before capturing a
+    # frame that is compared byte for byte.
+    - wait:
+        screen:
+            contains: "enter send"
+        timeoutMs: 5000
     - wait:
         idle:
             quietForMs: 50
