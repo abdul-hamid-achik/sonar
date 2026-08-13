@@ -95,7 +95,8 @@ func (m *Model) renderStatusLine() string {
 	// Empty welcome + session top bar own orientation and ambient identity.
 	// Repeating model/context on the idle footer only adds a sparse second row.
 	conversationQuiet := !conversationStarted && !noticeNeedsRecovery &&
-		len(m.failedServers) == 0 && !m.skipApprovalsEnabled() && m.footerNotice == nil
+		len(m.failedServers) == 0 && !m.skipApprovalsEnabled() && m.footerNotice == nil &&
+		!m.mouseCaptureOff
 	if conversationQuiet {
 		return ""
 	}
@@ -143,6 +144,11 @@ func (m *Model) renderStatusLine() string {
 	if failures := len(m.failedServers); failures > 0 {
 		label := mcpUnavailableStatusLabel(failures)
 		parts = append(parts, m.styles.ErrorText.UnsetPaddingLeft().Render(label))
+	}
+	if m.mouseCaptureOff {
+		// Sticky until alt+m restores capture. A footerNotice expires in seconds
+		// and left people thinking selection was still impossible.
+		parts = append(parts, m.styles.FocusIndicator.Render("select · alt+m"))
 	}
 	if notice := m.footerNotice; notice != nil {
 		parts = append(parts, m.footerNoticeStyle(notice.severity).Render(notice.text))
@@ -298,6 +304,9 @@ func (m *Model) renderGoalFooterStatus(summary GoalSummary, paneW int) string {
 			label = mcpUnavailableStatusLabel(failures)
 		}
 		required = append(required, metadataPart{view: m.styles.ErrorText.UnsetPaddingLeft().Render(label)})
+	}
+	if m.mouseCaptureOff {
+		required = append(required, metadataPart{view: m.styles.FocusIndicator.Render("select · alt+m")})
 	}
 	if m.currentModelIsNonLocal() && plan.owns(factRemoteBoundary, surfaceStatusLine) {
 		boundary := m.currentModelSurfaceLabel(true)

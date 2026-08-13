@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/charmbracelet/x/ansi"
 )
 
 // Mouse reporting consumes press and release, which is exactly what stops a
@@ -77,5 +79,31 @@ func TestHelpNamesTheRightSelectionOverride(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Errorf("help omits %q", want)
 		}
+	}
+}
+
+
+func TestSelectModeStickyChrome(t *testing.T) {
+	m := newTestModel(t)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m = updated.(*Model)
+	m.entries = []ChatEntry{
+		{Kind: "user", Content: "hi"},
+		{Kind: "assistant", Content: "hello there"},
+	}
+	m.state = StateIdle
+	m.mouseCaptureOff = true
+	status := strings.ToLower(ansi.Strip(m.renderStatusLine()))
+	if !strings.Contains(status, "select") || !strings.Contains(status, "alt+m") {
+		t.Fatalf("status missing sticky select chip: %q", status)
+	}
+	bar := strings.ToLower(ansi.Strip(m.renderShortcutsBar(m.chatPaneWidth())))
+	if !strings.Contains(bar, "alt+m") || !strings.Contains(bar, "select") {
+		t.Fatalf("shortcuts missing exit-select hint: %q", bar)
+	}
+	m.mouseCaptureOff = false
+	bar = strings.ToLower(ansi.Strip(m.renderShortcutsBar(m.chatPaneWidth())))
+	if !strings.Contains(bar, "ctrl+y") || !strings.Contains(bar, "copy") {
+		t.Fatalf("idle with last answer should advertise ctrl+y copy: %q", bar)
 	}
 }

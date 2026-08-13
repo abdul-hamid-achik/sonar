@@ -41,6 +41,30 @@ func restoreManualModelPreference(
 	return "", false, fmt.Sprintf("saved model %q is no longer available; using automatic or configured selection", preferred)
 }
 
+// restoreManualRemoteModelPreference accepts a saved selection only when the
+// active remote provider's catalog (or configured list) still offers that id.
+// Unlike the Ollama path, there is no inventory consent to refresh — the
+// catalog is the authority. An id absent from SelectableRemoteModels is not
+// forced in: passing preferred as the "current" argument would always admit it.
+func restoreManualRemoteModelPreference(preferred, providerType string) (string, bool, string) {
+	preferred = strings.TrimSpace(preferred)
+	if preferred == "" {
+		return "", false, ""
+	}
+	offered := config.SelectableRemoteModels(providerType, "")
+	if model, ok := matchingModel(offered, preferred); ok {
+		return model, true, ""
+	}
+	providerType = strings.TrimSpace(providerType)
+	if providerType == "" {
+		providerType = "remote"
+	}
+	return "", false, fmt.Sprintf(
+		"saved model %q is not offered by provider %s; using configured selection",
+		preferred, providerType,
+	)
+}
+
 func matchingModel(models []string, wanted string) (string, bool) {
 	wanted = config.CanonicalModelName(wanted)
 	for _, model := range models {

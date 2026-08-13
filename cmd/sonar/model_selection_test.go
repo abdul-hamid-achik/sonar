@@ -278,3 +278,18 @@ func TestStartupModelAuthoritiesTakePrecedenceOverManualPreference(t *testing.T)
 
 var _ config.ModelRouter = (*selectionRouterStub)(nil)
 var _ availabilityAwareRouter = (*selectionRouterStub)(nil)
+
+func TestRestoreManualRemoteModelPreference(t *testing.T) {
+	got, ok, warning := restoreManualRemoteModelPreference("deepseek-v4-pro", "deepseek")
+	if !ok || got != "deepseek-v4-pro" || warning != "" {
+		t.Fatalf("pro restore = %q ok=%v warning=%q", got, ok, warning)
+	}
+	got, ok, warning = restoreManualRemoteModelPreference("not-a-real-model", "deepseek")
+	if ok || got != "" || warning == "" {
+		t.Fatalf("unknown id = %q ok=%v warning=%q", got, ok, warning)
+	}
+	got, ok, warning = restoreManualRemoteModelPreference("", "deepseek")
+	if ok || got != "" || warning != "" {
+		t.Fatalf("empty = %q ok=%v warning=%q", got, ok, warning)
+	}
+}

@@ -365,15 +365,30 @@ func (m *Model) renderShortcutsBar(paneW int) string {
 				{Key: m.keys.Help.Help().Key, Action: "help"},
 			}
 		}
+		// Select mode is sticky chrome, not a 6s footer blink: once capture is
+		// off the bar must keep naming the way out.
+		if m.mouseCaptureOff {
+			hints = append([]keyHint{{Key: "alt+m", Action: "exit select"}}, hints...)
+		} else if strings.TrimSpace(m.input.Value()) == "" && m.lastAssistantContent() != "" {
+			// Prefer structured copy over the voice invite when there is
+			// something to yank and the draft is empty (ctrl+y's precondition).
+			withCopy := append(append([]keyHint{}, hints...),
+				keyHint{Key: "ctrl+y", Action: "copy"})
+			if lipgloss.Width(m.renderKeyHintSet(mergeKeyHintAliases(withCopy), len(withCopy))) <= leftBudget {
+				hints = withCopy
+			}
+		}
 		// The voice invite joins only when every hint keeps its label. This
 		// row is where first-run discovery happens — the welcome deliberately
 		// paints nothing on roomy frames — but renderKeyHints compacts by
 		// stripping action words, and a bar that trades "shift+tab mode" for
 		// an unlabeled "ctrl+g" taught one thing by unteaching another.
-		withVoice := append(append([]keyHint{}, hints...),
-			keyHint{Key: m.keys.VoiceInput.Help().Key, Action: "voice"})
-		if lipgloss.Width(m.renderKeyHintSet(mergeKeyHintAliases(withVoice), len(withVoice))) <= leftBudget {
-			hints = withVoice
+		if !m.mouseCaptureOff {
+			withVoice := append(append([]keyHint{}, hints...),
+				keyHint{Key: m.keys.VoiceInput.Help().Key, Action: "voice"})
+			if lipgloss.Width(m.renderKeyHintSet(mergeKeyHintAliases(withVoice), len(withVoice))) <= leftBudget {
+				hints = withVoice
+			}
 		}
 	} else {
 		// Live activity rail already surfaces esc stop · enter queue.

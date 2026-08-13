@@ -55,17 +55,7 @@ func (a *Agent) handleBash(parent context.Context, args map[string]any) (string,
 		return a.startBackgroundShellCommand(command)
 	}
 
-	timeout := a.getArgInt(args, "timeout", int(a.ToolTimeout().Seconds()))
-	maxTimeoutSecs := int(a.ToolTimeout().Seconds())
-	if maxTimeoutSecs > 120 {
-		maxTimeoutSecs = 120
-	}
-	if timeout > maxTimeoutSecs {
-		timeout = maxTimeoutSecs
-	}
-	if timeout < 1 {
-		timeout = 1
-	}
+	timeout := clampBashTimeoutSecs(a.getArgInt(args, "timeout", int(a.ToolTimeout().Seconds())))
 
 	ctx, cancel := context.WithTimeout(parent, time.Duration(timeout)*time.Second)
 	defer cancel()
@@ -138,6 +128,21 @@ var envAllowlist = []string{
 	"NVM_DIR", "PYENV_ROOT", "RBENV_ROOT", "CARGO_HOME", "RUSTUP_HOME",
 	"ASDF_DIR", "ASDF_DATA_DIR", "MISE_DATA_DIR", "MISE_CACHE_DIR",
 	"XDG_CONFIG_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME",
+}
+
+// clampBashTimeoutSecs keeps an explicit model-supplied timeout inside the
+// schema's advertised [1, 120] range. tools.timeout only supplies the default
+// when the argument is omitted — it must not silently shrink a requested 35s
+// down to 30s and then report OUTCOME UNKNOWN.
+func clampBashTimeoutSecs(timeout int) int {
+	const advertisedBashTimeoutMaxSecs = 120
+	if timeout > advertisedBashTimeoutMaxSecs {
+		timeout = advertisedBashTimeoutMaxSecs
+	}
+	if timeout < 1 {
+		timeout = 1
+	}
+	return timeout
 }
 
 // sanitizedEnv returns a minimal environment for subprocesses, copying only

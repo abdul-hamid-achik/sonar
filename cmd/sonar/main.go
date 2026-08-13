@@ -268,6 +268,23 @@ func run() int {
 					strings.Join(applied, ", "), cfg.Credentials.EnvFile)
 			}
 		}
+		// Remote providers persist /model the same way local ones do. Restore
+		// before building the client so the first request uses the saved id
+		// (Flash is only the cold-start default).
+		if modelPreferenceStore != nil && shouldRestoreManualModelPreference(*modelFlag, profileModelPinned) {
+			preferred, saved, preferenceErr := modelPreferenceStore.LoadManualModel()
+			switch {
+			case preferenceErr != nil:
+				fmt.Fprintf(os.Stderr, "warning: saved model preference ignored: %v\n", preferenceErr)
+			case saved:
+				if restored, ok, warning := restoreManualRemoteModelPreference(preferred, provider.Type); ok {
+					modelName = restored
+					modelPinned = true
+				} else if warning != "" {
+					fmt.Fprintf(os.Stderr, "warning: %s\n", warning)
+				}
+			}
+		}
 		apiKey, keyErr := provider.ResolveAPIKey()
 		if keyErr != nil {
 			fmt.Fprintf(os.Stderr, "provider: %v\n", keyErr)
