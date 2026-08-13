@@ -1787,16 +1787,20 @@ type clipboardResultMsg struct {
 	Err error
 }
 
-// copyToClipboard copies text to the system clipboard. Its receipt is a
-// transient footer notice; copy affordances must never mutate or persist chat.
+// copyToClipboard copies text to the host clipboard and, in the same frame,
+// asks the terminal to do the same via OSC 52. atotto talks to pbcopy/xclip
+// and is silent over SSH/tmux without a display; tea.SetClipboard is the
+// sequence those sessions actually honour. Both are user-initiated. The
+// receipt is a transient footer notice; copy must never mutate or persist chat.
 func (m *Model) copyToClipboard(text string) tea.Cmd {
 	write := m.clipboardWrite
-	return func() tea.Msg {
-		if write == nil {
-			return clipboardResultMsg{Err: context.Canceled}
+	host := func() tea.Msg {
+		if write != nil {
+			_ = write(text)
 		}
-		return clipboardResultMsg{Err: write(text)}
+		return clipboardResultMsg{}
 	}
+	return tea.Batch(tea.SetClipboard(text), host)
 }
 
 // readClipboardPaste keeps explicit Ctrl+V on the same inspected path as a

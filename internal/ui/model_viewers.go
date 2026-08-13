@@ -482,15 +482,13 @@ func (m *Model) viewerClipboardCmd(id OverlayID, kind ModalKind, text string) te
 		return nil
 	}
 	write := m.clipboardWrite
-	return func() tea.Msg {
-		var err error
-		if write == nil {
-			err = context.Canceled
-		} else {
-			err = write(text)
+	host := func() tea.Msg {
+		if write != nil {
+			_ = write(text)
 		}
-		return viewerClipboardResultMsg{OverlayID: id, Kind: kind, Err: err}
+		return viewerClipboardResultMsg{OverlayID: id, Kind: kind}
 	}
+	return tea.Batch(tea.SetClipboard(text), host)
 }
 
 func (m *Model) handleViewerClipboardResult(message viewerClipboardResultMsg) tea.Cmd {

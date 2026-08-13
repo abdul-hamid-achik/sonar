@@ -3,6 +3,9 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestLastAssistantContent(t *testing.T) {
@@ -107,16 +110,13 @@ func TestCopyLast_OnlyWhenIdleAndEmpty(t *testing.T) {
 		_, cmd := m.Update(ctrlKey('y'))
 		if cmd == nil {
 			t.Fatal("expected copy command while streaming with empty draft")
-			return
 		}
-		if msg := cmd(); msg != nil {
-			if res, ok := msg.(clipboardResultMsg); ok && res.Err != nil {
-				t.Fatalf("copy err: %v", res.Err)
-			}
+		result := awaitCommandMessage[clipboardResultMsg](t, commandMessages(cmd), time.Second)
+		if result.Err != nil {
+			t.Fatalf("copy err: %v", result.Err)
 		}
 		if copied != "response text" && !strings.Contains(copied, "response") {
-			// copyToClipboard is async cmd — invoke the write path via Update of result
-			t.Logf("clipboard content not yet flushed: %q", copied)
+			t.Fatalf("clipboard content = %q", copied)
 		}
 	})
 
@@ -154,8 +154,8 @@ func TestCopyLastReceiptIsTransientAndDoesNotPolluteTranscript(t *testing.T) {
 
 	updated, command := m.Update(ctrlKey('y'))
 	m = updated.(*Model)
-	message := command()
-	updated, _ = m.Update(message)
+	result := awaitCommandMessage[clipboardResultMsg](t, commandMessages(command), time.Second)
+	updated, _ = m.Update(result)
 	m = updated.(*Model)
 
 	if copied != "response text" {
@@ -166,5 +166,37 @@ func TestCopyLastReceiptIsTransientAndDoesNotPolluteTranscript(t *testing.T) {
 	}
 	if m.footerNotice == nil || m.footerNotice.text != "Copied to clipboard." {
 		t.Fatalf("copy footer receipt = %#v", m.footerNotice)
+	}
+}
+
+func TestCopyLastEmitsOSC52AndHostClipboard(t *testing.T) {
+	// SSH/tmux have no pbcopy. The host write is best-effort; OSC 52 is the
+	// sequence the terminal actually honours. Both must leave on every copy.
+	m := newTestModel(t)
+	m.entries = []ChatEntry{{Kind: "assistant", Content: "response text"}}
+	m.input.SetValue("")
+	var copied string
+	m.clipboardWrite = func(value string) error {
+		copied = value
+		return nil
+	}
+	_, cmd := m.Update(ctrlKey('y'))
+	if cmd == nil {
+		t.Fatal("expected copy command")
+	}
+	msg := cmd()
+	batch, ok := msg.(tea.BatchMsg)
+	if !ok {
+		t.Fatalf("copy cmd = %T, want BatchMsg (OSC 52 + host write)", msg)
+	}
+	if len(batch) != 2 {
+		t.Fatalf("copy batch len = %d, want 2", len(batch))
+	}
+	result := awaitCommandMessage[clipboardResultMsg](t, commandMessages(cmd), time.Second)
+	if result.Err != nil {
+		t.Fatalf("copy err: %v", result.Err)
+	}
+	if copied != "response text" {
+		t.Fatalf("host clipboard = %q", copied)
 	}
 }

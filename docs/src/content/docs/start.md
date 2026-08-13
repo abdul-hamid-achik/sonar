@@ -50,8 +50,30 @@ process.
 | `ctrl+f` | search the transcript |
 | `ctrl+g` | dictate into the composer |
 | `f1` | every key and command |
+| `/mouse` | turn mouse capture off so the terminal can select and copy; `alt+m` is the same chord when the terminal actually sends it |
+| `ctrl+y` | copy the last reply when the draft is empty — including over tmux and SSH |
 
 Run `/help` for the rest.
+
+## Select and copy
+
+Mouse reporting is on so the wheel scrolls the transcript. That is also what
+stops the terminal from drag-selecting.
+
+Most terminals hand the mouse back with a modifier: `shift+drag` in Ghostty,
+kitty, WezTerm, Alacritty and xterm; `option+drag` in iTerm2. Terminal.app has
+none. `/mouse` turns capture off in every terminal; `pgup`/`pgdn` still scroll.
+
+Stock macOS terminals compose Option+M into µ instead of sending `alt+m`.
+`/mouse` is the binding that still works. To make `alt+m` itself work:
+
+- Ghostty: `macos-option-as-alt = true`
+- iTerm2: Profiles → Keys → Left Option key = Esc+
+- Terminal.app: Profiles → Keyboard → Use Option as Meta key
+
+`ctrl+y` copies the last assistant reply without the mouse. It writes the host
+clipboard and asks the terminal to do the same, so a tmux or SSH session still
+lands the text on the machine you are looking at.
 
 ## Long unattended runs
 
