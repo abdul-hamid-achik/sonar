@@ -43,15 +43,19 @@ func (m *Model) projectSessionHeader() sessionHeaderProjection {
 	// Sticky user: real conversation + room for vertical padding (Grok band).
 	if m.stickyUserActive() {
 		if sticky := m.renderStickyUserStrip(paneW); sticky != "" {
-			// Outer blanks breathe around a single-row sticky. The elevated
-			// 3-row band already pads itself — stacking outer blanks on top
-			// produced blank-on-blank voids (measured: 4 empty rows of 6).
+			// Outer blanks breathe around a single-row sticky. On tall frames
+			// the elevated 3-row band already pads itself — stacking outer
+			// blanks produced blank-on-blank voids (measured: 4 empty of 6).
+			// Keep the outer blanks through ordinary heights (incl. Glyphrun
+			// 22-row readers) so one PgUp still leaves latest-follow; only
+			// reclaim them once the frame is clearly roomy.
 			elevated := stickyUsesElevatedBand(m.height, paneW)
-			if !elevated && m.height >= 18 && len(lines) > 0 {
+			omitOuter := elevated && m.height >= 28
+			if !omitOuter && m.height >= 18 && len(lines) > 0 {
 				lines = append(lines, "")
 			}
 			lines = append(lines, sticky)
-			if !elevated && m.height >= 18 {
+			if !omitOuter && m.height >= 18 {
 				lines = append(lines, "")
 			}
 		}

@@ -97,7 +97,7 @@ func TestStickyUserStripHasVerticalBreathingInHeader(t *testing.T) {
 	m.settleChromeSpringForTest()
 	m.recalcViewportHeight()
 	header := m.projectSessionHeader()
-	// Roomy: identity + 3-row elevated sticky (no outer blank-on-blank).
+	// Roomy (H>=28): identity + 3-row elevated sticky (no outer blank-on-blank).
 	if header.reservedHeight != 4 {
 		t.Fatalf("header height = %d, want 4 (top + elevated sticky)\n%s",
 			header.reservedHeight, ansi.Strip(header.content))
@@ -115,6 +115,18 @@ func TestStickyUserStripHasVerticalBreathingInHeader(t *testing.T) {
 	plain := ansi.Strip(header.content)
 	if !strings.Contains(plain, "hello chat!") {
 		t.Fatalf("header missing sticky prompt:\n%s", plain)
+	}
+
+	// Ordinary elevated frames keep outer blanks so short readers still overflow.
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 22})
+	m = updated.(*Model)
+	m.entries = []ChatEntry{{Kind: "user", Content: "hello chat!"}}
+	m.settleChromeSpringForTest()
+	m.recalcViewportHeight()
+	ordinary := m.projectSessionHeader()
+	if ordinary.reservedHeight != 6 {
+		t.Fatalf("ordinary elevated header height = %d, want 6 (top + blanks + band)\n%s",
+			ordinary.reservedHeight, ansi.Strip(ordinary.content))
 	}
 
 	// Mid frames keep outer blanks around the single-row sticky.
