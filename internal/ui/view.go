@@ -139,11 +139,10 @@ func (m *Model) View() tea.View {
 	v.AltScreen = true
 	// Cell-motion (DEC 1002) reports wheel and clicks. It also consumes press
 	// and release, which is what stops the terminal doing native drag-select.
-	// Capture is therefore off until someone asks for it: drag-select is the
-	// ordinary gesture, and pgup/pgdn always scroll. alt+m / /mouse turn
-	// reporting on for wheel-scroll and click-to-expand. Bubble Tea diffs
-	// MouseMode between frames and emits the reset sequence itself, so this
-	// takes effect on the next paint.
+	// Capture stays on so the wheel scrolls; in-app drag-select copies.
+	// alt+m / /mouse turn reporting off for the emulator's own select.
+	// Bubble Tea diffs MouseMode between frames and emits the reset sequence
+	// itself, so this takes effect on the next paint.
 	if m.mouseCaptureOff {
 		v.MouseMode = tea.MouseModeNone
 	} else {

@@ -1327,6 +1327,7 @@ func (m *Model) syncTranscriptPaintWindow() {
 	)
 	rows, blocksPainted := paint.document.materializeRows(start, end)
 	m.styleTranscriptSearchWindowRows(rows, start, highlightRow)
+	m.styleTranscriptSelectionWindowRows(rows, start)
 	m.viewport.SetContentLines(rows)
 	m.viewport.SetYOffset(paint.top - start)
 	paint.windowStart = start

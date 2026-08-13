@@ -73,10 +73,11 @@ type Model struct {
 	// restores this value without persisting, Enter persists the previewed one.
 	themePickerBase string
 	// mouseCaptureOff disables mouse reporting so the terminal can do native
-	// text selection. Default true: drag-select is the ordinary gesture.
-	// Turning capture on (wheel scroll, click-to-expand) is the session
-	// gesture, and is deliberately not persisted.
+	// text selection. Capture stays on by default: the wheel scrolls the
+	// transcript and in-app drag-select copies. /mouse hands the mouse back
+	// when someone wants the emulator's own select. Not persisted.
 	mouseCaptureOff       bool
+	transcriptSel         transcriptSelection
 	reducedMotion         bool
 	glyphProfile          GlyphProfile
 	evalCount             int
@@ -528,7 +529,6 @@ func New(ag *agent.Agent, cmdReg *command.Registry, skillMgr *skill.Manager, com
 		receiptInspectToolIndex: -1,
 		turnEntryIndex:          -1,
 		commitRunner:            runCommit,
-		mouseCaptureOff:         true,
 	}
 }
 
@@ -968,6 +968,16 @@ func (m *Model) Update(msg tea.Msg) (retModel tea.Model, retCmd tea.Cmd) {
 
 	case tea.MouseClickMsg:
 		if cmd, handled := m.handleMouseClickMsg(msg); handled {
+			return m, cmd
+		}
+
+	case tea.MouseMotionMsg:
+		if cmd, handled := m.handleTranscriptMouseMotion(msg); handled {
+			return m, cmd
+		}
+
+	case tea.MouseReleaseMsg:
+		if cmd, handled := m.handleTranscriptMouseRelease(msg); handled {
 			return m, cmd
 		}
 

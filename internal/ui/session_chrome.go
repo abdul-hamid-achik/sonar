@@ -377,11 +377,10 @@ func (m *Model) renderShortcutsBar(paneW int) string {
 				{Key: m.keys.Help.Help().Key, Action: "help"},
 			}
 		}
-		// Wheel-capture is the opt-in mode, so it is sticky chrome rather
-		// than a 6s footer blink: the bar keeps naming the way back to
-		// native select. Default idle advertises ctrl+y instead.
-		if !m.mouseCaptureOff {
-			hints = append([]keyHint{{Key: "alt+m", Action: "select"}}, hints...)
+		// Select mode is sticky chrome, not a 6s footer blink: once capture is
+		// off the bar must keep naming the way out.
+		if m.mouseCaptureOff {
+			hints = append([]keyHint{{Key: "alt+m", Action: "exit select"}}, hints...)
 		} else if strings.TrimSpace(m.input.Value()) == "" && m.lastAssistantContent() != "" {
 			// Prefer structured copy over the voice invite when there is
 			// something to yank and the draft is empty (ctrl+y's precondition).
@@ -396,7 +395,7 @@ func (m *Model) renderShortcutsBar(paneW int) string {
 		// paints nothing on roomy frames — but renderKeyHints compacts by
 		// stripping action words, and a bar that trades "shift+tab mode" for
 		// an unlabeled "ctrl+g" taught one thing by unteaching another.
-		if m.mouseCaptureOff {
+		if !m.mouseCaptureOff {
 			withVoice := append(append([]keyHint{}, hints...),
 				keyHint{Key: m.keys.VoiceInput.Help().Key, Action: "voice"})
 			if lipgloss.Width(m.renderKeyHintSet(mergeKeyHintAliases(withVoice), len(withVoice))) <= leftBudget {

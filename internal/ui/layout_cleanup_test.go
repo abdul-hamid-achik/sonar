@@ -347,14 +347,10 @@ func TestMouseHitTestingStartsAtViewportRowZero(t *testing.T) {
 	}
 }
 
-func TestViewLeavesMouseFreeForNativeSelect(t *testing.T) {
+func TestViewEnablesCellMotionForTranscriptWheel(t *testing.T) {
 	m := newTestModel(t)
-	if got := m.View().MouseMode; got != tea.MouseModeNone {
-		t.Fatalf("mouse mode = %v, want none so the terminal can drag-select", got)
-	}
-	m.mouseCaptureOff = false
 	if got := m.View().MouseMode; got != tea.MouseModeCellMotion {
-		t.Fatalf("opt-in mouse mode = %v, want cell motion", got)
+		t.Fatalf("mouse mode = %v, want cell motion", got)
 	}
 }
 

@@ -68,6 +68,10 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return m.beginShutdown(), true
 
 	case key.Matches(msg, m.keys.Cancel):
+		if m.transcriptSel.active {
+			m.clearTranscriptSelection()
+			return nil, true
+		}
 		// An open microphone owns Escape before anything else does. It is the
 		// only stop that works in every terminal — the toggle chord may be
 		// claimed by a multiplexer, and /voice needs the composer, which is
@@ -208,6 +212,12 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return m.toggleMouseCapture(), true
 
 	case key.Matches(msg, m.keys.CopyLast):
+		if !m.transcriptSel.empty() {
+			text := strings.TrimRight(m.transcriptSelectionText(), "\n")
+			if strings.TrimSpace(text) != "" {
+				return m.copyToClipboard(text), true
+			}
+		}
 		// Prefer last assistant answer; allow copy while a turn is live when the
 		// draft is empty so users can grab text without waiting for idle.
 		if strings.TrimSpace(m.input.Value()) == "" {
@@ -327,17 +337,17 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	return nil, false
 }
 
-// toggleMouseCapture flips mouse reporting. Capture starts off so the
-// terminal can drag-select; turning it on trades that for wheel-scroll and
-// click-to-expand. The notice names the trade, because a dead scroll wheel
+// toggleMouseCapture flips mouse reporting. Capture stays on so the wheel
+// scrolls and in-app drag-select copies; turning it off hands the mouse to
+// the terminal. The notice names the trade, because a dead scroll wheel
 // (or a drag that does nothing) with no explanation reads as a bug. Shared
 // by alt+m and /mouse so both paths paint the same sticky chrome.
 func (m *Model) toggleMouseCapture() tea.Cmd {
 	m.mouseCaptureOff = !m.mouseCaptureOff
 	if m.mouseCaptureOff {
+		m.clearTranscriptSelection()
 		return m.setFooterNotice(noticeInfo,
-			"mouse capture off · select and copy with the mouse", 3*time.Second)
+			"mouse capture off · select and copy with the mouse · pgup/pgdn still scroll · alt+m or /mouse restores", 6*time.Second)
 	}
-	return m.setFooterNotice(noticeInfo,
-		"mouse capture on · wheel scrolls the transcript · alt+m or /mouse restores select", 6*time.Second)
+	return m.setFooterNotice(noticeInfo, "mouse capture on · wheel scrolling restored", 3*time.Second)
 }

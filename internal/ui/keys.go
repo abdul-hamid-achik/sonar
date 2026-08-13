@@ -191,7 +191,7 @@ func DefaultKeyMap() KeyMap {
 			key.WithKeys("alt+m"),
 			// /mouse is the non-Option path: stock macOS terminals compose µ
 			// instead of sending alt+m until Option is configured as Meta.
-			key.WithHelp("alt+m", "mouse capture on/off — on for wheel scroll · /mouse also"),
+			key.WithHelp("alt+m", "mouse capture off/on — turn off to select and copy · /mouse also"),
 		),
 		CycleMode: key.NewBinding(
 			key.WithKeys("shift+tab"),

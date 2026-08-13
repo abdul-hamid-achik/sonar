@@ -109,15 +109,6 @@ steps:
         screen:
             contains: "/recover inspect"
         timeoutMs: 2000
-    # Capture starts off so native select works. Wheel scrolling is opt-in;
-    # enable it the same way a terminal sends alt+m (ESC then m), before the
-    # draft is typed so ESC cannot clear it.
-    - send:
-        bytes: "\em"
-    - wait:
-        screen:
-            contains: "alt+m select"
-        timeoutMs: 2000
     - type: "draft must stay unchanged while the transcript scrolls"
     - mouse:
         x: 10

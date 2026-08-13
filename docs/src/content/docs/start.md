@@ -50,21 +50,26 @@ process.
 | `ctrl+f` | search the transcript |
 | `ctrl+g` | dictate into the composer |
 | `f1` | every key and command |
-| `/mouse` | turn mouse capture on for wheel-scroll and click-to-expand; `alt+m` is the same chord when the terminal actually sends it |
-| `ctrl+y` | copy the last reply when the draft is empty — including over tmux and SSH |
+| `/mouse` | hand the mouse to the terminal for native select; `alt+m` is the same chord when the terminal actually sends it |
+| `ctrl+y` | copy the selection, or the last reply when the draft is empty — including over tmux and SSH |
 
 Run `/help` for the rest.
 
 ## Select and copy
 
-Drag-select is the default. Mouse reporting stays off so the terminal owns
-press and release, the way any other program in a terminal works.
+Drag across the transcript to select; release copies. The wheel still scrolls.
+Double-click a word, triple-click a line. `esc` clears the highlight. `ctrl+y`
+copies the selection, or the last assistant reply when nothing is selected
+and the draft is empty.
 
-`/mouse` (or `alt+m`) turns capture on when you want the wheel to scroll the
-transcript or a click to expand a tool card. `pgup`/`pgdn` always scroll.
-While capture is on, most terminals still hand the mouse back with a
-modifier: `shift+drag` in Ghostty, kitty, WezTerm, Alacritty and xterm;
-`option+drag` in iTerm2. Terminal.app has none — toggle capture off again.
+Mouse reporting is on so the wheel can scroll the chat. That is also what
+stops the terminal from doing its own drag-select. `/mouse` (or `alt+m`)
+hands the mouse back when you want the emulator's select instead; `pgup`/`pgdn`
+still scroll.
+
+Most terminals also hand the mouse back with a modifier while capture is on:
+`shift+drag` in Ghostty, kitty, WezTerm, Alacritty and xterm; `option+drag`
+in iTerm2. Terminal.app has none.
 
 Stock macOS terminals compose Option+M into µ instead of sending `alt+m`.
 `/mouse` is the binding that still works. To make `alt+m` itself work:
@@ -73,9 +78,8 @@ Stock macOS terminals compose Option+M into µ instead of sending `alt+m`.
 - iTerm2: Profiles → Keys → Left Option key = Esc+
 - Terminal.app: Profiles → Keyboard → Use Option as Meta key
 
-`ctrl+y` copies the last assistant reply without the mouse. It writes the host
-clipboard and asks the terminal to do the same, so a tmux or SSH session still
-lands the text on the machine you are looking at.
+`ctrl+y` writes the host clipboard and asks the terminal to do the same, so a
+tmux or SSH session still lands the text on the machine you are looking at.
 
 ## Long unattended runs
 

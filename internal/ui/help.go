@@ -61,14 +61,14 @@ func (m *Model) buildHelpContent(innerW int) string {
 
 	// Select/copy sits above Input Shortcuts on purpose: people look here when
 	// a copy does not work, and burying it under paste/@mentions is how that
-	// happened. Capture is off by default; the toggle is how to get the wheel.
+	// happened. Capture stays on so the wheel scrolls; in-app drag copies.
 	b.WriteString("\n")
 	b.WriteString(m.styles.OverlayAccent.Render("Select & Copy"))
 	b.WriteString("\n")
 	m.writeHelpRows(&b, []helpRow{
+		{"alt+m / /mouse", "Toggle mouse capture — off lets the terminal select and copy; wheel scroll stays on pgup/pgdn"},
 		{"ctrl+y", "Copy the last assistant reply when the draft is empty"},
-		{"alt+m / /mouse", "Turn mouse capture on for wheel-scroll and click-to-expand; drag-select is the default"},
-		{"shift+drag", "Still selects while capture is on, in Ghostty, kitty, WezTerm, Alacritty, xterm — Option-drag in iTerm2"},
+		{"shift+drag", "Native select in Ghostty, kitty, WezTerm, Alacritty, xterm — Option-drag in iTerm2"},
 	}, innerW)
 
 	b.WriteString("\n")

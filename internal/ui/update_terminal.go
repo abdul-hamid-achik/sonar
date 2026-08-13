@@ -320,7 +320,12 @@ func (m *Model) handleMouseClickMsg(msg tea.MouseClickMsg) (cmd tea.Cmd, handled
 		return nil, true
 	}
 	if msg.Button == tea.MouseLeft {
-		return m.handleMouseClick(msg.X, msg.Y), true
+		if m.transcriptPointerOnDisclosure(msg.X, msg.Y) {
+			m.clearTranscriptSelection()
+			return m.handleMouseClick(msg.X, msg.Y), true
+		}
+		m.beginTranscriptSelection(msg)
+		return nil, true
 	}
 	return nil, false
 }

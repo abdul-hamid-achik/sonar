@@ -71,10 +71,9 @@ func TestHelpKeepsKeysAndContextTruthfulAtNarrowWidth(t *testing.T) {
 		}
 		// Copy paths must survive the narrow tier, and their keys must not be
 		// truncated — a key you cannot read is a key you cannot press. The
-		// wording is free to reflow; the keys are not. drag is the default;
-		// shift+drag is the override once capture is on; alt+m / /mouse is
-		// the toggle.
-		if !strings.Contains(compact, "shift+drag") || !strings.Contains(compact, "alt+m") || !strings.Contains(compact, "/mouse") {
+		// wording is free to reflow; the keys are not. drag is in-app select;
+		// shift+drag is the terminal override; alt+m / /mouse is the toggle.
+		if !strings.Contains(compact, "drag") || !strings.Contains(compact, "shift+drag") || !strings.Contains(compact, "alt+m") || !strings.Contains(compact, "/mouse") {
 			t.Fatalf("width %d help omitted mouse selection guidance:\n%s", width, plain)
 		}
 		if strings.Contains(plain, "shift+dra…") || strings.Contains(plain, "alt+…") {
