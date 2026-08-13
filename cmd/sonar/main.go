@@ -24,6 +24,7 @@ import (
 	executionpkg "github.com/abdul-hamid-achik/sonar/internal/execution"
 	"github.com/abdul-hamid-achik/sonar/internal/goal"
 	"github.com/abdul-hamid-achik/sonar/internal/goaladvisor"
+	"github.com/abdul-hamid-achik/sonar/internal/hostenv"
 	"github.com/abdul-hamid-achik/sonar/internal/ice"
 	"github.com/abdul-hamid-achik/sonar/internal/imageasset"
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
@@ -45,6 +46,7 @@ type availabilityAwareRouter interface {
 }
 
 func main() {
+	hostenv.ScrubDarwinMallocDiagnostics()
 	os.Exit(run())
 }
 
@@ -1274,7 +1276,9 @@ func run() int {
 		})
 	}()
 
+	restoreStderr := hostenv.FilterMallocDiagnostics()
 	finalModel, runErr := p.Run()
+	restoreStderr()
 	signal.Stop(sigCh)
 	close(signalDone)
 	initCancel()
