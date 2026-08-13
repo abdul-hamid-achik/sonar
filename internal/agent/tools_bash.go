@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"time"
+
+	"github.com/abdul-hamid-achik/sonar/internal/tools"
 )
 
 type cappedBuffer struct {
@@ -131,16 +133,16 @@ var envAllowlist = []string{
 }
 
 // clampBashTimeoutSecs keeps an explicit model-supplied timeout inside the
-// schema's advertised [1, 120] range. tools.timeout only supplies the default
-// when the argument is omitted — it must not silently shrink a requested 35s
-// down to 30s and then report OUTCOME UNKNOWN.
+// schema's advertised [BashTimeoutMinSecs, BashTimeoutMaxSecs] range.
+// tools.timeout only supplies the default when the argument is omitted — it
+// must not silently shrink a requested 35s down to 30s and then report
+// OUTCOME UNKNOWN.
 func clampBashTimeoutSecs(timeout int) int {
-	const advertisedBashTimeoutMaxSecs = 120
-	if timeout > advertisedBashTimeoutMaxSecs {
-		timeout = advertisedBashTimeoutMaxSecs
+	if timeout > tools.BashTimeoutMaxSecs {
+		timeout = tools.BashTimeoutMaxSecs
 	}
-	if timeout < 1 {
-		timeout = 1
+	if timeout < tools.BashTimeoutMinSecs {
+		timeout = tools.BashTimeoutMinSecs
 	}
 	return timeout
 }

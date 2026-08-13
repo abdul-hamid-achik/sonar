@@ -9,14 +9,12 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/abdul-hamid-achik/sonar/internal/llm"
 	"github.com/abdul-hamid-achik/sonar/internal/tools"
 )
 
 const (
-	maxTimeout          = 120 * time.Second
 	maxToolCaptureBytes = 1024 * 1024
 	maxFileReadBytes    = 8 * 1024 * 1024
 	maxCopyBytes        = 64 * 1024 * 1024

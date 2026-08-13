@@ -64,6 +64,51 @@ func TestBashToolDef(t *testing.T) {
 	if _, ok := props["command"]; !ok {
 		t.Error("should have command property")
 	}
+	timeout, ok := props["timeout"].(map[string]any)
+	if !ok {
+		t.Fatal("should have timeout property")
+	}
+	if got, ok := timeout["minimum"].(int); !ok || got != BashTimeoutMinSecs {
+		t.Fatalf("timeout.minimum = %#v, want %d", timeout["minimum"], BashTimeoutMinSecs)
+	}
+	if got, ok := timeout["maximum"].(int); !ok || got != BashTimeoutMaxSecs {
+		t.Fatalf("timeout.maximum = %#v, want %d", timeout["maximum"], BashTimeoutMaxSecs)
+	}
+	desc, _ := timeout["description"].(string)
+	for _, want := range []string{"1–120", "tools.timeout", "OUTCOME UNKNOWN", "background"} {
+		if !strings.Contains(desc, want) {
+			t.Errorf("timeout description omitted %q: %s", want, desc)
+		}
+	}
+	if !strings.Contains(tool.Description, "background") || !strings.Contains(tool.Description, "sleep") {
+		t.Errorf("bash description should discourage foreground sleep fills: %s", tool.Description)
+	}
+}
+
+func TestBashTimeoutBoundsAreTheOnlyTimeoutContract(t *testing.T) {
+	// Sweep: bash is the only built-in that advertises a timeout argument.
+	// Anything else claiming one without sharing BashTimeoutMaxSecs would
+	// recreate the silent-clamp footgun.
+	for _, def := range AllToolDefs() {
+		props, _ := def.Parameters["properties"].(map[string]any)
+		if props == nil {
+			continue
+		}
+		timeout, ok := props["timeout"]
+		if !ok {
+			continue
+		}
+		if def.Name != "bash" {
+			t.Fatalf("%s advertises timeout; only bash is wired to host clamping", def.Name)
+		}
+		spec, ok := timeout.(map[string]any)
+		if !ok {
+			t.Fatalf("bash timeout property has unexpected shape %#v", timeout)
+		}
+		if got, _ := spec["maximum"].(int); got != BashTimeoutMaxSecs {
+			t.Fatalf("bash timeout.maximum = %v, want shared BashTimeoutMaxSecs=%d", spec["maximum"], BashTimeoutMaxSecs)
+		}
+	}
 }
 
 func TestLsToolDef(t *testing.T) {

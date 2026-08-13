@@ -338,6 +338,9 @@ voice:
 # Provider-loop budgets are independent so interactive turns stay concise while
 # AUTO has room to inspect, implement, and verify without a premature stop.
 tools:
+  # Default bash timeout when the model omits the argument. An explicit timeout
+  # argument is still honored up to 120s (see the bash tool schema); this value
+  # is not a silent ceiling for requested timeouts.
   timeout: 30s
   # Bounds a single MCP tool call. The 60s default suits interactive tools, but
   # a server that indexes a codebase first — vecgrep embeds through local
