@@ -43,14 +43,15 @@ func (m *Model) projectSessionHeader() sessionHeaderProjection {
 	// Sticky user: real conversation + room for vertical padding (Grok band).
 	if m.stickyUserActive() {
 		if sticky := m.renderStickyUserStrip(paneW); sticky != "" {
-			// One blank row between identity bar and sticky when the frame is
-			// tall enough — horizontal chrome was fine; vertical felt crushed.
-			if m.height >= 18 && len(lines) > 0 {
+			// Outer blanks breathe around a single-row sticky. The elevated
+			// 3-row band already pads itself — stacking outer blanks on top
+			// produced blank-on-blank voids (measured: 4 empty rows of 6).
+			elevated := stickyUsesElevatedBand(m.height, paneW)
+			if !elevated && m.height >= 18 && len(lines) > 0 {
 				lines = append(lines, "")
 			}
 			lines = append(lines, sticky)
-			// Breath before transcript content begins.
-			if m.height >= 18 {
+			if !elevated && m.height >= 18 {
 				lines = append(lines, "")
 			}
 		}
@@ -239,11 +240,18 @@ func (m *Model) renderStickyUserStrip(paneW int) string {
 	// (empty / prompt / empty) so the sticky isn't crushed against the
 	// identity bar above or the transcript below. Horizontal layout was fine.
 	content := barStyle.Render(plain)
-	if m.height >= 20 && paneW >= 40 {
+	if stickyUsesElevatedBand(m.height, paneW) {
 		blank := barStyle.Render(strings.Repeat(" ", paneW))
 		content = blank + "\n" + content + "\n" + blank
 	}
 	return content
+}
+
+// stickyUsesElevatedBand is the single gate for the 3-row sticky surface.
+// projectSessionHeader consults it so outer blank rows never stack on the
+// band's own pad rows.
+func stickyUsesElevatedBand(height, paneW int) bool {
+	return height >= 20 && paneW >= 40
 }
 
 func (m *Model) latestUserPromptText() string {

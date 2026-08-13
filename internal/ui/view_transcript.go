@@ -1013,6 +1013,11 @@ func transcriptEntrySeparator(previous, current string) string {
 	if previous == "assistant" && current == "assistant" {
 		return "\n"
 	}
+	// Prelude → tools stays dense: the stack is the same turn's instrument
+	// panel, not a new chapter. Tool → answer still breathes below.
+	if previous == "assistant" && current == "tool_group" {
+		return "\n"
+	}
 	// Tool → answer / notice → assistant / user → * : one blank row.
 	// This matches Grok's readable vertical rhythm without sparse voids.
 	return "\n\n"

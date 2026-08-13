@@ -97,14 +97,36 @@ func TestStickyUserStripHasVerticalBreathingInHeader(t *testing.T) {
 	m.settleChromeSpringForTest()
 	m.recalcViewportHeight()
 	header := m.projectSessionHeader()
-	// top bar + blank + 3-row sticky band + blank = enough vertical air
-	if header.reservedHeight < 5 {
-		t.Fatalf("header height = %d, want >= 5 for vertical sticky padding\n%s",
+	// Roomy: identity + 3-row elevated sticky (no outer blank-on-blank).
+	if header.reservedHeight != 4 {
+		t.Fatalf("header height = %d, want 4 (top + elevated sticky)\n%s",
 			header.reservedHeight, ansi.Strip(header.content))
+	}
+	lines := strings.Split(ansi.Strip(header.content), "\n")
+	if len(lines) != 4 {
+		t.Fatalf("header lines = %d, want 4:\n%s", len(lines), ansi.Strip(header.content))
+	}
+	// No adjacent blank rows — elevated pad is the only breath.
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i-1]) == "" && strings.TrimSpace(lines[i]) == "" {
+			t.Fatalf("blank-on-blank void at rows %d-%d:\n%s", i-1, i, ansi.Strip(header.content))
+		}
 	}
 	plain := ansi.Strip(header.content)
 	if !strings.Contains(plain, "hello chat!") {
 		t.Fatalf("header missing sticky prompt:\n%s", plain)
+	}
+
+	// Mid frames keep outer blanks around the single-row sticky.
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 18})
+	m = updated.(*Model)
+	m.entries = []ChatEntry{{Kind: "user", Content: "hello chat!"}}
+	m.settleChromeSpringForTest()
+	m.recalcViewportHeight()
+	mid := m.projectSessionHeader()
+	if mid.reservedHeight != 4 {
+		t.Fatalf("mid header height = %d, want 4 (top + blank + sticky + blank)\n%s",
+			mid.reservedHeight, ansi.Strip(mid.content))
 	}
 }
 
@@ -299,5 +321,8 @@ func TestTranscriptSeparatorsUseConsistentMessagePadding(t *testing.T) {
 	// Tool cards stay dense.
 	if got := transcriptEntrySeparator("tool_group", "tool_group"); got != "\n" {
 		t.Fatalf("tool→tool separator = %q, want dense stack", got)
+	}
+	if got := transcriptEntrySeparator("assistant", "tool_group"); got != "\n" {
+		t.Fatalf("assistant→tool separator = %q, want dense same-turn stack", got)
 	}
 }
