@@ -108,7 +108,7 @@ const (
 func BashToolDef() llm.ToolDef {
 	return llm.ToolDef{
 		Name: "bash",
-		Description: "Execute a shell command. Commands already run in the working directory named in the system prompt, foreground and background alike, so never prefix one with a 'cd' into that directory: the extra cd can turn an auto-approved command into an approval prompt. Use this to run git, npm, go, or other command-line tools. Output is returned after completion. Set background to true for a long-running command such as a dev server, watch build, or log tail — prefer that over a foreground sleep that fills the timeout window.",
+		Description: "Execute a shell command. Commands already run in the working directory named in the system prompt, foreground and background alike, so never prefix one with a 'cd' into that directory: the extra cd can turn an auto-approved command into an approval prompt. Use this to run git, npm, go, or other command-line tools. Output is returned after completion. Set background to true for a long-running command such as a dev server, watch build, or log tail.",
 		Parameters: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -120,7 +120,7 @@ func BashToolDef() llm.ToolDef {
 					"type":        "integer",
 					"minimum":     BashTimeoutMinSecs,
 					"maximum":     BashTimeoutMaxSecs,
-					"description": "Timeout in seconds (1–120). When omitted, the host tools.timeout applies (typically 30s). Ignored when background is true. A foreground sleep that equals this timeout ends as OUTCOME UNKNOWN — use background=true and bash_output instead.",
+					"description": "Timeout in seconds (1–120; tools.timeout when omitted). Ignored when background is true.",
 				},
 				"background": map[string]any{
 					"type":        "boolean",

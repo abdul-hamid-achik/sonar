@@ -75,13 +75,10 @@ func TestBashToolDef(t *testing.T) {
 		t.Fatalf("timeout.maximum = %#v, want %d", timeout["maximum"], BashTimeoutMaxSecs)
 	}
 	desc, _ := timeout["description"].(string)
-	for _, want := range []string{"1–120", "tools.timeout", "OUTCOME UNKNOWN", "background"} {
+	for _, want := range []string{"1–120", "tools.timeout", "background"} {
 		if !strings.Contains(desc, want) {
 			t.Errorf("timeout description omitted %q: %s", want, desc)
 		}
-	}
-	if !strings.Contains(tool.Description, "background") || !strings.Contains(tool.Description, "sleep") {
-		t.Errorf("bash description should discourage foreground sleep fills: %s", tool.Description)
 	}
 }
 
