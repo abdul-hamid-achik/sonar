@@ -282,7 +282,7 @@ func run() int {
 			fmt.Fprintf(os.Stderr, "provider: %v\n", err)
 			return 1
 		}
-		modelList = []string{modelName}
+		modelList = config.SelectableRemoteModels(provider.Type, modelName)
 		modelPinned = true
 		// Best-effort Ollama inventory for ICE/embeddings only.
 		discoveryCtx, cancelDiscovery := context.WithTimeout(context.Background(), 2*time.Second)

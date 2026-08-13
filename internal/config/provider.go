@@ -366,6 +366,45 @@ func catalogProviderDefaults(providerType string) (providerDefaults, bool) {
 	return defaults, true
 }
 
+// SelectableRemoteModels returns the model ids a remote provider should offer
+// for /model list and completion. Catalog order is preserved; the current id
+// is always retained even when the catalog has not seen it yet (a pinned
+// snapshot cannot refuse a provider's newly shipped model).
+//
+// A provider the catalog does not describe — a private openai_compatible
+// endpoint — returns only the current model, because there is nothing else to
+// offer without inventing ids.
+func SelectableRemoteModels(providerType, current string) []string {
+	current = strings.TrimSpace(current)
+	id := catalog.ProviderID(NormalizedProviderType(providerType))
+	models := catalog.Models(id)
+	if len(models) == 0 {
+		if current == "" {
+			return nil
+		}
+		return []string{current}
+	}
+	out := make([]string, 0, len(models)+1)
+	seen := make(map[string]struct{}, len(models)+1)
+	for _, model := range models {
+		name := strings.TrimSpace(model.ID)
+		if name == "" {
+			continue
+		}
+		if _, ok := seen[name]; ok {
+			continue
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	if current != "" {
+		if _, ok := seen[current]; !ok {
+			out = append([]string{current}, out...)
+		}
+	}
+	return out
+}
+
 func (p ProviderProfile) asConfig() ProviderConfig {
 	return ProviderConfig{
 		Type:        p.Type,

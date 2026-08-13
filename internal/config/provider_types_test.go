@@ -275,3 +275,30 @@ func TestProviderProfileRejectsHandWrittenEndpointTemplate(t *testing.T) {
 		t.Errorf("error does not explain the problem: %v", err)
 	}
 }
+
+func TestSelectableRemoteModelsIncludesDeepSeekPro(t *testing.T) {
+	models := SelectableRemoteModels(ProviderTypeDeepSeek, "deepseek-v4-flash")
+	foundFlash, foundPro := false, false
+	for _, name := range models {
+		switch name {
+		case "deepseek-v4-flash":
+			foundFlash = true
+		case "deepseek-v4-pro":
+			foundPro = true
+		}
+	}
+	if !foundFlash || !foundPro {
+		t.Fatalf("deepseek selectable models = %#v, want flash and pro", models)
+	}
+
+	// An unlisted id the operator pinned must remain selectable.
+	models = SelectableRemoteModels(ProviderTypeDeepSeek, "deepseek-v5-future")
+	if models[0] != "deepseek-v5-future" {
+		t.Fatalf("unlisted current = %#v, want it first", models)
+	}
+
+	// A private endpoint has no catalog rows to offer.
+	if got := SelectableRemoteModels(ProviderTypeOpenAICompatible, "my-model"); len(got) != 1 || got[0] != "my-model" {
+		t.Fatalf("private endpoint models = %#v", got)
+	}
+}

@@ -53,6 +53,13 @@ func TestParseFrontmatter(t *testing.T) {
 			wantName:    "multi",
 			wantContent: "line 1\nline 2\nline 3",
 		},
+		{
+			name:        "disable-model-invocation accepted",
+			input:       "---\nname: grill\ndescription: interview\ndisable-model-invocation: true\n---\nRun /grilling",
+			wantName:    "grill",
+			wantDesc:    "interview",
+			wantContent: "Run /grilling",
+		},
 	}
 
 	for _, tt := range tests {
@@ -75,6 +82,9 @@ func TestParseFrontmatter(t *testing.T) {
 			}
 			if skill.Content != tt.wantContent {
 				t.Errorf("Content = %q, want %q", skill.Content, tt.wantContent)
+			}
+			if tt.name == "disable-model-invocation accepted" && !skill.DisableModelInvocation {
+				t.Fatal("DisableModelInvocation = false, want true")
 			}
 		})
 	}

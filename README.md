@@ -7,7 +7,7 @@ MIT licensed. Built on [Charm](https://charm.land) and the [Catwalk](https://git
 Full documentation lives in [`docs/`](docs/) — an Astro Starlight site. This
 README stays the front door; the site is where the longer explanations go.
 
-**DeepSeek V4 Flash is the default, not the boundary.** Provider metadata comes from an embedded [Catwalk](https://github.com/charmbracelet/catwalk) snapshot — 40 providers, 1403 models — so selecting `groq`, `cerebras`, or `moonshot` needs a provider name and a key, not code. `ollama` is in that list too and means **Ollama Cloud** (`https://ollama.com/v1`, `OLLAMA_API_KEY`), not a daemon on your machine.
+**DeepSeek V4 Flash is the default, not the boundary.** Provider metadata comes from an embedded [Catwalk](https://github.com/charmbracelet/catwalk) snapshot — 40 providers, 1403 models — so selecting `groq`, `cerebras`, or `moonshot` needs a provider name and a key, not code. DeepSeek also ships `deepseek-v4-pro` in that catalog — same dialect, switch with `/model deepseek-v4-pro` or pin it in config. `ollama` is in that list too and means **Ollama Cloud** (`https://ollama.com/v1`, `OLLAMA_API_KEY`), not a daemon on your machine.
 
 Forked from [`local-agent`](https://github.com/abdul-hamid-achik/local-agent) and cut down. The agent loop, tool dispatch, permission model, durable goals, session store, and MCP surface came across intact; the local-first inference machinery did not.
 

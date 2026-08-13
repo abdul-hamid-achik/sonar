@@ -509,6 +509,9 @@ metadata:
 allowed-tools: Bash(go test:*)
 triggers:
   - go
+disable-model-invocation: false
+user-invocable: true
+argument-hint: "[path]"
 ---
 body`)
 		m := NewManager(dir)
@@ -519,6 +522,38 @@ body`)
 			t.Fatalf("extended skill names = %#v", got)
 		}
 	})
+}
+
+func TestManagerDisableModelInvocationStaysUserOnly(t *testing.T) {
+	dir := t.TempDir()
+	mustWriteFile(t, filepath.Join(dir, "grill.md"), `---
+name: grill-with-docs
+description: A relentless interview
+disable-model-invocation: true
+---
+Run a grilling session.`)
+	mustWriteFile(t, filepath.Join(dir, "normal.md"), `---
+name: normal
+description: Ordinary skill
+---
+Ordinary body.`)
+	m := NewManager(dir)
+	if err := m.LoadAll(); err != nil {
+		t.Fatalf("LoadAll: %v", err)
+	}
+	catalog := m.Catalog()
+	if len(catalog) != 1 || catalog[0].Name != "normal" {
+		t.Fatalf("catalog = %#v, want only normal", catalog)
+	}
+	if _, ok := m.Load("grill-with-docs"); ok {
+		t.Fatal("model Load must refuse disable-model-invocation skills")
+	}
+	if err := m.Activate("grill-with-docs"); err != nil {
+		t.Fatalf("user Activate: %v", err)
+	}
+	if !strings.Contains(m.ActiveContent(), "grilling") {
+		t.Fatalf("active content missing body: %q", m.ActiveContent())
+	}
 }
 
 func TestManagerRejectsInvalidSkillNamesDuringDiscovery(t *testing.T) {

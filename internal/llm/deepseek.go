@@ -31,9 +31,13 @@ const (
 	// environment so a secret can never land in YAML.
 	DeepSeekAPIKeyEnv = "DEEPSEEK_API_KEY"
 
-	// DeepSeekFlashModel is the model sonar pins to. Its current published
+	// DeepSeekFlashModel is the default cheap tier. Its current published
 	// build is DeepSeek-V4-Flash-0731 (284B total / 13B active).
 	DeepSeekFlashModel = "deepseek-v4-flash"
+
+	// DeepSeekProModel is the catalog's large DeepSeek tier. Same 1M context
+	// and thinking contract as Flash; pick it explicitly via /model or config.
+	DeepSeekProModel = "deepseek-v4-pro"
 
 	// DeepSeekContextWindow is the 1M-token context DeepSeek serves by default.
 	DeepSeekContextWindow = 1_000_000
@@ -69,7 +73,8 @@ type DeepSeekOptions struct {
 	// APIKey is the resolved secret value, read from the environment by the
 	// caller. Required: sonar has no unauthenticated mode.
 	APIKey string
-	// Model defaults to DeepSeekFlashModel. Any other value is rejected.
+	// Model defaults to DeepSeekFlashModel. Other catalog ids (including
+	// DeepSeekProModel) are accepted; unlisted ids pass through too.
 	Model string
 	// BaseURL overrides the endpoint for a gateway or proxy that speaks the
 	// same dialect. Defaults to DeepSeekBaseURL.

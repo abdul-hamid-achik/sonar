@@ -138,7 +138,7 @@ func (m *Model) applySwitchedProvider(name string) {
 	m.model = m.modelManager.Model()
 	m.modelPinned = true
 	if m.modelManager.RemoteProvider() {
-		m.modelList = []string{m.model}
+		m.modelList = config.SelectableRemoteModels(m.activeProviderName(), m.model)
 		if policy := m.modelManager.ContextPolicy(m.model); policy.Effective > 0 {
 			m.numCtx = policy.Effective
 		}

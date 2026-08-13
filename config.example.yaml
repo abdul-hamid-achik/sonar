@@ -18,8 +18,15 @@
 #
 #   type:        deepseek
 #   base_url:    https://api.deepseek.com
-#   model:       deepseek-v4-flash   (1M context, 384K max output)
+#   model:       deepseek-v4-flash   (default / cheap; 1M context, 384K max output)
 #   api_key_env: DEEPSEEK_API_KEY
+#
+# The catalog also lists deepseek-v4-pro (same window, higher quality/cost).
+# Switch at runtime with `/model deepseek-v4-pro`, ctrl+o, or pin it here:
+#
+#   provider:
+#     type: deepseek
+#     model: deepseek-v4-pro
 #
 # Secrets are NEVER written here — only environment variable NAMES. The value is
 # read from the process environment at launch:
@@ -37,11 +44,12 @@
 # Chain-of-thought is ON by default, matching the API. It is the dominant cost
 # term on long turns; a request opts out per-call, not from config.
 #
-# Cost, per 1M tokens (regular rate): $0.14 input on a cache miss, $0.0028 on a
-# cache hit, $0.28 output. A cache hit is ~50x cheaper than a miss, so a stable
-# prompt prefix is the single biggest lever you have. DeepSeek has announced
-# peak-hour pricing at 2x every billing item (09:00-12:00 and 14:00-18:00
-# Beijing time), so treat any in-app cost figure as an estimate.
+# Cost (Flash, regular rate, per 1M tokens): $0.14 input on a cache miss,
+# $0.0028 on a cache hit, $0.28 output. Pro is higher ($0.435 / $0.87). A cache
+# hit is ~50x cheaper than a miss, so a stable prompt prefix is the single
+# biggest lever you have. DeepSeek has announced peak-hour pricing at 2x every
+# billing item (09:00-12:00 and 14:00-18:00 Beijing time), so treat any in-app
+# cost figure as an estimate.
 
 # Optional: read provider API keys from a KEY=VALUE file instead of exporting
 # them by hand. Only names the catalog recognises as credential variables are

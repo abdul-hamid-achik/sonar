@@ -14,12 +14,13 @@ const MaxSkillBodyBytes = 1 << 20
 
 // Skill represents a loadable skill definition.
 type Skill struct {
-	Name         string `yaml:"name"`
-	Description  string `yaml:"description"`
-	Active       bool   `yaml:"-"`
-	Content      string `yaml:"-"` // markdown body after frontmatter
-	Path         string `yaml:"-"` // file path
-	nameDeclared bool   // distinguishes an omitted name from an explicitly blank one
+	Name                   string `yaml:"name"`
+	Description            string `yaml:"description"`
+	Active                 bool   `yaml:"-"`
+	Content                string `yaml:"-"` // markdown body after frontmatter
+	Path                   string `yaml:"-"` // file path
+	DisableModelInvocation bool   `yaml:"-"` // frontmatter: model may not auto-select
+	nameDeclared           bool   // distinguishes an omitted name from an explicitly blank one
 }
 
 type optionalFrontmatterString struct {
@@ -37,17 +38,21 @@ func (value *optionalFrontmatterString) UnmarshalYAML(node *yaml.Node) error {
 }
 
 // skillFrontmatter is an explicit compatibility schema. sonar consumes
-// only name and description, but accepts the remaining Agent Skills metadata
-// fields without projecting them into prompts or session state. Typos and
-// unsupported fields fail discovery instead of being silently ignored.
+// name, description, and disable-model-invocation; the remaining Agent Skills
+// metadata fields are accepted without projecting them into prompts or
+// session state. Typos and unsupported fields fail discovery instead of being
+// silently ignored.
 type skillFrontmatter struct {
-	Name          optionalFrontmatterString `yaml:"name"`
-	Description   optionalFrontmatterString `yaml:"description"`
-	License       yaml.Node                 `yaml:"license"`
-	Compatibility yaml.Node                 `yaml:"compatibility"`
-	Metadata      yaml.Node                 `yaml:"metadata"`
-	AllowedTools  yaml.Node                 `yaml:"allowed-tools"`
-	Triggers      yaml.Node                 `yaml:"triggers"`
+	Name                   optionalFrontmatterString `yaml:"name"`
+	Description            optionalFrontmatterString `yaml:"description"`
+	DisableModelInvocation *bool                     `yaml:"disable-model-invocation"`
+	UserInvocable          yaml.Node                 `yaml:"user-invocable"`
+	ArgumentHint           yaml.Node                 `yaml:"argument-hint"`
+	License                yaml.Node                 `yaml:"license"`
+	Compatibility          yaml.Node                 `yaml:"compatibility"`
+	Metadata               yaml.Node                 `yaml:"metadata"`
+	AllowedTools           yaml.Node                 `yaml:"allowed-tools"`
+	Triggers               yaml.Node                 `yaml:"triggers"`
 }
 
 // CatalogEntry is the bounded, model-safe projection of a discovered skill.
@@ -110,6 +115,9 @@ func parseFrontmatter(data string) (*Skill, error) {
 		Name:         metadata.Name.value,
 		Description:  metadata.Description.value,
 		nameDeclared: metadata.Name.set,
+	}
+	if metadata.DisableModelInvocation != nil {
+		s.DisableModelInvocation = *metadata.DisableModelInvocation
 	}
 
 	// Remaining content is the markdown body.

@@ -236,6 +236,8 @@ func (m *Manager) All() []*Skill {
 
 // Catalog returns a deterministic metadata-only snapshot of inactive skills
 // for progressive disclosure. Bodies and paths never cross this boundary.
+// Skills marked disable-model-invocation are omitted: the model must not
+// auto-select them, while explicit user or profile activation still works.
 func (m *Manager) Catalog() []CatalogEntry {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -245,7 +247,7 @@ func (m *Manager) Catalog() []CatalogEntry {
 		if len(result) >= maxSkillCatalogEntries {
 			break
 		}
-		if item.Active {
+		if item.Active || item.DisableModelInvocation {
 			continue
 		}
 		name := item.Name
@@ -277,11 +279,16 @@ func truncateUTF8(value string, limit int) string {
 
 // Load returns the already-discovered body for an exact skill name. It never
 // rereads the filesystem and deliberately does not change activation state.
+// Skills with disable-model-invocation are not loadable through this path —
+// that is the model-selected load_skill boundary; Activate still works.
 func (m *Manager) Load(name string) (string, bool) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	for _, item := range m.skills {
 		if item.Name == name {
+			if item.DisableModelInvocation {
+				return "", false
+			}
 			return item.Content, true
 		}
 	}
