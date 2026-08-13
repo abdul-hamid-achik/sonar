@@ -1,6 +1,12 @@
                      ╭────────────────────────────────────────────────────────────────────────────╮
                      │ Help                                                                       │
                      │                                                                            │
+                     │   #skill            Insert skill mention text                              │
+                     │   /cmd              Run slash command                                      │
+                     │   enter (running)   Slash commands run immediately; other drafts queue     │
+                     │                     until the current turn settles                         │
+                     │   esc (running)     Clear a queued follow-up first; press again to cancel  │
+                     │                     the turn                                               │
                      │                                                                            │
                      │ Voice                                                                      │
                      │   ctrl+g            Open the mic; the same key closes it and the           │
@@ -25,11 +31,5 @@
                      │                     response time                                          │
                      │                                                                            │
                      │ Slash Commands                                                             │
-                     │   Full registry — scroll for actions and availability                      │
-                     │   /help             Show help overlay with shortcuts and commands          │
-                     │   /clear            Clear conversation history                             │
-                     │   /plan             Open a guided read-only planning form                  │
-                     │   /goal             Create, inspect, pause, resume, budget, or drop a      │
-                     │                     durable goal                                           │
-                     │ esc/q close · j/k scroll · pgup/pgdn page · 47%                            │
+                     │ esc/q close · j/k scroll · pgup/pgdn page · 44%                            │
                      ╰────────────────────────────────────────────────────────────────────────────╯

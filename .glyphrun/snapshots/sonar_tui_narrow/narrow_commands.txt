@@ -12,8 +12,8 @@
 │   /plan · Open a guided read-only… │
 │   /goal · Create, inspect, pause,… │
 │   /model · Show, switch, or list … │
+│   /mouse · Toggle mouse capture s… │
 │   /theme · Show, switch, or list … │
-│   /provider · Show or switch infe… │
 │ esc cancel · enter select · ↑/↓    │
 ╰────────────────────────────────────╯
 ▌❯ /

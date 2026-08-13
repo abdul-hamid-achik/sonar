@@ -12,6 +12,11 @@
                      │   ↓                 Next input (history active)                            │
                      │   ctrl+e            Open in $VISUAL/$EDITOR                                │
                      │                                                                            │
+                     │   Select                                                                   │
+                     │   alt+m             Mouse capture off/on — turn off to select and copy ·   │
+                     │                     /mouse also                                            │
+                     │   ctrl+y            Copy last response (empty input)                       │
+                     │                                                                            │
                      │   Read                                                                     │
                      │   pgup              Scroll up                                              │
                      │   pgdown            Scroll down                                            │
@@ -26,10 +31,5 @@
                      │   alt+r             Toggle all reasoning (empty draft)                     │
                      │   alt+o             Open full output (inspected receipt)                   │
                      │   alt+d             Open full diff (inspected receipt)                     │
-                     │   ctrl+y            Copy last response (empty input)                       │
-                     │   alt+m             Mouse capture off/on — turn off to select and copy     │
-                     │                     with the mouse                                         │
-                     │   alt+c             Toggle compact mode                                    │
-                     │                                                                            │
                      │ esc/q close · pgdn more · g/shift+g ends                                   │
                      ╰────────────────────────────────────────────────────────────────────────────╯
