@@ -3,6 +3,7 @@
 ▌  Review the release receipts.
 
    I checked the saved verification receipts.
+
 │  ✓ Read path=internal/ui/view.go (42ms)
 │  2 lines hidden · ctrl+t
 │  ✗ Run failed command=go test ./internal/ui (310ms)

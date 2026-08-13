@@ -38,6 +38,12 @@ func (m *Model) projectSessionHeader() sessionHeaderProjection {
 
 	var lines []string
 	if bar := m.renderSessionTopBar(paneW); bar != "" {
+		// Tall frames: one blank above the identity row so it is not flush
+		// against the terminal chrome. Glyphrun contracts top out at 40 rows,
+		// so this stays off every committed spec and on a maximized window.
+		if m.height >= 42 {
+			lines = append(lines, "")
+		}
 		lines = append(lines, bar)
 	}
 	// Sticky user: real conversation + room for vertical padding (Grok band).

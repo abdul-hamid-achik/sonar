@@ -3,6 +3,7 @@
 ▌  Review the release receipts.
 
    I checked the saved verification receipts.
+
 │  ▾ ✓ Read (42ms)
 │  tool: read_file
 │  args: path=internal/ui/view.go

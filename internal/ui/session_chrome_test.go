@@ -97,7 +97,7 @@ func TestStickyUserStripHasVerticalBreathingInHeader(t *testing.T) {
 	m.settleChromeSpringForTest()
 	m.recalcViewportHeight()
 	header := m.projectSessionHeader()
-	// Roomy (H>=28): identity + 3-row elevated sticky (no outer blank-on-blank).
+	// Roomy (H>=28, below the tall-frame pad): identity + 3-row elevated sticky.
 	if header.reservedHeight != 4 {
 		t.Fatalf("header height = %d, want 4 (top + elevated sticky)\n%s",
 			header.reservedHeight, ansi.Strip(header.content))
@@ -115,6 +115,21 @@ func TestStickyUserStripHasVerticalBreathingInHeader(t *testing.T) {
 	plain := ansi.Strip(header.content)
 	if !strings.Contains(plain, "hello chat!") {
 		t.Fatalf("header missing sticky prompt:\n%s", plain)
+	}
+
+	// Tall frames (above every Glyphrun contract) pad above identity.
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 100, Height: 42})
+	m = updated.(*Model)
+	m.entries = []ChatEntry{{Kind: "user", Content: "hello chat!"}}
+	m.settleChromeSpringForTest()
+	m.recalcViewportHeight()
+	tall := m.projectSessionHeader()
+	if tall.reservedHeight != 5 {
+		t.Fatalf("tall header height = %d, want 5 (pad + top + elevated sticky)\n%s",
+			tall.reservedHeight, ansi.Strip(tall.content))
+	}
+	if got := strings.Split(ansi.Strip(tall.content), "\n"); strings.TrimSpace(got[0]) != "" {
+		t.Fatalf("tall header should lead with a blank row:\n%s", ansi.Strip(tall.content))
 	}
 
 	// Ordinary elevated frames keep outer blanks so short readers still overflow.
@@ -334,7 +349,7 @@ func TestTranscriptSeparatorsUseConsistentMessagePadding(t *testing.T) {
 	if got := transcriptEntrySeparator("tool_group", "tool_group"); got != "\n" {
 		t.Fatalf("tool→tool separator = %q, want dense stack", got)
 	}
-	if got := transcriptEntrySeparator("assistant", "tool_group"); got != "\n" {
-		t.Fatalf("assistant→tool separator = %q, want dense same-turn stack", got)
+	if got := transcriptEntrySeparator("assistant", "tool_group"); got != "\n\n" {
+		t.Fatalf("assistant→tool separator = %q, want one blank row", got)
 	}
 }

@@ -1013,10 +1013,11 @@ func transcriptEntrySeparator(previous, current string) string {
 	if previous == "assistant" && current == "assistant" {
 		return "\n"
 	}
-	// Prelude → tools stays dense: the stack is the same turn's instrument
-	// panel, not a new chapter. Tool → answer still breathes below.
+	// Thought / prelude is a different surface from the tool stack. One blank
+	// row between them is the same chapter break as tool → answer; gluing
+	// them made a long turn read as one undivided column.
 	if previous == "assistant" && current == "tool_group" {
-		return "\n"
+		return "\n\n"
 	}
 	// Tool → answer / notice → assistant / user → * : one blank row.
 	// This matches Grok's readable vertical rhythm without sparse voids.
@@ -1070,6 +1071,9 @@ func (m *Model) renderAssistantMsg(b *strings.Builder, entry ChatEntry, contentW
 		thinkBox := m.renderThinkingBox(entry.ThinkingContent, entry.ThinkingCollapsed)
 		b.WriteString(grid.IndentBlock(" ", thinkBox))
 		b.WriteString("\n")
+		if hasContent {
+			b.WriteString("\n")
+		}
 	}
 	if !hasContent {
 		return

@@ -24,7 +24,7 @@ func TestTranscriptEntrySeparatorOwnsVerticalRhythm(t *testing.T) {
 		// Dense stacks only.
 		{name: "tool sequence", previous: "tool_group", current: "tool_group", want: "\n"},
 		{name: "assistant segments", previous: "assistant", current: "assistant", want: "\n"},
-		{name: "prelude to tools", previous: "assistant", current: "tool_group", want: "\n"},
+		{name: "prelude to tools", previous: "assistant", current: "tool_group", want: "\n\n"},
 		{name: "notice stack", previous: "system", current: "system", want: "\n\n"},
 	}
 	for _, tt := range tests {

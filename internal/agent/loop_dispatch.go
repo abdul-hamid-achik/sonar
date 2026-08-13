@@ -606,13 +606,17 @@ func (t *turnRuntime) dispatchStage(ctx context.Context, i int, toolCalls []llm.
 // The duplicate-suppression guard above assumes a read-only built-in is a pure
 // function of its arguments until some tool changes state, which holds for
 // read, grep, ls and the rest. It does not hold for a poll against a process
-// running outside the tool loop: bash_output exists to be asked the same
-// question repeatedly while a background command produces more output, so
-// suppressing the second call refuses the only correct way to ask.
+// running outside the tool loop: bash_output and agent_output exist to be
+// asked the same question repeatedly while a background command or subagent
+// produces more output, so suppressing the second call refuses the only
+// correct way to ask.
 //
 // Observed in a real session: four consecutive bash_output calls were
 // suppressed as duplicates while the command they were polling was still
-// running. The guard predates background execution and nobody reconciled them.
+// running. The same loop then hit agent_output: the model polled a live
+// subagent, the host painted "Agent output failed", and the turn spent
+// iterations on a suppression the tool was designed to invite. The guard
+// predates background execution and nobody reconciled them.
 func builtinResultVariesOverTime(name string) bool {
-	return name == "bash_output"
+	return name == "bash_output" || name == "agent_output"
 }

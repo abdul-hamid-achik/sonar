@@ -11,8 +11,10 @@ import "testing"
 //
 // Asking the same question again is the only correct way to ask it.
 func TestBackgroundPollIsExemptFromDuplicateSuppression(t *testing.T) {
-	if !builtinResultVariesOverTime("bash_output") {
-		t.Error("bash_output is still treated as a repeatable pure read")
+	for _, name := range []string{"bash_output", "agent_output"} {
+		if !builtinResultVariesOverTime(name) {
+			t.Errorf("%s is still treated as a repeatable pure read", name)
+		}
 	}
 }
 
