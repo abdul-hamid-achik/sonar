@@ -28,4 +28,4 @@
 ─────────────────────────────────────────────────────────────────────────────────────────
    approvals on · ✓ Done · <elapsed> · ↑ 4 · <session> · Draw the fixture pipeline
 ▏❯ Ask
-   enter send · shift+tab mode · f1 help · ctrl+g voice
+   enter send · shift+tab mode · f1 help · ctrl+y copy
