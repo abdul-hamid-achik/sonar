@@ -177,8 +177,12 @@ func (m *Model) noticeForOptionComposedKey(typed string) string {
 		return "That is Option+V — this terminal composes it instead of sending alt+v. " +
 			"Press " + m.voiceInputKeyHint() + " to dictate, or run /voice."
 	}
+	if chord == "alt+m" {
+		return "That is Option+M — this terminal composes µ instead of sending alt+m. " +
+			"Run /mouse to toggle select mode, or enable Option as Meta in the terminal."
+	}
 	return "That is Option — this terminal composes a character instead of sending " +
-		chord + ". Set it to use Option as Meta, or use the slash command."
+		chord + ". Set it to use Option as Meta, or use the matching slash command."
 }
 
 // voiceInputKeyHint names the binding as this build actually has it.

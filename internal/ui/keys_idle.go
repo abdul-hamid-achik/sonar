@@ -205,16 +205,7 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		}
 
 	case key.Matches(msg, m.keys.ToggleMouse):
-		// Mouse reporting consumes press and release, which is what stops the
-		// terminal from doing native drag-select. Turning it off hands the
-		// mouse back to the terminal; the notice says what was traded away,
-		// because a dead scroll wheel with no explanation reads as a bug.
-		m.mouseCaptureOff = !m.mouseCaptureOff
-		if m.mouseCaptureOff {
-			return m.setFooterNotice(noticeInfo,
-				"mouse capture off · select and copy with the mouse · pgup/pgdn still scroll · alt+m restores", 6*time.Second), true
-		}
-		return m.setFooterNotice(noticeInfo, "mouse capture on · wheel scrolling restored", 3*time.Second), true
+		return m.toggleMouseCapture(), true
 
 	case key.Matches(msg, m.keys.CopyLast):
 		// Prefer last assistant answer; allow copy while a turn is live when the
@@ -334,4 +325,20 @@ func (m *Model) handleIdleKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	}
 
 	return nil, false
+}
+
+// toggleMouseCapture flips mouse reporting for native terminal select/copy.
+//
+// Mouse reporting consumes press and release, which is what stops the terminal
+// from doing native drag-select. Turning it off hands the mouse back; the
+// notice says what was traded away, because a dead scroll wheel with no
+// explanation reads as a bug. Shared by alt+m and /mouse so both paths paint
+// the same sticky select chrome and the same restore hint.
+func (m *Model) toggleMouseCapture() tea.Cmd {
+	m.mouseCaptureOff = !m.mouseCaptureOff
+	if m.mouseCaptureOff {
+		return m.setFooterNotice(noticeInfo,
+			"mouse capture off · select and copy with the mouse · pgup/pgdn still scroll · alt+m or /mouse restores", 6*time.Second)
+	}
+	return m.setFooterNotice(noticeInfo, "mouse capture on · wheel scrolling restored", 3*time.Second)
 }

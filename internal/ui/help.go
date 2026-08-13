@@ -59,6 +59,18 @@ func (m *Model) buildHelpContent(innerW int) string {
 		m.writeHelpRows(&b, rows, innerW)
 	}
 
+	// Select/copy sits above Input Shortcuts on purpose: mouse reporting makes
+	// native drag-select look broken until someone finds the toggle, and burying
+	// it under paste/@mentions is how that happened.
+	b.WriteString("\n")
+	b.WriteString(m.styles.OverlayAccent.Render("Select & Copy"))
+	b.WriteString("\n")
+	m.writeHelpRows(&b, []helpRow{
+		{"alt+m / /mouse", "Toggle mouse capture — off lets the terminal select and copy; wheel scroll stays on pgup/pgdn"},
+		{"ctrl+y", "Copy the last assistant reply when the draft is empty"},
+		{"shift+drag", "Native select in Ghostty, kitty, WezTerm, Alacritty, xterm — Option-drag in iTerm2"},
+	}, innerW)
+
 	b.WriteString("\n")
 	b.WriteString(m.styles.OverlayAccent.Render("Input Shortcuts"))
 	b.WriteString("\n")
@@ -66,7 +78,6 @@ func (m *Model) buildHelpContent(innerW int) string {
 	inputShortcuts := []helpRow{
 		{"@file / @agent", "Insert file or agent mention text"},
 		{"paste/drag images", "Attach up to four PNG, JPEG, or GIF files to the pending prompt"},
-		{"shift+drag", "Select and copy: Ghostty, kitty, WezTerm, Alacritty, xterm — Option in iTerm2, and alt+m for terminals with no override"},
 		{"~/… or /…", "Review temporary read-only access; MCP tools require separate approval"},
 		{"#skill", "Insert skill mention text"},
 		{"/cmd", "Run slash command"},

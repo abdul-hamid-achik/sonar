@@ -231,6 +231,7 @@ const (
 	ActionSubagentsStatus               // Report every subagent's status, activity, and session reference
 	ActionSubagentsDoctor               // Report which vendor subagent CLIs are installed and their versions
 	ActionSubagentsSpawn                // Start one subagent by hand (Data = "<provider> <prompt>")
+	ActionToggleMouseCapture            // Release or restore mouse reporting so the terminal can select text
 )
 
 // Registry holds all registered slash commands.

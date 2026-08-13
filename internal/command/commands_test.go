@@ -22,6 +22,21 @@ func TestBuiltin_Help(t *testing.T) {
 	}
 }
 
+func TestBuiltin_Mouse(t *testing.T) {
+	r := newTestRegistry()
+	result := r.Execute(&Context{}, "mouse", nil)
+	if result.Action != ActionToggleMouseCapture {
+		t.Fatalf("mouse action = %d, want %d", result.Action, ActionToggleMouseCapture)
+	}
+	alias := r.Execute(&Context{}, "select", nil)
+	if alias.Action != ActionToggleMouseCapture {
+		t.Fatalf("select alias action = %d, want %d", alias.Action, ActionToggleMouseCapture)
+	}
+	if got := r.Execute(&Context{}, "mouse", []string{"on"}); got.Error == "" {
+		t.Fatal("mouse with args should error")
+	}
+}
+
 func TestBuiltin_Clear(t *testing.T) {
 	r := newTestRegistry()
 	result := r.Execute(&Context{}, "clear", nil)

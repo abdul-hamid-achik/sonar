@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/abdul-hamid-achik/sonar/internal/command"
 )
 
 // Mouse reporting consumes press and release, which is exactly what stops a
@@ -60,7 +62,7 @@ func TestMouseToggleNoticeNamesWhatWasTradedAway(t *testing.T) {
 	m = updated.(*Model)
 
 	notice := strings.ToLower(m.footerNotice.text)
-	for _, want := range []string{"mouse capture off", "select", "pgup", "alt+m"} {
+	for _, want := range []string{"mouse capture off", "select", "pgup", "alt+m", "/mouse"} {
 		if !strings.Contains(notice, want) {
 			t.Errorf("notice %q does not mention %q", notice, want)
 		}
@@ -73,11 +75,42 @@ func TestMouseToggleNoticeNamesWhatWasTradedAway(t *testing.T) {
 func TestHelpNamesTheRightSelectionOverride(t *testing.T) {
 	m := newTestModel(t)
 	content := strings.ToLower(m.buildHelpContent(m.helpContentWidth()))
-	// shift+drag is the terminal's own override and iTerm2's differs; alt+m is
-	// the harness fallback for terminals that offer no override at all.
-	for _, want := range []string{"shift+drag", "iterm2", "alt+m"} {
+	// Select & Copy is its own section so it is not buried under Input Shortcuts.
+	selectIdx := strings.Index(content, "select & copy")
+	inputIdx := strings.Index(content, "input shortcuts")
+	if selectIdx < 0 || inputIdx < 0 || selectIdx > inputIdx {
+		t.Fatalf("Select & Copy must appear above Input Shortcuts:\n%s", content)
+	}
+	// shift+drag is the terminal's own override and iTerm2's differs; alt+m and
+	// /mouse are the harness fallbacks for terminals that offer no override.
+	for _, want := range []string{"shift+drag", "iterm2", "alt+m", "/mouse", "ctrl+y"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("help omits %q", want)
+		}
+	}
+}
+
+func TestMouseSlashCommandTogglesCapture(t *testing.T) {
+	m := newTestModel(t)
+	cmd := m.handleCommandAction(command.Result{Action: command.ActionToggleMouseCapture})
+	if cmd != nil {
+		// Footer notice is a Cmd; drain it so state is settled for assertions.
+		_ = cmd
+	}
+	if !m.mouseCaptureOff {
+		t.Fatal("/mouse action did not release the mouse")
+	}
+	if got := m.View().MouseMode; got != tea.MouseModeNone {
+		t.Fatalf("released MouseMode = %v, want none", got)
+	}
+}
+
+func TestOptionComposedMuNamesMouseSlash(t *testing.T) {
+	m := newTestModel(t)
+	notice := m.noticeForOptionComposedKey("µ")
+	for _, want := range []string{"Option+M", "/mouse", "µ"} {
+		if !strings.Contains(notice, want) {
+			t.Fatalf("µ notice %q omitted %q", notice, want)
 		}
 	}
 }

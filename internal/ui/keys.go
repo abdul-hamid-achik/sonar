@@ -189,7 +189,9 @@ func DefaultKeyMap() KeyMap {
 		),
 		ToggleMouse: key.NewBinding(
 			key.WithKeys("alt+m"),
-			key.WithHelp("alt+m", "mouse capture off/on — turn off to select and copy with the mouse"),
+			// /mouse is the non-Option path: stock macOS terminals compose µ
+			// instead of sending alt+m until Option is configured as Meta.
+			key.WithHelp("alt+m", "mouse capture off/on — turn off to select and copy · /mouse also"),
 		),
 		CycleMode: key.NewBinding(
 			key.WithKeys("shift+tab"),
@@ -270,12 +272,15 @@ func (k KeyMap) HelpSections() []KeyHelpSection {
 			k.Send, k.NewLine, k.Paste, k.Complete, k.HistoryUp, k.HistoryDown,
 			k.ExternalEditor,
 		}},
+		// Select before Read/Inspect: the default mouse mode blocks terminal
+		// drag-select, so the toggle has to be findable without scrolling past
+		// paging and tool-expand chords.
+		{"Select", []key.Binding{k.ToggleMouse, k.CopyLast}},
 		{"Read", []key.Binding{
 			k.PageUp, k.PageDown, k.HalfPageUp, k.HalfPageDn, k.JumpLatest, k.TranscriptSearch,
 		}},
 		{"Inspect", []key.Binding{
 			k.ToggleTools, k.ToggleFocusedTool, k.ToggleThinking, k.InspectOutput, k.InspectDiff,
-			k.CopyLast, k.ToggleMouse,
 			k.CompactToggle,
 		}},
 		{"Session", []key.Binding{
