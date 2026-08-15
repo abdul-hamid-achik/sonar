@@ -28,6 +28,11 @@ Use `minerva_learn` to onboard and `minerva_resolve_skill` to pick a skill for
 the current task, then sonar `load_skill`. Do not call `./bin/minerva` outside
 the Minerva repository itself. Profile mutations stay on the approved CLI.
 
+The Minerva contract and a safe MCPHub fragment live at
+[minervacli.dev/guide/session-native](https://minervacli.dev/guide/session-native).
+Default trust for the nine `minerva__*` routes is in
+`internal/config/default_mcp_trust.yaml` and `config.example.yaml`.
+
 ## Three things that are not the same
 
 This is the one idea worth carrying away, because conflating them is the
