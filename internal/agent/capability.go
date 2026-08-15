@@ -554,7 +554,7 @@ func appendKnownCapabilityContract(builder *strings.Builder, activity Capability
 	case "fcheap":
 		builder.WriteString("Known file.cheap contract: artifact storage preserves bytes; it does not create truth by itself.\n")
 	case "minerva":
-		builder.WriteString("Known Minerva contract: skills/profiles/stack analytics for self-improvement after the primary task is grounded.\n")
+		builder.WriteString("Known Minerva contract: session-native library operator. Use minerva_learn to onboard and minerva_resolve_skill to pick a skill for this task. It is not a runtime — sonar still owns load_skill and /agent. minerva skill activate does not inject into this session. Mutations (add-skills, delete) stay on the approved CLI.\n")
 	case "monitor":
 		builder.WriteString("Known Monitor contract: operational process/resource support, not application verification evidence.\n")
 	case "obsidian":

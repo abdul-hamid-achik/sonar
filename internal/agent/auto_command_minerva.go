@@ -165,7 +165,7 @@ func autoScopedMinervaQueryArgsAllowed(args []string) bool {
 	if len(args) == 1 && stringIn(args[0], "--version", "--help", "-h", "help") {
 		return true
 	}
-	if len(args) == 1 && stringIn(args[0], "analytics", "suggest") {
+	if len(args) == 1 && stringIn(args[0], "analytics", "suggest", "learn", "status") {
 		return true
 	}
 	if len(args) < 2 {
@@ -175,8 +175,29 @@ func autoScopedMinervaQueryArgsAllowed(args []string) bool {
 		return len(rest) == 0 || len(rest) == 1 && rest[0] == "--json"
 	}
 	switch args[0] {
-	case "skill", "profile":
+	case "skill":
+		switch args[1] {
+		case "list":
+			return optionalJSON(args[2:])
+		case "show":
+			return len(args) == 3 && minervaQuerySlug.MatchString(args[2])
+		case "resolve":
+			if len(args) < 3 || len(args) > 4 {
+				return false
+			}
+			if !minervaQueryName.MatchString(args[2]) {
+				return false
+			}
+			return optionalJSON(args[3:])
+		default:
+			return false
+		}
+	case "profile":
 		return args[1] == "list" && optionalJSON(args[2:])
+	case "library":
+		return args[1] == "lint" && optionalJSON(args[2:])
+	case "status", "learn":
+		return optionalJSON(args[1:])
 	case "stack":
 		return args[1] == "check" && optionalJSON(args[2:])
 	case "template":
@@ -193,7 +214,7 @@ func autoScopedMinervaQueryArgsAllowed(args []string) bool {
 		for _, argument := range args[1:] {
 			if !minervaQueryName.MatchString(argument) || !stringIn(argument,
 				"skill", "profile", "stack", "template", "evidence", "analytics", "suggest",
-				"list", "check", "docs",
+				"learn", "status", "library", "list", "check", "docs", "lint", "show", "resolve",
 			) {
 				return false
 			}

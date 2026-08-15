@@ -89,9 +89,8 @@ func capabilityPlaybookText(activity CapabilityActivity, hint *capabilityadvisor
 		}
 	}
 
-	// Minerva is opt-in self-improvement, not a default coding path.
-	if has(intents, "skills", "profiles", "self_improvement") {
-		steps = append(steps, "Self-improvement: minerva_suggest / skill and profile tools after the primary task result is grounded.")
+	if has(intents, "skills", "profiles", "library", "readiness", "self_improvement") {
+		steps = append(steps, "Library/readiness: minerva_learn or minerva_resolve_skill via MCPHub now — not after the task. Use load_skill for a one-shot body; profile add-skills stays on the approved CLI.")
 	}
 	if has(intents, "notes", "knowledge", "vault") {
 		steps = append(steps, "Notes/knowledge: use the obsidian specialist for vault reads/writes under normal approval.")

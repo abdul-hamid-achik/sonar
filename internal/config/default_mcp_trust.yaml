@@ -28,6 +28,15 @@ profiles:
       - mcphub_resolve_tool
       - mcphub_search_tools
       - mcphub_stats
+      - minerva__evidence
+      - minerva__learn
+      - minerva__library
+      - minerva__profile
+      - minerva__resolve_skill
+      - minerva__skill
+      - minerva__stack_check
+      - minerva__status
+      - minerva__suggest
     workspace_effectful:
       - cortex__cortex_begin_change
       - cortex__cortex_investigate
@@ -63,6 +72,18 @@ profiles:
       - cortex_resolve
       - cortex_start_task
       - cortex_verify
+  minerva:
+    local_owner: minerva
+    read_only:
+      - minerva_evidence
+      - minerva_learn
+      - minerva_library
+      - minerva_profile
+      - minerva_resolve_skill
+      - minerva_skill
+      - minerva_stack_check
+      - minerva_status
+      - minerva_suggest
   bob:
     local_owner: bob
     read_only:

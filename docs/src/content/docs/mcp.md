@@ -16,6 +16,18 @@ reconnect on their own, and every dispatch is traced.
 Servers are declared in your configuration; see `config.example.yaml` for the
 shape.
 
+## Minerva
+
+The shared `~/.agents` library is already loaded by sonar (`/agent`, `load_skill`).
+Minerva is the operator for that tree, not a second runtime. Reach it through
+MCPHub as nine read-only routes (`minerva__learn`, `minerva__resolve_skill`,
+`minerva__status`, `minerva__suggest`, `minerva__skill`, `minerva__profile`,
+`minerva__library`, `minerva__stack_check`, `minerva__evidence`).
+
+Use `minerva_learn` to onboard and `minerva_resolve_skill` to pick a skill for
+the current task, then sonar `load_skill`. Do not call `./bin/minerva` outside
+the Minerva repository itself. Profile mutations stay on the approved CLI.
+
 ## Three things that are not the same
 
 This is the one idea worth carrying away, because conflating them is the

@@ -542,6 +542,15 @@ servers:
         - mcphub_resolve_tool
         - mcphub_search_tools
         - mcphub_stats
+        - minerva__evidence
+        - minerva__learn
+        - minerva__library
+        - minerva__profile
+        - minerva__resolve_skill
+        - minerva__skill
+        - minerva__stack_check
+        - minerva__status
+        - minerva__suggest
       workspace_effectful:
         - cortex__cortex_begin_change
         - cortex__cortex_investigate

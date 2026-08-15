@@ -16,6 +16,8 @@ func TestResolveMCPTrustUsesLegacyProfileOnlyAsOmittedCompatibility(t *testing.T
 	}
 	if trust == nil || trust.LocalOwner != "mcphub" || trust.Gateway != MCPTrustGatewayMCPHub ||
 		!containsMCPTrustRoute(trust.ReadOnly, "bob__bob_plan") ||
+		!containsMCPTrustRoute(trust.ReadOnly, "minerva__learn") ||
+		!containsMCPTrustRoute(trust.ReadOnly, "minerva__resolve_skill") ||
 		!containsMCPTrustRoute(trust.WorkspaceEffectful, "cortex__cortex_plan") {
 		t.Fatalf("legacy MCPHub profile = %#v", trust)
 	}
