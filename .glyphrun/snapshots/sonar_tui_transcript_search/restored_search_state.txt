@@ -15,7 +15,6 @@
 
    notice · Restored session <session> · Recovery receipt review
 
-    ✗ error
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
    <session> · Recovery receipt review · Follow paused · end latest
 ▏❯ draft survives transcript search

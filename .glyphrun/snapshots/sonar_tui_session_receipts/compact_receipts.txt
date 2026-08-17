@@ -33,7 +33,6 @@
 
 
 
-
 ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
    Recovery paused <session> · Recovery receipt review · /recover inspect
 ▏❯ Ask
