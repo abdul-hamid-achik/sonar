@@ -57,7 +57,7 @@ homebrew_casks:
     binaries:
       - sonar
     homepage: https://github.com/abdul-hamid-achik/sonar
-    description: "Local AI agent with TUI, powered by Ollama and MCP servers"
+    description: "Terminal coding agent for hosted models, over an API key"
     repository:
       owner: abdul-hamid-achik
       name: homebrew-tap
